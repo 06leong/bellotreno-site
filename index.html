@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BelloTreno - 意大利铁路火车实时情况</title>
+    <title>BelloTreno - 意大利火车实时情况</title>
     <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@500;700&family=Roboto:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined" rel="stylesheet">
     <script type="module">
@@ -19,70 +19,159 @@
             --text-grey: #90a4ae;
             --alert-bg: #fffde7;
             --alert-text: #f57f17;
+            --text-primary: #233975;
+            --bg-primary: #f4fbfa;
         }
 
-        body { font-family: 'Roboto', 'Noto Sans SC', sans-serif; margin: 0; background-color: var(--md-sys-color-surface); color: #1f1f1f; }
-        .container { width: 100%; max-width: 950px; margin: 0 auto; padding: 16px; box-sizing: border-box; }
+        [data-theme="dark"] {
+            --text-primary: #a2e6fb;
+            --bg-primary: #0d131e;
+            --md-sys-color-surface: #0d131e;
+            --md-sys-color-primary: #4db6ac;
+            --train-grey: #455a64;
+            --text-grey: #78909c;
+            --alert-bg: #1a2332;
+            --alert-text: #ffd54f;
+        }
+
+        body { font-family: 'Roboto', 'Noto Sans SC', sans-serif; margin: 0; background-color: var(--bg-primary); color: var(--text-primary); transition: background-color 0.3s, color 0.3s; min-height: 100vh; display: flex; flex-direction: column; }
+        
+        /* 导航栏 */
+        .navbar { position: fixed; top: 0; left: 0; right: 0; background: var(--bg-primary); border-bottom: 1px solid rgba(0,0,0,0.1); padding: 12px 20px; display: flex; justify-content: flex-end; align-items: center; gap: 15px; z-index: 1000; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        [data-theme="dark"] .navbar { border-bottom-color: rgba(255,255,255,0.1); }
+        .navbar a { color: var(--text-primary); text-decoration: none; font-weight: 500; font-size: 0.95rem; transition: opacity 0.2s; padding: 6px 12px; }
+        .navbar a:hover { opacity: 0.7; }
+        .theme-switch, .lang-switch { cursor: pointer; display: flex; align-items: center; gap: 5px; padding: 6px 12px; border-radius: 20px; background: rgba(0,0,0,0.05); transition: background 0.2s; position: relative; }
+        [data-theme="dark"] .theme-switch, [data-theme="dark"] .lang-switch { background: rgba(255,255,255,0.1); }
+        .theme-switch:hover, .lang-switch:hover { background: rgba(0,0,0,0.1); }
+        [data-theme="dark"] .theme-switch:hover, [data-theme="dark"] .lang-switch:hover { background: rgba(255,255,255,0.15); }
+        .theme-switch .material-symbols-outlined, .lang-switch .material-symbols-outlined { font-size: 20px; color: var(--text-primary); }
+        
+        /* 下拉菜单 */
+        .dropdown-menu { display: none; position: absolute; top: 100%; right: 0; margin-top: 8px; background: var(--bg-primary); border: 1px solid rgba(0,0,0,0.1); border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); min-width: 150px; overflow: hidden; }
+        [data-theme="dark"] .dropdown-menu { border-color: rgba(255,255,255,0.2); }
+        .dropdown-menu.show { display: block; }
+        .dropdown-item { padding: 12px 16px; cursor: pointer; color: var(--text-primary); transition: background 0.2s; font-size: 0.9rem; }
+        .dropdown-item:hover { background: rgba(0,0,0,0.05); }
+        [data-theme="dark"] .dropdown-item:hover { background: rgba(255,255,255,0.1); }
+        .dropdown-item.active { background: rgba(0,106,106,0.1); font-weight: 600; }
+        
+        .container { width: 100%; max-width: 950px; margin: 0 auto; padding: 80px 16px 16px; box-sizing: border-box; flex: 1; }
         
         /* 搜索区 */
         .search-section { margin: 40px 0 20px; text-align: center; }
+        .logo-link { color: var(--md-sys-color-primary); text-decoration: none; }
+        .logo-link:hover { opacity: 0.8; }
         md-filled-text-field { width: 100%; --md-filled-text-field-container-shape: 28px; }
-        .disclaimer { margin-top: 12px; font-size: 0.85rem; color: #757575; display: flex; align-items: center; justify-content: center; gap: 6px; }
+        [data-theme="dark"] md-filled-text-field { --md-filled-text-field-input-text-color: #000000; --md-filled-text-field-label-text-color: #000000; }
+        .disclaimer { margin-top: 12px; font-size: 0.85rem; color: var(--text-grey); display: flex; align-items: center; justify-content: center; gap: 6px; }
 
         /* 歧义选择面板 */
-        #disambiguation { display: none; background: #fff; border-radius: 24px; padding: 24px; margin-bottom: 24px; box-shadow: 0 8px 32px rgba(0,0,0,0.12); border: 2px solid var(--md-sys-color-primary); }
-        .choice-item { cursor: pointer; padding: 16px; border-bottom: 1px solid #eee; transition: background 0.2s; border-radius: 12px; margin-bottom: 8px; }
+        #disambiguation { display: none; background: var(--bg-primary); border-radius: 24px; padding: 24px; margin-bottom: 24px; box-shadow: 0 8px 32px rgba(0,0,0,0.12); border: 2px solid var(--md-sys-color-primary); }
+        .choice-item { cursor: pointer; padding: 16px; border-bottom: 1px solid rgba(0,0,0,0.1); transition: background 0.2s; border-radius: 12px; margin-bottom: 8px; }
+        [data-theme="dark"] .choice-item { border-bottom-color: rgba(255,255,255,0.1); }
         .choice-item:last-child { border-bottom: none; }
-        .choice-item:hover { background: #e0f2f1; }
+        .choice-item:hover { background: rgba(0,106,106,0.1); }
 
         /* 头部卡片 */
-        .train-header { background: #fff; padding: 24px; border-radius: 24px; margin-bottom: 24px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); border: 1px solid #e0e0e0; }
+        .train-header { background: var(--bg-primary); padding: 24px; border-radius: 24px; margin-bottom: 24px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); border: 1px solid rgba(0,0,0,0.1); position: relative; }
+        [data-theme="dark"] .train-header { border-color: rgba(255,255,255,0.2); }
         .op-cat-row { font-weight: 700; color: var(--md-sys-color-primary); margin-bottom: 8px; font-size: 1.1rem; }
+        .op-cat-row a { transition: opacity 0.2s; }
+        .op-cat-row a:hover { opacity: 0.7; }
+        .op-cat-row img { display: inline-block; vertical-align: middle; height: 1.3rem; margin-left: 4px; }
+        .refresh-btn { position: absolute; top: 20px; right: 20px; cursor: pointer; padding: 8px; border-radius: 50%; background: rgba(0,0,0,0.05); transition: all 0.3s; }
+        [data-theme="dark"] .refresh-btn { background: rgba(255,255,255,0.1); }
+        .refresh-btn:hover { background: rgba(0,106,106,0.2); transform: rotate(90deg); }
+        .refresh-btn .material-symbols-outlined { font-size: 24px; color: var(--text-primary); }
         
         /* 公告框 */
-        .alert-box { background: var(--alert-bg); color: var(--alert-text); padding: 14px 18px; border-radius: 14px; margin-top: 16px; font-size: 0.95rem; display: flex; align-items: flex-start; gap: 10px; border: 1px solid #fff59d; line-height: 1.5; }
+        .alert-box { background: var(--alert-bg); color: var(--alert-text); padding: 14px 18px; border-radius: 14px; margin-top: 16px; font-size: 0.95rem; display: flex; align-items: flex-start; gap: 10px; border: 1px solid rgba(255,245,157,0.5); line-height: 1.5; }
 
         /* Timeline 布局 */
-        .timeline-container { position: relative; margin-top: 20px; padding: 40px 20px 40px 70px; background: #fff; border-radius: 24px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        .timeline-container { position: relative; margin-top: 20px; padding: 40px 20px 40px 70px; background: var(--bg-primary); border-radius: 24px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); border: 1px solid rgba(0,0,0,0.1); }
+        [data-theme="dark"] .timeline-container { border-color: rgba(255,255,255,0.2); }
         .station-item { position: relative; padding-bottom: 40px; z-index: 2; }
         .station-item:last-child { padding-bottom: 0; }
         .segment-line { position: absolute; left: -32px; top: 24px; width: 4px; height: 100%; background: var(--train-grey); z-index: 2; }
         .line-active { background: var(--train-green); }
-        .station-dot { position: absolute; left: -38px; top: 6px; width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 4px solid var(--train-grey); z-index: 3; }
+        .station-dot { position: absolute; left: -38px; top: 6px; width: 16px; height: 16px; border-radius: 50%; background: var(--bg-primary); border: 4px solid var(--train-grey); z-index: 3; }
         .dot-active { border-color: var(--train-green); background: var(--train-green); }
 
-        .station-card { background: #f8f9fa; padding: 18px 24px; border-radius: 16px; border: 1px solid #edf2f4; }
-        .station-name { font-weight: 700; font-size: 1.25rem; margin-bottom: 12px; color: #263238; }
+        .station-card { background: rgba(0,0,0,0.02); padding: 18px 24px; border-radius: 16px; border: 1px solid rgba(0,0,0,0.05); color: #1f1f1f; }
+        [data-theme="dark"] .station-card { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); color: #ffffff; }
+        .station-name { font-weight: 700; font-size: 1.25rem; margin-bottom: 12px; color: var(--text-primary); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        .direction-badge { display: inline-flex; align-items: center; padding: 4px 12px; background: rgba(128,128,128,0.2); border-radius: 8px; font-size: 0.85rem; font-weight: 500; color: inherit; }
+        [data-theme="dark"] .direction-badge { background: rgba(128,128,128,0.3); }
         .info-row { display: flex; gap: 35px; font-size: 0.95rem; margin-bottom: 8px; flex-wrap: wrap; }
-        .info-row.secondary { border-top: 1px dashed #cfd8dc; padding-top: 12px; margin-top: 12px; color: #546e7a; }
+        .info-row.secondary { border-top: 1px dashed var(--train-grey); padding-top: 12px; margin-top: 12px; color: var(--text-grey); }
+        .time-label { color: inherit; }
+        .time-item { color: inherit; }
         .time-val-sched { text-decoration: line-through red; color: var(--text-grey); margin-right: 8px; }
         .time-val-real.late { color: var(--train-red); font-weight: 700; }
         .time-val-real.early { color: var(--train-green); font-weight: 700; }
         .plat-old { text-decoration: line-through red; color: var(--text-grey); margin-right: 8px; }
         .plat-new { color: var(--train-green); font-weight: 900; }
-        .plat-normal { font-weight: 800; color: #000; }
+        .plat-normal { font-weight: 800; color: var(--text-primary); }
 
-        footer { margin: 60px 0 30px; text-align: center; font-size: 0.85rem; color: #90a4ae; }
+        /* 回到顶部按钮 */
+        .back-to-top { position: fixed; bottom: 30px; right: 30px; width: 50px; height: 50px; background: #233975; color: white; border-radius: 50%; display: none; justify-content: center; align-items: center; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.3); transition: all 0.3s; z-index: 999; }
+        .back-to-top:hover { background: #1a2a5a; transform: translateY(-5px); }
+        .back-to-top.show { display: flex; }
+        .back-to-top .material-symbols-outlined { font-size: 28px; }
+
+        footer { margin-top: auto; padding: 30px 20px; text-align: center; font-size: 0.85rem; color: var(--text-grey); width: 100%; }
         #results { display: none; }
     </style>
 </head>
 <body>
 
+<!-- 导航栏 -->
+<nav class="navbar">
+    <a href="#" onclick="goHome(); return false;" data-i18n="nav_home">首页</a>
+    <a href="about.html" data-i18n="nav_about">关于</a>
+    <div class="lang-switch" onclick="toggleLangMenu()">
+        <span class="material-symbols-outlined">language</span>
+        <span id="currentLang">简体中文</span>
+        <div class="dropdown-menu" id="langMenu">
+            <div class="dropdown-item" onclick="changeLang('zh'); event.stopPropagation();">简体中文</div>
+            <div class="dropdown-item" onclick="changeLang('en'); event.stopPropagation();">English</div>
+            <div class="dropdown-item" onclick="changeLang('it'); event.stopPropagation();">Italiano</div>
+        </div>
+    </div>
+    <div class="theme-switch" onclick="toggleThemeMenu()">
+        <span class="material-symbols-outlined">contrast</span>
+        <span id="currentTheme" data-i18n="theme_auto">跟随系统</span>
+        <div class="dropdown-menu" id="themeMenu">
+            <div class="dropdown-item" onclick="changeTheme('auto'); event.stopPropagation();" data-i18n="theme_auto">跟随系统</div>
+            <div class="dropdown-item" onclick="changeTheme('light'); event.stopPropagation();" data-i18n="theme_light">浅色模式</div>
+            <div class="dropdown-item" onclick="changeTheme('dark'); event.stopPropagation();" data-i18n="theme_dark">深色模式</div>
+        </div>
+    </div>
+</nav>
+
+<!-- 回到顶部按钮 -->
+<div class="back-to-top" onclick="scrollToTop()">
+    <span class="material-symbols-outlined">arrow_upward</span>
+</div>
+
 <div class="container">
     <div class="search-section">
-        <h1 style="color: var(--md-sys-color-primary); font-size: 2.5rem; margin-bottom: 10px;">BelloTreno</h1>
-        <md-filled-text-field id="trainSearch" label="输入车次 (例如 FR9633, IC630, 144)" type="text">
+        <a href="#" class="logo-link" onclick="goHome(); return false;">
+            <h1 style="color: var(--md-sys-color-primary); font-size: 2.5rem; margin-bottom: 10px;">BelloTreno</h1>
+        </a>
+        <md-filled-text-field id="trainSearch" label="" type="text">
             <md-icon slot="leading-icon">train</md-icon>
         </md-filled-text-field>
         <div class="disclaimer">
             <span class="material-symbols-outlined" style="font-size: 18px;">warning</span>
-            目前不支持 Italo 和 SNCF 列车。
+            <span data-i18n="disclaimer">目前不支持 Italo 和 SNCF 列车。</span>
         </div>
     </div>
 
     <!-- 歧义消除面板 -->
     <div id="disambiguation">
-        <h3 style="margin-top:0; color: var(--md-sys-color-primary)">检测到多个班次，请选择：</h3>
+        <h3 style="margin-top:0; color: var(--md-sys-color-primary)" data-i18n="disambiguation_title">检测到多个班次，请选择：</h3>
         <div id="choicesList"></div>
     </div>
 
@@ -95,7 +184,7 @@
     </div>
 
     <footer>
-        数据来源于ViaggiaTreno, 本站数据仅供参考，如有问题请关注车站大屏获取最新信息。 | &copy; 2026 BelloTreno
+        <span data-i18n="footer">数据来源于ViaggiaTreno, 本站数据仅供参考，如有问题请关注车站大屏获取最新信息。 | &copy; 2026 BelloTreno</span>
     </footer>
 </div>
 
@@ -104,16 +193,362 @@
 
     const CLIENT_MAP = { 1: "Trenitalia", 2: "Trenitalia", 4: "Trenitalia", 18: "Trenitalia TPER", 30: "Ferrovie del Sud Est", 63: "Trenord", 64: "ÖBB" };
     
+    const CLIENT_LINK_MAP = {
+        "Trenitalia": "https://www.trenitalia.com",
+        "Trenitalia TPER": "https://www.trenitaliatper.it",
+        "Ferrovie del Sud Est": "https://www.trenitalia.com",
+        "Trenord": "https://www.trenord.it",
+        "ÖBB": "https://www.oebb.at"
+    };
+    
     const CAT_MAP = {
         "REG": "Regionale", "RV": "Regionale Veloce", "MET": "Metropolitan", "FR": "Frecciarossa", 
         "IC": "Intercity", "ICN": "Intercity Notte", "EC": "Eurocity", "FB": "Frecciabianca", 
         "FA": "Frecciargento", "EN": "EuroNight", "RE": "Regionale"
     };
 
+    // 服务类型图片映射 (运营商代码 + 类型代码)
+    const CAT_IMAGE_MAP = {
+        // Trenitalia (1, 2, 4)
+        "1-IC": "pic/IC.png",
+        "2-IC": "pic/IC.png",
+        "4-IC": "pic/IC.png",
+        "1-ICN": "pic/ICN.png",
+        "2-ICN": "pic/ICN.png",
+        "4-ICN": "pic/ICN.png",
+        "1-REG": "pic/RV.png",
+        "2-REG": "pic/RV.png",
+        "4-REG": "pic/RV.png",
+        "1-RV": "pic/RV.png",
+        "2-RV": "pic/RV.png",
+        "4-RV": "pic/RV.png",
+        "1-MET": "pic/RV.png",
+        "2-MET": "pic/RV.png",
+        "4-MET": "pic/RV.png",
+        "1-RE": "pic/RV.png",
+        "2-RE": "pic/RV.png",
+        "4-RE": "pic/RV.png",
+        "1-FR": "pic/FR.png",
+        "2-FR": "pic/FR.png",
+        "4-FR": "pic/FR.png",
+        "1-FA": "pic/FA.png",
+        "2-FA": "pic/FA.png",
+        "4-FA": "pic/FA.png",
+        "1-FB": "pic/FB.png",
+        "2-FB": "pic/FB.png",
+        "4-FB": "pic/FB.png",
+        "1-EC": "pic/EC.png",
+        "2-EC": "pic/EC.png",
+        "4-EC": "pic/EC.png",
+        "1-EN": "pic/EN.png",
+        "2-EN": "pic/EN.png",
+        "4-EN": "pic/EN.png",
+        // Trenitalia TPER (18)
+        "18-REG": "pic/regn.png",
+        "18-RV": "pic/regn.png",
+        "18-RE": "pic/regn.png",
+        // Ferrovie del Sud Est (30)
+        "30-REG": "pic/regn.png",
+        "30-RV": "pic/regn.png",
+        "30-RE": "pic/regn.png",
+        // Trenord (63)
+        "63-REG": "pic/regn.png",
+        "63-RV": "pic/regn.png",
+        "63-RE": "pic/regn.png",
+        // ÖBB (64)
+        "64-EC": "pic/RJ.png",
+        "64-EN": "pic/NJ.png"
+    };
+
+    // 多语言翻译
+    const translations = {
+        zh: {
+            nav_home: "首页",
+            nav_about: "关于",
+            theme_auto: "跟随系统",
+            theme_light: "浅色模式",
+            theme_dark: "深色模式",
+            search_placeholder: "输入车次（例如 FR9633, IC630, EC144, R2025 或纯数字）",
+            disclaimer: "目前不支持 Italo 和 SNCF 列车。",
+            disambiguation_title: "检测到多个班次，请选择：",
+            depart_date: "始发日期",
+            origin_station: "始发站ID",
+            duration: "总时长约",
+            direction: "方向",
+            train_num: "车次",
+            last_position: "最后位置",
+            arrival: "到达",
+            departure: "出发",
+            expected: "预计",
+            stop_duration: "停靠时长",
+            platform: "站台",
+            direction: "方向",
+            executive_head: "Executive 在车头",
+            executive_tail: "Executive 在车尾",
+            in_head: "在车头",
+            in_tail: "在车尾",
+            minutes: "分钟",
+            hours: "小时",
+            not_departed: "未出发",
+            on_time: "准点",
+            early_by: "提前",
+            late_by: "晚点",
+            footer: "数据来源于ViaggiaTreno, 本站数据仅供参考，如有问题请关注车站大屏获取最新信息。 | © 2026 BelloTreno"
+        },
+        en: {
+            nav_home: "Home",
+            nav_about: "About",
+            theme_auto: "Follow System",
+            theme_light: "Light Mode",
+            theme_dark: "Dark Mode",
+            search_placeholder: "Enter train number (e.g. FR9633, IC630, EC144, R2025 or numbers)",
+            disclaimer: "Italo and SNCF trains are not currently supported.",
+            disambiguation_title: "Multiple trains detected, please select:",
+            depart_date: "Departure Date",
+            origin_station: "Origin Station ID",
+            duration: "Total Duration",
+            direction: "Direction",
+            train_num: "Train No.",
+            last_position: "Last Position",
+            arrival: "Arrival",
+            departure: "Departure",
+            expected: "Expected",
+            stop_duration: "Stop Duration",
+            platform: "Platform",
+            direction: "Direction",
+            executive_head: "Executive at the head",
+            executive_tail: "Executive at the tail",
+            in_head: "at the head",
+            in_tail: "at the tail",
+            minutes: "min",
+            hours: "h",
+            not_departed: "Not Departed",
+            on_time: "On Time",
+            early_by: "Early by",
+            late_by: "Delayed by",
+            footer: "Data from ViaggiaTreno. This information is for reference only. Please check station displays for official information. | © 2026 BelloTreno"
+        },
+        it: {
+            nav_home: "Home",
+            nav_about: "Informazioni",
+            theme_auto: "Segui Sistema",
+            theme_light: "Modalità Chiara",
+            theme_dark: "Modalità Scura",
+            search_placeholder: "Inserisci numero treno (es. FR9633, IC630, EC144, R2025 o numeri)",
+            disclaimer: "Treni Italo e SNCF non sono attualmente supportati.",
+            disambiguation_title: "Rilevati più treni, seleziona:",
+            depart_date: "Data di partenza",
+            origin_station: "ID Stazione Origine",
+            duration: "Durata Totale",
+            direction: "Direzione",
+            train_num: "Treno",
+            last_position: "Ultima Posizione",
+            arrival: "Arrivo",
+            departure: "Partenza",
+            expected: "Previsto",
+            stop_duration: "Durata Fermata",
+            platform: "Binario",
+            direction: "Direzione",
+            executive_head: "Executive in testa",
+            executive_tail: "Executive in coda",
+            in_head: "in testa",
+            in_tail: "in coda",
+            minutes: "min",
+            hours: "h",
+            not_departed: "Non Partito",
+            on_time: "In Orario",
+            early_by: "In Anticipo di",
+            late_by: "In Ritardo di",
+            footer: "Dati da ViaggiaTreno. Queste informazioni sono solo di riferimento. Controllare i display delle stazioni per informazioni ufficiali. | © 2026 BelloTreno"
+        }
+    };
+
+    let currentLang = 'zh';
+    let currentTheme = 'auto';
+    let currentTrainData = null;
+    let currentTriple = null;
+    let disambiguationData = null; // 存储歧义数据以便语言切换时重新渲染
+
+    // 初始化语言
+    function initLanguage() {
+        const savedLang = localStorage.getItem('language');
+        if (savedLang) {
+            currentLang = savedLang;
+        } else {
+            const browserLang = navigator.language.toLowerCase();
+            if (browserLang.startsWith('zh')) {
+                currentLang = 'zh';
+            } else if (browserLang.startsWith('it')) {
+                currentLang = 'it';
+            } else {
+                currentLang = 'en';
+            }
+        }
+        updateLanguage();
+    }
+
+    // 更新语言
+    function updateLanguage() {
+        const langNames = { zh: '简体中文', en: 'English', it: 'Italiano' };
+        document.getElementById('currentLang').textContent = langNames[currentLang];
+        document.documentElement.lang = currentLang;
+        
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+            const key = el.getAttribute('data-i18n');
+            if (translations[currentLang][key]) {
+                el.textContent = translations[currentLang][key];
+            }
+        });
+        
+        // 更新搜索框placeholder
+        document.getElementById('trainSearch').label = translations[currentLang].search_placeholder;
+        
+        // 如果有歧义面板显示，重新渲染
+        if (disambiguationData) {
+            renderDisambiguation();
+        }
+        
+        // 如果有车次信息显示，重新渲染
+        if (currentTrainData) {
+            render(currentTrainData);
+        }
+    }
+
+    // 切换语言
+    function changeLang(lang) {
+        currentLang = lang;
+        localStorage.setItem('language', lang);
+        updateLanguage();
+        document.getElementById('langMenu').classList.remove('show');
+    }
+
+    // 初始化主题
+    function initTheme() {
+        const savedTheme = localStorage.getItem('theme') || 'auto';
+        currentTheme = savedTheme;
+        applyTheme();
+        updateThemeDisplay();
+    }
+
+    // 应用主题
+    function applyTheme() {
+        if (currentTheme === 'auto') {
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+        } else {
+            document.documentElement.setAttribute('data-theme', currentTheme);
+        }
+    }
+
+    // 更新主题显示
+    function updateThemeDisplay() {
+        const themeKey = `theme_${currentTheme}`;
+        document.getElementById('currentTheme').textContent = translations[currentLang][themeKey];
+        document.getElementById('currentTheme').setAttribute('data-i18n', themeKey);
+    }
+
+    // 切换主题
+    function changeTheme(theme) {
+        currentTheme = theme;
+        localStorage.setItem('theme', theme);
+        applyTheme();
+        updateThemeDisplay();
+        document.getElementById('themeMenu').classList.remove('show');
+    }
+
+    // 切换下拉菜单
+    function toggleLangMenu() {
+        const menu = document.getElementById('langMenu');
+        menu.classList.toggle('show');
+        document.getElementById('themeMenu').classList.remove('show');
+    }
+
+    function toggleThemeMenu() {
+        const menu = document.getElementById('themeMenu');
+        menu.classList.toggle('show');
+        document.getElementById('langMenu').classList.remove('show');
+    }
+
+    // 点击外部关闭下拉菜单
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.lang-switch') && !e.target.closest('.theme-switch')) {
+            document.getElementById('langMenu').classList.remove('show');
+            document.getElementById('themeMenu').classList.remove('show');
+        }
+    });
+
+    // 监听系统主题变化
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+        if (currentTheme === 'auto') {
+            applyTheme();
+        }
+    });
+
+    // 回到顶部功能
+    function scrollToTop() {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // 显示/隐藏回到顶部按钮
+    window.addEventListener('scroll', () => {
+        const backToTop = document.querySelector('.back-to-top');
+        if (window.scrollY > 300) {
+            backToTop.classList.add('show');
+        } else {
+            backToTop.classList.remove('show');
+        }
+    });
+
+    // 返回首页
+    function goHome() {
+        window.location.href = '/';
+    }
+
+    // 格式化时长
+    function formatDuration(duration) {
+        if (!duration) return 'N/A';
+        const parts = duration.split(':');
+        if (parts.length === 2) {
+            const hours = parseInt(parts[0]);
+            const mins = parseInt(parts[1]);
+            if (currentLang === 'zh') {
+                return `${hours}小时${mins}分钟`;
+            } else if (currentLang === 'it') {
+                return `${hours}h:${mins}min`;
+            } else {
+                return `${hours}h:${mins}min`;
+            }
+        }
+        return duration;
+    }
+
+    // 翻译状态
     function translateStatus(text) {
         if (!text) return "";
-        return text.replace(/con un anticipo di/g, "提前").replace(/con un ritardo di/g, "晚点").replace(/in orario/g, "准点").replace(/(\d+)\s*min\./g, "$1分钟");
+        
+        if (currentLang === 'zh') {
+            return text
+                .replace(/non partito/gi, "未出发")
+                .replace(/con un anticipo di/g, "提前")
+                .replace(/con un ritardo di/g, "晚点")
+                .replace(/in orario/g, "准点")
+                .replace(/(\d+)\s*min\./g, "$1分钟");
+        } else if (currentLang === 'en') {
+            return text
+                .replace(/non partito/gi, "Not Departed")
+                .replace(/con un anticipo di/g, "Early by")
+                .replace(/con un ritardo di/g, "Delayed by")
+                .replace(/in orario/g, "On Time")
+                .replace(/(\d+)\s*min\./g, "$1 min");
+        }
+        
+        // 意大利语保持原文
+        return text;
     }
+
+    // 页面初始化
+    initLanguage();
+    initTheme();
 
     document.getElementById('trainSearch').addEventListener('keypress', async (e) => {
         if (e.key === 'Enter') {
@@ -129,7 +564,12 @@
         try {
             const autoRes = await fetch(`${API_BASE}/cercaNumeroTrenoTrenoAutocomplete/${num}`);
             const autoText = await autoRes.text();
-            if (!autoText.trim()) return alert("未找到该车次");
+            if (!autoText.trim()) {
+                const msg = currentLang === 'zh' ? "未找到该车次" :
+                           currentLang === 'it' ? "Treno non trovato" :
+                           "Train not found";
+                return alert(msg);
+            }
 
             const lines = autoText.trim().split('\n');
             if (lines.length > 1) {
@@ -137,15 +577,27 @@
             } else {
                 fetchDetails(lines[0].split('|')[1]);
             }
-        } catch (err) { alert("搜索失败"); }
+        } catch (err) {
+            const msg = currentLang === 'zh' ? "搜索失败" :
+                       currentLang === 'it' ? "Ricerca fallita" :
+                       "Search failed";
+            alert(msg);
+        }
     }
 
     function showDisambiguation(lines) {
+        disambiguationData = lines; // 保存数据
+        renderDisambiguation();
+    }
+
+    function renderDisambiguation() {
+        if (!disambiguationData) return;
+        
         const list = document.getElementById('choicesList');
         const panel = document.getElementById('disambiguation');
         list.innerHTML = '';
         
-        lines.forEach(line => {
+        disambiguationData.forEach(line => {
             const [label, triple] = line.split('|');
             const [tNum, sID, ts] = triple.split('-');
             // 将 Unix 毫秒戳转为当地日期
@@ -156,13 +608,14 @@
             div.className = 'choice-item';
             div.innerHTML = `
                 <div style="font-size:1.1rem; font-weight:bold; color:var(--md-sys-color-primary)">${label}</div>
-                <div style="font-size:0.9rem; color:#666; margin-top:4px">
-                    <span class="material-symbols-outlined" style="font-size:14px; vertical-align:middle">calendar_month</span> 始发日期: ${dateStr} 
-                    | <span class="material-symbols-outlined" style="font-size:14px; vertical-align:middle">location_on</span> 始发站ID: ${sID}
+                <div style="font-size:0.9rem; color:var(--text-grey); margin-top:4px">
+                    <span class="material-symbols-outlined" style="font-size:14px; vertical-align:middle">calendar_month</span> ${translations[currentLang].depart_date}: ${dateStr} 
+                    | <span class="material-symbols-outlined" style="font-size:14px; vertical-align:middle">location_on</span> ${translations[currentLang].origin_station}: ${sID}
                 </div>
             `;
             div.onclick = () => {
                 panel.style.display = 'none';
+                disambiguationData = null; // 清除数据
                 fetchDetails(triple);
             };
             list.appendChild(div);
@@ -172,13 +625,42 @@
     }
 
     async function fetchDetails(triple) {
+        currentTriple = triple;
         const [tNum, originID, ts] = triple.split('-');
         try {
             const res = await fetch(`${API_BASE}/andamentoTreno/${originID}/${tNum}/${ts}`);
-            if (res.status === 204) return alert("该班次暂无实时数据（可能已过期或尚未生成）");
+            if (res.status === 204) {
+                const msg = currentLang === 'zh' ? "该班次暂无实时数据（可能已过期或尚未生成）" :
+                           currentLang === 'it' ? "Nessun dato in tempo reale per questo treno (potrebbe essere scaduto o non ancora generato)" :
+                           "No real-time data for this train (may be expired or not yet generated)";
+                return alert(msg);
+            }
             const data = await res.json();
+            currentTrainData = data;
             render(data);
-        } catch (err) { alert("详情加载失败"); }
+        } catch (err) {
+            const msg = currentLang === 'zh' ? "详情加载失败" :
+                       currentLang === 'it' ? "Impossibile caricare i dettagli" :
+                       "Failed to load details";
+            alert(msg);
+        }
+    }
+
+    // 刷新车次信息
+    async function refreshTrainData() {
+        if (!currentTriple) return;
+        const refreshBtn = document.querySelector('.refresh-btn');
+        if (refreshBtn) {
+            refreshBtn.style.opacity = '0.5';
+            refreshBtn.style.pointerEvents = 'none';
+        }
+        await fetchDetails(currentTriple);
+        if (refreshBtn) {
+            setTimeout(() => {
+                refreshBtn.style.opacity = '1';
+                refreshBtn.style.pointerEvents = 'auto';
+            }, 1000);
+        }
     }
 
     function formatT(ms) {
@@ -189,7 +671,7 @@
     function renderTimeHtml(label, schedMs, realMs, delayMin) {
         const sched = formatT(schedMs);
         const real = formatT(realMs);
-        if (!real) return `<div class="time-item"><span class="time-label">${label} | 预计:</span> <b>${sched || '--:--'}</b></div>`;
+        if (!real) return `<div class="time-item"><span class="time-label">${label} | ${translations[currentLang].expected}:</span> <b>${sched || '--:--'}</b></div>`;
         const isDiff = sched !== real;
         const colorClass = (delayMin > 0) ? "late" : "early";
         return `
@@ -216,24 +698,42 @@
 
         const operator = CLIENT_MAP[data.codiceCliente] || "Other";
         const category = CAT_MAP[catCode] || data.categoriaDescrizione || catCode || "Treno";
+        
+        // 获取运营商链接
+        const operatorLink = CLIENT_LINK_MAP[operator] || "#";
+        const operatorHTML = operatorLink !== "#" ? `<a href="${operatorLink}" target="_blank" style="color: inherit; text-decoration: none;">${operator}</a>` : operator;
+        
+        // 获取服务类型图片
+        const imageKey = `${data.codiceCliente}-${catCode}`;
+        const categoryImage = CAT_IMAGE_MAP[imageKey];
+        const categoryHTML = categoryImage ? `<img src="${categoryImage}" alt="${category}" style="height: 1.3rem; vertical-align: middle; margin-left: 8px;">` : category;
 
         const displayOrigin = data.origineEstera || data.origine;
         const displayDest = data.destinazioneEstera || data.destinazione;
         const delayMsg = translateStatus(data.compRitardoAndamento[0]);
-        const isEarly = delayMsg.includes("提前") || delayMsg.includes("准点");
+        const isEarly = delayMsg.includes(translations[currentLang].early_by) || 
+                       delayMsg.includes(translations[currentLang].on_time) ||
+                       delayMsg.toLowerCase().includes("anticipo") ||
+                       delayMsg.toLowerCase().includes("orario") ||
+                       delayMsg.toLowerCase().includes("early");
+
+        const formattedDuration = formatDuration(data.compDurata);
 
         card.innerHTML = `
-            <div class="op-cat-row">${operator} · ${category}</div>
+            <div class="refresh-btn" onclick="refreshTrainData()" title="${currentLang === 'zh' ? '刷新' : currentLang === 'it' ? 'Aggiorna' : 'Refresh'}">
+                <span class="material-symbols-outlined">refresh</span>
+            </div>
+            <div class="op-cat-row" style="display: flex; align-items: center;">${operatorHTML} · ${categoryHTML}</div>
             <div style="display:flex; justify-content:space-between; align-items:flex-end;">
                 <div>
-                    <div style="font-size:2rem; font-weight:800; color:#1a1a1a; letter-spacing:-0.5px">${displayOrigin} ➜ ${displayDest}</div>
-                    <div style="font-size:1rem; color:#546e7a; margin-top:8px">
-                        车次: <b>${data.compNumeroTreno}</b> | 耗时: <b>${data.compDurata || 'N/A'}</b> | 方向: ${data.descOrientamento[0]}
+                    <div style="font-size:2rem; font-weight:800; color:var(--text-primary); letter-spacing:-0.5px">${displayOrigin} ➜ ${displayDest}</div>
+                    <div style="font-size:1rem; color:var(--text-grey); margin-top:8px">
+                        ${translations[currentLang].train_num}: <b>${data.compNumeroTreno}</b> | ${translations[currentLang].duration}: <b>${formattedDuration}</b>
                     </div>
                 </div>
                 <div style="text-align:right">
                     <div style="color:${isEarly ? 'var(--train-green)' : 'var(--train-red)'}; font-size:1.6rem; font-weight:800">${delayMsg}</div>
-                    <div style="font-size:0.95rem; color:#78909c">最后位置: ${data.stazioneUltimoRilevamento} (${data.compOraUltimoRilevamento || '--:--'})</div>
+                    <div style="font-size:0.95rem; color:var(--text-grey)">${translations[currentLang].last_position}: ${data.stazioneUltimoRilevamento} (${data.compOraUltimoRilevamento || '--:--'})</div>
                 </div>
             </div>
         `;
@@ -272,22 +772,40 @@
                 ? `<span class="plat-old">${pPlat}</span><span class="plat-new">${ePlat}</span>`
                 : `<span class="plat-normal">${pPlat || "--"}</span>`;
 
-            const stayTime = (f.partenza_teorica && f.arrivo_teorico) ? Math.round((f.partenza_teorica - f.arrivo_teorico) / 60000) + " 分钟" : "N/A";
+            const stayMinutes = (f.partenza_teorica && f.arrivo_teorico) ? Math.round((f.partenza_teorica - f.arrivo_teorico) / 60000) : null;
+            const stayTime = stayMinutes ? `${stayMinutes} ${translations[currentLang].minutes}` : "N/A";
+            
+            // 获取方向信息（如果有的话）- 显示在站名旁边
+            let directionBadge = '';
+            if (f.orientamento) {
+                let directionText = '';
+                if (f.orientamento === 'A') {
+                    directionText = `Executive ${translations[currentLang].in_tail}`;
+                } else if (f.orientamento === 'B') {
+                    directionText = `Executive ${translations[currentLang].in_head}`;
+                } else {
+                    directionText = f.orientamento;
+                }
+                directionBadge = `<span class="direction-badge">${directionText}</span>`;
+            }
 
             timeline.innerHTML += `
                 <div class="station-item">
                     ${lineHTML}
                     <div class="station-dot ${isDotActive ? 'dot-active' : ''}"></div>
                     <div class="station-card">
-                        <div class="station-name">${f.stazione}</div>
+                        <div class="station-name">
+                            <span>${f.stazione}</span>
+                            ${directionBadge}
+                        </div>
                         <div class="info-row">
-                            ${!isFirst ? renderTimeHtml("到达", (f.arrivo_teorico || f.programmata), f.arrivoReale, f.ritardoArrivo) : ''}
-                            ${!isLast ? renderTimeHtml("出发", (f.partenza_teorica || f.programmata), f.partenzaReale, f.ritardoPartenza) : ''}
-                            ${(!isFirst && !isLast) ? `<div class="time-item"><span class="time-label">停靠时长:</span> <b>${stayTime}</b></div>` : ''}
+                            ${!isFirst ? renderTimeHtml(translations[currentLang].arrival, (f.arrivo_teorico || f.programmata), f.arrivoReale, f.ritardoArrivo) : ''}
+                            ${!isLast ? renderTimeHtml(translations[currentLang].departure, (f.partenza_teorica || f.programmata), f.partenzaReale, f.ritardoPartenza) : ''}
+                            ${(!isFirst && !isLast) ? `<div class="time-item"><span class="time-label">${translations[currentLang].stop_duration}:</span> <b>${stayTime}</b></div>` : ''}
                         </div>
                         <div class="info-row secondary">
-                            <div class="time-item"><span class="time-label">站台:</span> ${platHTML}</div>
-                            <div class="time-item"><span class="time-label">里程指数 (Progressivo):</span> <b>${f.progressivo}</b></div>
+                            <div class="time-item"><span class="time-label">${translations[currentLang].platform}:</span> ${platHTML}</div>
+                            <div class="time-item" style="color: var(--text-grey);"><span class="time-label">Progressivo:</span> <b>${f.progressivo}</b></div>
                         </div>
                     </div>
                 </div>
