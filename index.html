@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BelloTreno - 意大利铁路火车实时情况</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@500;700&family=Roboto:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined" rel="stylesheet">
+    <script type="module">
+        import 'https://esm.run/@material/web/all.js';
+    </script>
+    <style>
+        :root {
+            --md-sys-color-primary: #006a6a;
+            --md-sys-color-surface: #f4fbfa;
+            --train-green: #2e7d32;
+            --train-grey: #cfd8dc;
+            --train-red: #d32f2f;
+            --text-grey: #90a4ae;
+            --alert-bg: #fffde7;
+            --alert-text: #f57f17;
+        }
+
+        body { font-family: 'Roboto', 'Noto Sans SC', sans-serif; margin: 0; background-color: var(--md-sys-color-surface); color: #1f1f1f; }
+        .container { width: 100%; max-width: 950px; margin: 0 auto; padding: 16px; box-sizing: border-box; }
+        
+        /* 搜索区 */
+        .search-section { margin: 40px 0 20px; text-align: center; }
+        md-filled-text-field { width: 100%; --md-filled-text-field-container-shape: 28px; }
+        .disclaimer { margin-top: 12px; font-size: 0.85rem; color: #757575; display: flex; align-items: center; justify-content: center; gap: 6px; }
+
+        /* 歧义选择面板 */
+        #disambiguation { display: none; background: #fff; border-radius: 24px; padding: 24px; margin-bottom: 24px; box-shadow: 0 8px 32px rgba(0,0,0,0.12); border: 2px solid var(--md-sys-color-primary); }
+        .choice-item { cursor: pointer; padding: 16px; border-bottom: 1px solid #eee; transition: background 0.2s; border-radius: 12px; margin-bottom: 8px; }
+        .choice-item:last-child { border-bottom: none; }
+        .choice-item:hover { background: #e0f2f1; }
+
+        /* 头部卡片 */
+        .train-header { background: #fff; padding: 24px; border-radius: 24px; margin-bottom: 24px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); border: 1px solid #e0e0e0; }
+        .op-cat-row { font-weight: 700; color: var(--md-sys-color-primary); margin-bottom: 8px; font-size: 1.1rem; }
+        
+        /* 公告框 */
+        .alert-box { background: var(--alert-bg); color: var(--alert-text); padding: 14px 18px; border-radius: 14px; margin-top: 16px; font-size: 0.95rem; display: flex; align-items: flex-start; gap: 10px; border: 1px solid #fff59d; line-height: 1.5; }
+
+        /* Timeline 布局 */
+        .timeline-container { position: relative; margin-top: 20px; padding: 40px 20px 40px 70px; background: #fff; border-radius: 24px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        .station-item { position: relative; padding-bottom: 40px; z-index: 2; }
+        .station-item:last-child { padding-bottom: 0; }
+        .segment-line { position: absolute; left: -32px; top: 24px; width: 4px; height: 100%; background: var(--train-grey); z-index: 2; }
+        .line-active { background: var(--train-green); }
+        .station-dot { position: absolute; left: -38px; top: 6px; width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 4px solid var(--train-grey); z-index: 3; }
+        .dot-active { border-color: var(--train-green); background: var(--train-green); }
+
+        .station-card { background: #f8f9fa; padding: 18px 24px; border-radius: 16px; border: 1px solid #edf2f4; }
+        .station-name { font-weight: 700; font-size: 1.25rem; margin-bottom: 12px; color: #263238; }
+        .info-row { display: flex; gap: 35px; font-size: 0.95rem; margin-bottom: 8px; flex-wrap: wrap; }
+        .info-row.secondary { border-top: 1px dashed #cfd8dc; padding-top: 12px; margin-top: 12px; color: #546e7a; }
+        .time-val-sched { text-decoration: line-through red; color: var(--text-grey); margin-right: 8px; }
+        .time-val-real.late { color: var(--train-red); font-weight: 700; }
+        .time-val-real.early { color: var(--train-green); font-weight: 700; }
+        .plat-old { text-decoration: line-through red; color: var(--text-grey); margin-right: 8px; }
+        .plat-new { color: var(--train-green); font-weight: 900; }
+        .plat-normal { font-weight: 800; color: #000; }
+
+        footer { margin: 60px 0 30px; text-align: center; font-size: 0.85rem; color: #90a4ae; }
+        #results { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="search-section">
+        <h1 style="color: var(--md-sys-color-primary); font-size: 2.5rem; margin-bottom: 10px;">BelloTreno</h1>
+        <md-filled-text-field id="trainSearch" label="输入车次 (例如 FR9633, IC630, 144)" type="text">
+            <md-icon slot="leading-icon">train</md-icon>
+        </md-filled-text-field>
+        <div class="disclaimer">
+            <span class="material-symbols-outlined" style="font-size: 18px;">warning</span>
+            目前不支持 Italo 和 SNCF 列车。
+        </div>
+    </div>
+
+    <!-- 歧义消除面板 -->
+    <div id="disambiguation">
+        <h3 style="margin-top:0; color: var(--md-sys-color-primary)">检测到多个班次，请选择：</h3>
+        <div id="choicesList"></div>
+    </div>
+
+    <!-- 结果展示区 -->
+    <div id="results">
+        <div id="trainCard" class="train-header"></div>
+        <div class="timeline-container">
+            <div id="timelineBody"></div>
+        </div>
+    </div>
+
+    <footer>
+        数据来源于ViaggiaTreno, 本站数据仅供参考，如有问题请关注车站大屏获取最新信息。 | &copy; 2026 BelloTreno
+    </footer>
+</div>
+
+<script>
+    const API_BASE = "https://api.bellotreno.org/?url=https://www.viaggiatreno.it/infomobilita/resteasy/viaggiatreno";
+
+    const CLIENT_MAP = { 1: "Trenitalia", 2: "Trenitalia", 4: "Trenitalia", 18: "Trenitalia TPER", 30: "Ferrovie del Sud Est", 63: "Trenord", 64: "ÖBB" };
+    
+    const CAT_MAP = {
+        "REG": "Regionale", "RV": "Regionale Veloce", "MET": "Metropolitan", "FR": "Frecciarossa", 
+        "IC": "Intercity", "ICN": "Intercity Notte", "EC": "Eurocity", "FB": "Frecciabianca", 
+        "FA": "Frecciargento", "EN": "EuroNight", "RE": "Regionale"
+    };
+
+    function translateStatus(text) {
+        if (!text) return "";
+        return text.replace(/con un anticipo di/g, "提前").replace(/con un ritardo di/g, "晚点").replace(/in orario/g, "准点").replace(/(\d+)\s*min\./g, "$1分钟");
+    }
+
+    document.getElementById('trainSearch').addEventListener('keypress', async (e) => {
+        if (e.key === 'Enter') {
+            const num = e.target.value.replace(/\D/g, '');
+            if (num) startSearch(num);
+        }
+    });
+
+    async function startSearch(num) {
+        document.getElementById('results').style.display = 'none';
+        document.getElementById('disambiguation').style.display = 'none';
+
+        try {
+            const autoRes = await fetch(`${API_BASE}/cercaNumeroTrenoTrenoAutocomplete/${num}`);
+            const autoText = await autoRes.text();
+            if (!autoText.trim()) return alert("未找到该车次");
+
+            const lines = autoText.trim().split('\n');
+            if (lines.length > 1) {
+                showDisambiguation(lines);
+            } else {
+                fetchDetails(lines[0].split('|')[1]);
+            }
+        } catch (err) { alert("搜索失败"); }
+    }
+
+    function showDisambiguation(lines) {
+        const list = document.getElementById('choicesList');
+        const panel = document.getElementById('disambiguation');
+        list.innerHTML = '';
+        
+        lines.forEach(line => {
+            const [label, triple] = line.split('|');
+            const [tNum, sID, ts] = triple.split('-');
+            // 将 Unix 毫秒戳转为当地日期
+            const dateObj = new Date(parseInt(ts));
+            const dateStr = dateObj.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit' });
+            
+            const div = document.createElement('div');
+            div.className = 'choice-item';
+            div.innerHTML = `
+                <div style="font-size:1.1rem; font-weight:bold; color:var(--md-sys-color-primary)">${label}</div>
+                <div style="font-size:0.9rem; color:#666; margin-top:4px">
+                    <span class="material-symbols-outlined" style="font-size:14px; vertical-align:middle">calendar_month</span> 始发日期: ${dateStr} 
+                    | <span class="material-symbols-outlined" style="font-size:14px; vertical-align:middle">location_on</span> 始发站ID: ${sID}
+                </div>
+            `;
+            div.onclick = () => {
+                panel.style.display = 'none';
+                fetchDetails(triple);
+            };
+            list.appendChild(div);
+        });
+        panel.style.display = 'block';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    async function fetchDetails(triple) {
+        const [tNum, originID, ts] = triple.split('-');
+        try {
+            const res = await fetch(`${API_BASE}/andamentoTreno/${originID}/${tNum}/${ts}`);
+            if (res.status === 204) return alert("该班次暂无实时数据（可能已过期或尚未生成）");
+            const data = await res.json();
+            render(data);
+        } catch (err) { alert("详情加载失败"); }
+    }
+
+    function formatT(ms) {
+        if (!ms) return null;
+        return new Date(ms).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' });
+    }
+
+    function renderTimeHtml(label, schedMs, realMs, delayMin) {
+        const sched = formatT(schedMs);
+        const real = formatT(realMs);
+        if (!real) return `<div class="time-item"><span class="time-label">${label} | 预计:</span> <b>${sched || '--:--'}</b></div>`;
+        const isDiff = sched !== real;
+        const colorClass = (delayMin > 0) ? "late" : "early";
+        return `
+            <div class="time-item">
+                <span class="time-label">${label} |</span> 
+                ${isDiff ? `<span class="time-val-sched">${sched}</span>` : ''}
+                <span class="time-val-real ${colorClass}">${real}</span>
+            </div>
+        `;
+    }
+
+    function render(data) {
+        document.getElementById('results').style.display = 'block';
+        const card = document.getElementById('trainCard');
+        const timeline = document.getElementById('timelineBody');
+
+        // --- 核心逻辑：箭系列类型识别 ---
+        let catCode = (data.categoria || "").trim();
+        // 如果 categoria 为空，尝试从 compNumeroTreno (如 " FR 9505") 提取前缀
+        if (!catCode && data.compNumeroTreno) {
+            const match = data.compNumeroTreno.match(/([A-Z]+)/);
+            if (match) catCode = match[1];
+        }
+
+        const operator = CLIENT_MAP[data.codiceCliente] || "Other";
+        const category = CAT_MAP[catCode] || data.categoriaDescrizione || catCode || "Treno";
+
+        const displayOrigin = data.origineEstera || data.origine;
+        const displayDest = data.destinazioneEstera || data.destinazione;
+        const delayMsg = translateStatus(data.compRitardoAndamento[0]);
+        const isEarly = delayMsg.includes("提前") || delayMsg.includes("准点");
+
+        card.innerHTML = `
+            <div class="op-cat-row">${operator} · ${category}</div>
+            <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+                <div>
+                    <div style="font-size:2rem; font-weight:800; color:#1a1a1a; letter-spacing:-0.5px">${displayOrigin} ➜ ${displayDest}</div>
+                    <div style="font-size:1rem; color:#546e7a; margin-top:8px">
+                        车次: <b>${data.compNumeroTreno}</b> | 耗时: <b>${data.compDurata || 'N/A'}</b> | 方向: ${data.descOrientamento[0]}
+                    </div>
+                </div>
+                <div style="text-align:right">
+                    <div style="color:${isEarly ? 'var(--train-green)' : 'var(--train-red)'}; font-size:1.6rem; font-weight:800">${delayMsg}</div>
+                    <div style="font-size:0.95rem; color:#78909c">最后位置: ${data.stazioneUltimoRilevamento} (${data.compOraUltimoRilevamento || '--:--'})</div>
+                </div>
+            </div>
+        `;
+
+        // 渲染实时公告 (subTitle)
+        if (data.subTitle && data.subTitle.trim()) {
+            card.innerHTML += `
+                <div class="alert-box">
+                    <span class="material-symbols-outlined" style="font-size:20px">campaign</span>
+                    <span>${data.subTitle}</span>
+                </div>
+            `;
+        }
+
+        // Timeline 进度算法
+        timeline.innerHTML = '';
+        let lastReachedIdx = -1;
+        if (!data.nonPartito) {
+            data.fermate.forEach((f, i) => { if (f.arrivoReale !== null || f.partenzaReale !== null) lastReachedIdx = i; });
+        }
+
+        data.fermate.forEach((f, i) => {
+            const isLast = i === data.fermate.length - 1;
+            const isFirst = i === 0;
+            const isDotActive = i <= lastReachedIdx;
+
+            let lineHTML = "";
+            if (!isLast) {
+                const isLineActive = i < lastReachedIdx;
+                lineHTML = `<div class="segment-line ${isLineActive ? 'line-active' : ''}"></div>`;
+            }
+
+            const pPlat = f.binarioProgrammatoPartenzaDescrizione || f.binarioProgrammatoArrivoDescrizione;
+            const ePlat = f.binarioEffettivoPartenzaDescrizione || f.binarioEffettivoArrivoDescrizione;
+            let platHTML = (ePlat && pPlat && ePlat !== pPlat) 
+                ? `<span class="plat-old">${pPlat}</span><span class="plat-new">${ePlat}</span>`
+                : `<span class="plat-normal">${pPlat || "--"}</span>`;
+
+            const stayTime = (f.partenza_teorica && f.arrivo_teorico) ? Math.round((f.partenza_teorica - f.arrivo_teorico) / 60000) + " 分钟" : "N/A";
+
+            timeline.innerHTML += `
+                <div class="station-item">
+                    ${lineHTML}
+                    <div class="station-dot ${isDotActive ? 'dot-active' : ''}"></div>
+                    <div class="station-card">
+                        <div class="station-name">${f.stazione}</div>
+                        <div class="info-row">
+                            ${!isFirst ? renderTimeHtml("到达", (f.arrivo_teorico || f.programmata), f.arrivoReale, f.ritardoArrivo) : ''}
+                            ${!isLast ? renderTimeHtml("出发", (f.partenza_teorica || f.programmata), f.partenzaReale, f.ritardoPartenza) : ''}
+                            ${(!isFirst && !isLast) ? `<div class="time-item"><span class="time-label">停靠时长:</span> <b>${stayTime}</b></div>` : ''}
+                        </div>
+                        <div class="info-row secondary">
+                            <div class="time-item"><span class="time-label">站台:</span> ${platHTML}</div>
+                            <div class="time-item"><span class="time-label">里程指数 (Progressivo):</span> <b>${f.progressivo}</b></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+</script>
+</body>
+</html>
