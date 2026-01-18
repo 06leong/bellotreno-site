@@ -32,7 +32,10 @@
             min-height: 100vh;
             display: flex;
             flex-direction: column;
+            overflow-x: hidden;
         }
+        
+        * { box-sizing: border-box; }
 
         /* 导航栏 */
         .navbar {
@@ -146,9 +149,10 @@
             width: 100%;
             max-width: 950px;
             margin: 0 auto;
-            padding: 100px 16px 50px;
+            padding: 80px 16px 16px;
             box-sizing: border-box;
             flex: 1;
+            overflow-x: hidden;
         }
 
         .content-card {
@@ -253,11 +257,56 @@
 
         footer {
             margin-top: auto;
-            padding: 30px 20px;
+            padding: 20px 16px;
             text-align: center;
             font-size: 0.85rem;
             color: var(--text-grey);
             width: 100%;
+        }
+        
+        footer span {
+            display: block;
+            max-width: 950px;
+            margin: 0 auto;
+            word-wrap: break-word;
+            line-height: 1.6;
+        }
+        
+        /* 响应式设计 - 移动端优化 */
+        @media (max-width: 768px) {
+            .navbar { padding: 10px 12px; gap: 8px; flex-wrap: wrap; }
+            .navbar a { font-size: 0.85rem; padding: 4px 8px; }
+            .theme-switch, .lang-switch { padding: 4px 8px; font-size: 0.85rem; }
+            .theme-switch .material-symbols-outlined, .lang-switch .material-symbols-outlined { font-size: 18px; }
+            
+            .container { padding: 70px 12px 12px; }
+            
+            .content-card { padding: 24px 16px; }
+            h1 { font-size: 2rem; }
+            h2 { font-size: 1.3rem; }
+            p { font-size: 0.95rem; }
+            .feature-list li { padding: 10px 0; font-size: 0.95rem; }
+            
+            .back-to-top { width: 45px; height: 45px; bottom: 20px; right: 20px; }
+            .back-to-top .material-symbols-outlined { font-size: 24px; }
+            
+            footer { font-size: 0.7rem; padding: 16px 10px; }
+            footer span { font-size: 0.7rem; padding: 0 5px; }
+        }
+        
+        /* 超小屏幕优化 */
+        @media (max-width: 480px) {
+            .navbar { gap: 6px; }
+            .navbar a { font-size: 0.8rem; padding: 4px 6px; white-space: nowrap; }
+            .theme-switch span:not(.material-symbols-outlined), 
+            .lang-switch span:not(.material-symbols-outlined) { display: none; }
+            
+            h1 { font-size: 1.8rem; }
+            h2 { font-size: 1.2rem; }
+            p { font-size: 0.9rem; }
+            .feature-list li { font-size: 0.9rem; }
+            
+            .content-card { padding: 20px 12px; border-radius: 16px; }
         }
     </style>
 </head>
@@ -328,11 +377,11 @@
             <p>网站：<a href="https://real.bellotreno.org">https://real.bellotreno.org</a></p>
         </div>
     </div>
-
-    <footer>
-        <span data-i18n="footer">数据来源于ViaggiaTreno, 本站数据仅供参考，如有问题请关注车站大屏获取最新信息。 | &copy; 2026 BelloTreno</span>
-    </footer>
 </div>
+
+<footer>
+    <span data-i18n="footer">数据来源于ViaggiaTreno, 本站数据仅供参考，如有问题请关注车站大屏获取最新信息。 | &copy; 2026 BelloTreno</span>
+</footer>
 
 <script>
     // 多语言翻译
