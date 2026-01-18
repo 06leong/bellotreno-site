@@ -89,6 +89,30 @@ const OPERATOR_MAP = {
     64: "ÖBB"
 };
 
+// 辅助函数：格式化车次号，添加换行（如 "REG 24435" → "REG<br>24435"）
+function formatTrainNumber(trainNumberStr) {
+    if (!trainNumberStr) return '';
+    
+    // 去除首尾空格
+    trainNumberStr = trainNumberStr.trim();
+    
+    // 匹配格式：字母部分 + 空格（一个或多个）+ 数字部分
+    // 支持格式：FR 9633, REG 24435, IC 630, EC 144 等
+    const match = trainNumberStr.match(/^([A-Z]+)\s+(\d+)$/);
+    if (match) {
+        return `${match[1]}<br>${match[2]}`;
+    }
+    
+    // 尝试更宽松的匹配：任何字母后跟数字（可能没有空格）
+    const matchNoSpace = trainNumberStr.match(/^([A-Z]+)(\d+)$/);
+    if (matchNoSpace) {
+        return `${matchNoSpace[1]}<br>${matchNoSpace[2]}`;
+    }
+    
+    // 如果格式不匹配，返回原始值
+    return trainNumberStr;
+}
+
 // 格式化离站看板数据
 function formatDepartureData(train, currentLang = 'zh') {
     const translations = {
@@ -120,8 +144,8 @@ function formatDepartureData(train, currentLang = 'zh') {
     // 时间
     const scheduledTime = train.compOrarioPartenza || '--:--';
     
-    // 车次号
-    const trainNumber = train.compNumeroTreno || '';
+    // 车次号 - 添加换行
+    const trainNumber = formatTrainNumber(train.compNumeroTreno || '');
     
     // 目的地
     const destination = train.destinazioneEstera || train.destinazione || '';
@@ -144,18 +168,22 @@ function formatDepartureData(train, currentLang = 'zh') {
         statusColor = 'green';
     }
     
-    // 站台
+    // 站台 - 添加呼吸灯效果（如果火车在站）
     const actualPlatform = train.binarioEffettivoPartenzaDescrizione || '';
     const scheduledPlatform = train.binarioProgrammatoPartenzaDescrizione || '';
+    const inStazione = train.inStazione === true;
     let platformHtml = '';
     
     if (actualPlatform && scheduledPlatform && actualPlatform !== scheduledPlatform) {
-        // 站台变更
-        platformHtml = `<span style="color:red; font-weight:bold;">${actualPlatform}</span> <del>${scheduledPlatform}</del>`;
+        // 站台变更 - 红色高亮实际站台，灰色删除线原站台
+        const pulseClass = inStazione ? ' class="platform-pulse"' : '';
+        platformHtml = `<span style="color:red; font-weight:bold;"${pulseClass}>${actualPlatform}</span> <del style="color:grey;">${scheduledPlatform}</del>`;
     } else if (actualPlatform) {
-        platformHtml = actualPlatform;
+        const pulseClass = inStazione ? ' class="platform-pulse"' : '';
+        platformHtml = `<span${pulseClass}>${actualPlatform}</span>`;
     } else if (scheduledPlatform) {
-        platformHtml = scheduledPlatform;
+        const pulseClass = inStazione ? ' class="platform-pulse"' : '';
+        platformHtml = `<span${pulseClass}>${scheduledPlatform}</span>`;
     } else {
         platformHtml = '--';
     }
@@ -167,6 +195,7 @@ function formatDepartureData(train, currentLang = 'zh') {
         status,
         statusColor,
         platformHtml,
+        inStazione,
         rawData: train
     };
 }
@@ -205,8 +234,8 @@ function formatArrivalData(train, currentLang = 'zh') {
     // 始发站
     const origin = train.origine || '';
     
-    // 车次号
-    const trainNumber = train.compNumeroTreno || '';
+    // 车次号 - 添加换行
+    const trainNumber = formatTrainNumber(train.compNumeroTreno || '');
     
     // 实际/预计到达时间（从 compOrarioEffettivoArrivo 中提取）
     let actualTime = scheduledTime;
@@ -236,18 +265,22 @@ function formatArrivalData(train, currentLang = 'zh') {
         statusColor = 'green';
     }
     
-    // 到达站台
+    // 到达站台 - 添加呼吸灯效果（如果火车在站）
     const actualPlatform = train.binarioEffettivoArrivoDescrizione || '';
     const scheduledPlatform = train.binarioProgrammatoArrivoDescrizione || '';
+    const inStazione = train.inStazione === true;
     let platformHtml = '';
     
     if (actualPlatform && scheduledPlatform && actualPlatform !== scheduledPlatform) {
-        // 站台变更 - 需要红色高亮或闪烁
-        platformHtml = `<span style="color:red; font-weight:bold;">${actualPlatform}</span> <del>${scheduledPlatform}</del>`;
+        // 站台变更 - 红色高亮实际站台，灰色删除线原站台
+        const pulseClass = inStazione ? ' class="platform-pulse"' : '';
+        platformHtml = `<span style="color:red; font-weight:bold;"${pulseClass}>${actualPlatform}</span> <del style="color:grey;">${scheduledPlatform}</del>`;
     } else if (actualPlatform) {
-        platformHtml = actualPlatform;
+        const pulseClass = inStazione ? ' class="platform-pulse"' : '';
+        platformHtml = `<span${pulseClass}>${actualPlatform}</span>`;
     } else if (scheduledPlatform) {
-        platformHtml = scheduledPlatform;
+        const pulseClass = inStazione ? ' class="platform-pulse"' : '';
+        platformHtml = `<span${pulseClass}>${scheduledPlatform}</span>`;
     } else {
         platformHtml = '--';
     }
@@ -260,6 +293,7 @@ function formatArrivalData(train, currentLang = 'zh') {
         status,
         statusColor,
         platformHtml,
+        inStazione,
         rawData: train
     };
 }

@@ -11,14 +11,18 @@
         /* 车站看板特定样式 */
         .station-header {
             text-align: center;
-            margin: 40px 0 20px;
+            margin: 40px auto 20px;
+            max-width: 100%;
+            padding: 0 20px;
         }
         
         .station-name {
             font-size: 2.5rem;
             font-weight: 800;
             color: var(--md-sys-color-primary);
-            margin-bottom: 10px;
+            margin: 0 auto 10px;
+            display: block;
+            width: 100%;
         }
         
         .board-type-switch {
@@ -127,16 +131,52 @@
         
         .train-col {
             font-weight: 600;
+            min-width: 80px;
+        }
+        
+        .destination-col, .origin-col {
+            min-width: 100px;
         }
         
         .status-col {
             font-weight: 500;
+            min-width: 90px;
         }
         
         .platform-col {
             font-family: 'Roboto Mono', monospace;
             font-weight: 700;
             font-size: 1.1rem;
+            min-width: 60px;
+        }
+        
+        /* 站台呼吸灯效果 - 当火车在站时 */
+        .platform-pulse {
+            display: inline-block;
+            animation: platformPulse 1.5s ease-in-out infinite;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--md-sys-color-primary) 0%, rgba(35, 57, 117, 0.2) 100%);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: white !important;
+            box-shadow: 0 0 10px rgba(35, 57, 117, 0.5);
+        }
+        
+        [data-theme="dark"] .platform-pulse {
+            background: linear-gradient(135deg, #a2e6fb 0%, rgba(162, 230, 251, 0.2) 100%);
+            color: #0d131e !important;
+            box-shadow: 0 0 15px rgba(162, 230, 251, 0.6);
+        }
+        
+        @keyframes platformPulse {
+            0%, 100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+            50% {
+                opacity: 0.85;
+                transform: scale(1.08);
+            }
         }
         
         .loading {
@@ -176,21 +216,163 @@
             opacity: 0.7;
         }
         
-        /* 响应式 */
-        @media (max-width: 768px) {
-            .station-name { font-size: 1.8rem; }
+        .scroll-hint {
+            text-align: center;
+            font-size: 0.85rem;
+            color: var(--text-grey);
+            margin-bottom: 10px;
+            padding: 8px;
+            background: rgba(0,0,0,0.03);
+            border-radius: 8px;
+            display: none;
+        }
+        
+        [data-theme="dark"] .scroll-hint {
+            background: rgba(255,255,255,0.05);
+        }
+        
+        .scroll-hint .material-symbols-outlined {
+            font-size: 16px;
+            vertical-align: middle;
+        }
+        
+        /* 响应式 - 添加横向滚动支持 */
+        .board-table {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch; /* iOS 平滑滚动 */
+        }
+        
+        table {
+            min-width: 650px; /* 桌面端确保表格有最小宽度 */
+        }
+        
+        /* 平板端（481px - 768px）*/
+        @media (max-width: 768px) and (min-width: 481px) {
+            .station-name { 
+                font-size: 1.8rem; 
+                word-break: break-word;
+                padding: 0 10px;
+            }
             .board-type-switch { max-width: 300px; }
             .board-type-btn { font-size: 0.9rem; padding: 8px 16px; }
             
-            table { font-size: 0.85rem; }
-            th, td { padding: 10px 8px; }
+            .scroll-hint { display: block; } /* 平板端显示滚动提示 */
+            
+            table { 
+                font-size: 0.85rem;
+                min-width: 600px; /* 平板端需要横向滚动 */
+            }
+            th, td { 
+                padding: 10px 8px;
+                white-space: nowrap; /* 平板端保持不换行 */
+            }
             .time-col, .platform-col { font-size: 0.95rem; }
         }
         
+        /* 手机端 - 紧凑模式 + 横向滚动 */
         @media (max-width: 480px) {
-            .station-name { font-size: 1.5rem; }
-            table { font-size: 0.8rem; }
-            th, td { padding: 8px 6px; }
+            .station-name { 
+                font-size: 1.5rem;
+                padding: 0 8px;
+            }
+            
+            .scroll-hint { 
+                display: block !important; /* 显示滚动提示 */
+                font-size: 0.75rem;
+                padding: 6px;
+                margin-bottom: 8px;
+            }
+            
+            table { 
+                font-size: 0.75rem;
+                min-width: 440px; /* 紧凑布局，但允许横向滚动查看长内容 */
+                width: auto; /* 自动宽度 */
+                table-layout: fixed; /* 固定表格布局，确保列宽一致 */
+            }
+            
+            th, td { 
+                padding: 8px 6px;
+                white-space: normal; /* 允许换行 */
+                word-wrap: break-word;
+                vertical-align: middle; /* 居中对齐，视觉效果更好 */
+                height: auto;
+                min-height: 36px; /* 最小行高，确保一致性 */
+            }
+            
+            tbody tr {
+                border-bottom: 1px solid rgba(0,0,0,0.08);
+            }
+            
+            [data-theme="dark"] tbody tr {
+                border-bottom-color: rgba(255,255,255,0.08);
+            }
+            
+            /* 时间列 - 不换行，紧凑 */
+            .time-col {
+                font-size: 0.8rem;
+                white-space: nowrap;
+                min-width: 45px;
+                max-width: 45px;
+                padding-left: 4px !important;
+                padding-right: 4px !important;
+            }
+            
+            /* 车次列 - 允许换行，两行显示（如 REG\n3069） */
+            .train-col {
+                font-size: 0.72rem;
+                line-height: 1.25;
+                min-width: 56px;
+                max-width: 56px;
+                word-break: break-all; /* 强制在空格处断行 */
+                padding-left: 4px !important;
+                padding-right: 4px !important;
+            }
+            
+            /* 目的地/始发站列 - 允许换行 */
+            .destination-col, .origin-col {
+                font-size: 0.72rem;
+                line-height: 1.25;
+                min-width: 85px;
+                max-width: 85px;
+                padding-left: 5px !important;
+                padding-right: 5px !important;
+            }
+            
+            /* 状态列 - 允许换行 */
+            .status-col {
+                font-size: 0.68rem;
+                line-height: 1.25;
+                min-width: 68px;
+                max-width: 68px;
+                padding-left: 4px !important;
+                padding-right: 4px !important;
+            }
+            
+            /* 站台列 - 允许换行，适应长站台名（如 4 TRONCO 1 Tronco） */
+            .platform-col {
+                font-size: 0.72rem;
+                line-height: 1.25;
+                white-space: normal; /* 允许换行 */
+                min-width: 72px;
+                max-width: 72px;
+                word-wrap: break-word;
+                padding-left: 4px !important;
+                padding-right: 4px !important;
+            }
+            
+            /* 表头字体调整 */
+            th {
+                font-size: 0.7rem;
+                line-height: 1.2;
+                padding: 6px 6px;
+                font-weight: 600;
+            }
+            
+            /* 确保表格容器可以滚动 */
+            .board-table {
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
         }
     </style>
 </head>
@@ -239,6 +421,11 @@
     </div>
     
     <div class="board-container">
+        <div class="scroll-hint">
+            <span class="material-symbols-outlined">swipe</span>
+            <span data-i18n="scroll_hint">左右滑动查看完整信息</span>
+        </div>
+        
         <div id="loadingIndicator" class="loading">
             <span class="material-symbols-outlined">refresh</span>
             <p data-i18n="loading">加载中...</p>
@@ -271,6 +458,7 @@
             arrivals: "到站",
             loading: "加载中...",
             load_error: "加载失败，请稍后重试",
+            scroll_hint: "左右滑动查看完整信息",
             scheduled_time: "计划时间",
             train: "车次",
             destination: "目的地",
@@ -290,6 +478,7 @@
             arrivals: "Arrivals",
             loading: "Loading...",
             load_error: "Failed to load, please try again later",
+            scroll_hint: "Swipe left/right to view full info",
             scheduled_time: "Scheduled",
             train: "Train",
             destination: "Destination",
@@ -309,6 +498,7 @@
             arrivals: "Arrivi",
             loading: "Caricamento...",
             load_error: "Caricamento fallito, riprova più tardi",
+            scroll_hint: "Scorri a sinistra/destra per vedere tutto",
             scheduled_time: "Orario",
             train: "Treno",
             destination: "Destinazione",
@@ -448,29 +638,32 @@
         }
     });
     
-    // 切换看板类型
+    // 切换看板类型（每次点击都重新获取最新数据）
     function switchBoardType(type) {
+        // 如果点击的是当前已激活的按钮，也要刷新数据
         currentBoardType = type;
         
         // 更新按钮状态
         document.getElementById('btnPartenze').classList.toggle('active', type === 'partenze');
         document.getElementById('btnArrivi').classList.toggle('active', type === 'arrivi');
         
-        // 重新加载数据
+        // 强制重新加载最新数据
         loadStationBoard();
     }
     
-    // 加载车站看板
+    // 加载车站看板（每次调用都获取最新数据）
     async function loadStationBoard() {
         const loadingEl = document.getElementById('loadingIndicator');
         const errorEl = document.getElementById('errorMessage');
         const contentEl = document.getElementById('boardContent');
         
+        // 显示加载动画
         loadingEl.style.display = 'block';
         errorEl.style.display = 'none';
         contentEl.style.display = 'none';
         
         try {
+            // 获取最新的车站看板数据（API 会使用当前意大利时间）
             const data = await fetchStationBoard(currentStationId, currentBoardType);
             
             if (!data || data.length === 0) {
@@ -480,9 +673,12 @@
                 return;
             }
             
+            // 渲染最新数据
             renderStationBoard(data);
             loadingEl.style.display = 'none';
             contentEl.style.display = 'block';
+            
+            console.log(`✅ 已刷新 ${currentBoardType} 数据，共 ${data.length} 条记录`);
         } catch (error) {
             console.error('Failed to load station board:', error);
             errorEl.style.display = 'block';
@@ -518,20 +714,20 @@
                     <tr>
                         <td class="time-col">${formatted.scheduledTime}</td>
                         <td class="train-col">${formatted.trainNumber}</td>
-                        <td>${formatted.destination}</td>
+                        <td class="destination-col">${formatted.destination}</td>
                         <td class="status-col" style="color:${formatted.statusColor}">${formatted.status}</td>
                         <td class="platform-col">${formatted.platformHtml}</td>
                     </tr>
                 `;
             });
         } else {
-            // 到站看板
+            // 到站看板 - 车次列在始发站之前
             tableHtml += `
                 <thead>
                     <tr>
                         <th>${t.scheduled_time}</th>
-                        <th>${t.origin}</th>
                         <th>${t.train}</th>
+                        <th>${t.origin}</th>
                         <th>${t.actual_time}</th>
                         <th>${t.status}</th>
                         <th>${t.platform}</th>
@@ -545,8 +741,8 @@
                 tableHtml += `
                     <tr>
                         <td class="time-col">${formatted.scheduledTime}</td>
-                        <td>${formatted.origin}</td>
                         <td class="train-col">${formatted.trainNumber}</td>
+                        <td class="origin-col">${formatted.origin}</td>
                         <td class="time-col">${formatted.actualTime}</td>
                         <td class="status-col" style="color:${formatted.statusColor}">${formatted.status}</td>
                         <td class="platform-col">${formatted.platformHtml}</td>
