@@ -6,155 +6,9 @@
     <title>关于 - BelloTreno</title>
     <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@500;700&family=Roboto:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
     <style>
-        :root {
-            --md-sys-color-primary: #006a6a;
-            --md-sys-color-surface: #f4fbfa;
-            --text-primary: #233975;
-            --bg-primary: #f4fbfa;
-            --text-grey: #90a4ae;
-        }
-
-        [data-theme="dark"] {
-            --text-primary: #a2e6fb;
-            --bg-primary: #0d131e;
-            --md-sys-color-surface: #0d131e;
-            --md-sys-color-primary: #4db6ac;
-            --text-grey: #78909c;
-        }
-
-        body {
-            font-family: 'Roboto', 'Noto Sans SC', sans-serif;
-            margin: 0;
-            background-color: var(--bg-primary);
-            color: var(--text-primary);
-            transition: background-color 0.3s, color 0.3s;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            overflow-x: hidden;
-        }
-        
-        * { box-sizing: border-box; }
-
-        /* 导航栏 */
-        .navbar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            background: var(--bg-primary);
-            border-bottom: 1px solid rgba(0,0,0,0.1);
-            padding: 12px 20px;
-            display: flex;
-            justify-content: flex-end;
-            align-items: center;
-            gap: 15px;
-            z-index: 1000;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        }
-
-        [data-theme="dark"] .navbar {
-            border-bottom-color: rgba(255,255,255,0.1);
-        }
-
-        .navbar a {
-            color: var(--text-primary);
-            text-decoration: none;
-            font-weight: 500;
-            font-size: 0.95rem;
-            transition: opacity 0.2s;
-            padding: 6px 12px;
-        }
-
-        .navbar a:hover {
-            opacity: 0.7;
-        }
-
-        .theme-switch, .lang-switch {
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            padding: 6px 12px;
-            border-radius: 20px;
-            background: rgba(0,0,0,0.05);
-            transition: background 0.2s;
-            position: relative;
-        }
-
-        [data-theme="dark"] .theme-switch, [data-theme="dark"] .lang-switch {
-            background: rgba(255,255,255,0.1);
-        }
-
-        .theme-switch:hover, .lang-switch:hover {
-            background: rgba(0,0,0,0.1);
-        }
-
-        [data-theme="dark"] .theme-switch:hover, [data-theme="dark"] .lang-switch:hover {
-            background: rgba(255,255,255,0.15);
-        }
-
-        .theme-switch .material-symbols-outlined, .lang-switch .material-symbols-outlined {
-            font-size: 20px;
-            color: var(--text-primary);
-        }
-
-        /* 下拉菜单 */
-        .dropdown-menu {
-            display: none;
-            position: absolute;
-            top: 100%;
-            right: 0;
-            margin-top: 8px;
-            background: var(--bg-primary);
-            border: 1px solid rgba(0,0,0,0.1);
-            border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            min-width: 150px;
-            overflow: hidden;
-        }
-
-        [data-theme="dark"] .dropdown-menu {
-            border-color: rgba(255,255,255,0.2);
-        }
-
-        .dropdown-menu.show {
-            display: block;
-        }
-
-        .dropdown-item {
-            padding: 12px 16px;
-            cursor: pointer;
-            color: var(--text-primary);
-            transition: background 0.2s;
-            font-size: 0.9rem;
-        }
-
-        .dropdown-item:hover {
-            background: rgba(0,0,0,0.05);
-        }
-
-        [data-theme="dark"] .dropdown-item:hover {
-            background: rgba(255,255,255,0.1);
-        }
-
-        .dropdown-item.active {
-            background: rgba(0,106,106,0.1);
-            font-weight: 600;
-        }
-
-        /* 内容区 */
-        .container {
-            width: 100%;
-            max-width: 950px;
-            margin: 0 auto;
-            padding: 80px 16px 16px;
-            box-sizing: border-box;
-            flex: 1;
-            overflow-x: hidden;
-        }
-
+        /* About 页面特定样式 */
         .content-card {
             background: var(--bg-primary);
             padding: 40px;
@@ -222,90 +76,21 @@
             font-weight: bold;
             margin-right: 10px;
         }
-
-        /* 回到顶部按钮 */
-        .back-to-top {
-            position: fixed;
-            bottom: 30px;
-            right: 30px;
-            width: 50px;
-            height: 50px;
-            background: #233975;
-            color: white;
-            border-radius: 50%;
-            display: none;
-            justify-content: center;
-            align-items: center;
-            cursor: pointer;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            transition: all 0.3s;
-            z-index: 999;
-        }
-
-        .back-to-top:hover {
-            background: #1a2a5a;
-            transform: translateY(-5px);
-        }
-
-        .back-to-top.show {
-            display: flex;
-        }
-
-        .back-to-top .material-symbols-outlined {
-            font-size: 28px;
-        }
-
-        footer {
-            margin-top: auto;
-            padding: 20px 16px;
-            text-align: center;
-            font-size: 0.85rem;
-            color: var(--text-grey);
-            width: 100%;
-        }
         
-        footer span {
-            display: block;
-            max-width: 950px;
-            margin: 0 auto;
-            word-wrap: break-word;
-            line-height: 1.6;
-        }
-        
-        /* 响应式设计 - 移动端优化 */
+        /* 响应式设计 - About页面特定 */
         @media (max-width: 768px) {
-            .navbar { padding: 10px 12px; gap: 8px; flex-wrap: wrap; }
-            .navbar a { font-size: 0.85rem; padding: 4px 8px; }
-            .theme-switch, .lang-switch { padding: 4px 8px; font-size: 0.85rem; }
-            .theme-switch .material-symbols-outlined, .lang-switch .material-symbols-outlined { font-size: 18px; }
-            
-            .container { padding: 70px 12px 12px; }
-            
             .content-card { padding: 24px 16px; }
             h1 { font-size: 2rem; }
             h2 { font-size: 1.3rem; }
             p { font-size: 0.95rem; }
             .feature-list li { padding: 10px 0; font-size: 0.95rem; }
-            
-            .back-to-top { width: 45px; height: 45px; bottom: 20px; right: 20px; }
-            .back-to-top .material-symbols-outlined { font-size: 24px; }
-            
-            footer { font-size: 0.7rem; padding: 16px 10px; }
-            footer span { font-size: 0.7rem; padding: 0 5px; }
         }
         
-        /* 超小屏幕优化 */
         @media (max-width: 480px) {
-            .navbar { gap: 6px; }
-            .navbar a { font-size: 0.8rem; padding: 4px 6px; white-space: nowrap; }
-            .theme-switch span:not(.material-symbols-outlined), 
-            .lang-switch span:not(.material-symbols-outlined) { display: none; }
-            
             h1 { font-size: 1.8rem; }
             h2 { font-size: 1.2rem; }
             p { font-size: 0.9rem; }
             .feature-list li { font-size: 0.9rem; }
-            
             .content-card { padding: 20px 12px; border-radius: 16px; }
         }
     </style>
@@ -380,7 +165,7 @@
 </div>
 
 <footer>
-    <span data-i18n="footer">数据来源于ViaggiaTreno, 本站数据仅供参考，如有问题请关注车站大屏获取最新信息。 | &copy; 2026 BelloTreno</span>
+    <span data-i18n="footer">本站数据仅供参考，如有问题请关注车站大屏获取最新信息。 | &copy; 2026 BelloTreno</span>
 </footer>
 
 <script>
@@ -404,7 +189,7 @@
             feature_5: "实时显示列车延误或提前到达信息",
             feature_6: "显示站台变更信息",
             feature_7: "可视化的时间轴展示列车运行进度",
-            footer: "数据来源于ViaggiaTreno, 本站数据仅供参考，如有问题请关注车站大屏获取最新信息。 | © 2026 BelloTreno"
+            footer: "本站数据仅供参考，如有问题请关注车站大屏获取最新信息。 | © 2026 BelloTreno"
         },
         en: {
             nav_home: "Home",
@@ -424,7 +209,7 @@
             feature_5: "Real-time display of train delay or early arrival information",
             feature_6: "Display platform change information",
             feature_7: "Visual timeline showing train progress",
-            footer: "Data from ViaggiaTreno. This information is for reference only. Please check station displays for official information. | © 2026 BelloTreno"
+            footer: "This information is for reference only. Please check station displays for official information. | © 2026 BelloTreno"
         },
         it: {
             nav_home: "Home",
@@ -444,7 +229,7 @@
             feature_5: "Visualizzazione in tempo reale delle informazioni su ritardi o arrivi anticipati dei treni",
             feature_6: "Visualizza informazioni sul cambio di binario",
             feature_7: "Timeline visiva che mostra l'avanzamento del treno",
-            footer: "Dati da ViaggiaTreno. Queste informazioni sono solo di riferimento. Controllare i display delle stazioni per informazioni ufficiali. | © 2026 BelloTreno"
+            footer: "Queste informazioni sono solo di riferimento. Controllare i display delle stazioni per informazioni ufficiali. | © 2026 BelloTreno"
         }
     };
 
