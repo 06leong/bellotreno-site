@@ -573,6 +573,26 @@ md-filled-text-field {
     word-wrap: break-word; 
 }
 
+.station-link {
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-decoration-color: var(--md-sys-color-primary);
+    transition: all 0.2s;
+    position: relative;
+    z-index: 2;
+    display: inline-block;
+}
+
+.station-link:hover {
+    color: var(--md-sys-color-primary);
+    text-decoration-style: solid;
+}
+
+.station-link:active {
+    opacity: 0.7;
+}
+
 .direction-badge { 
     display: inline-flex; 
     align-items: center; 

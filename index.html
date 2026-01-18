@@ -83,8 +83,11 @@
     <span data-i18n="footer"> 本站数据仅供参考，如有问题请关注车站大屏获取最新信息。 | &copy; 2026 BelloTreno</span>
 </footer>
 
+<script src="station.js"></script>
 <script>
-    const API_BASE = "https://api.bellotreno.org/?url=https://www.viaggiatreno.it/infomobilita/resteasy/viaggiatreno";
+    // API 基础路径（全局变量，供 station.js 使用）
+    window.API_BASE = "https://api.bellotreno.org/?url=https://www.viaggiatreno.it/infomobilita/resteasy/viaggiatreno";
+    const API_BASE = window.API_BASE; // 本地引用
 
     const CLIENT_MAP = { 1: "Trenitalia", 2: "Trenitalia", 4: "Trenitalia", 18: "Trenitalia TPER", 30: "Ferrovie del Sud Est", 63: "Trenord", 64: "ÖBB" };
     
@@ -824,7 +827,7 @@
                     </div>
                     <div class="station-card">
                         <div class="station-name">
-                            <span>${f.stazione}</span>
+                            <span class="station-link" data-station-id="${f.id}" data-station-name="${f.stazione.replace(/"/g, '&quot;')}">${f.stazione}</span>
                             ${directionBadge}
                         </div>
                         <div class="info-row">
@@ -844,6 +847,20 @@
         
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
+    
+    // 为站名链接添加事件监听器（使用事件代理）
+    // 注意：直接绑定到 document，因为 timeline 内容是动态生成的
+    document.addEventListener('click', function(e) {
+        // 检查点击的是否是站名链接
+        const stationLink = e.target.closest('.station-link');
+        if (stationLink) {
+            const stationId = stationLink.getAttribute('data-station-id');
+            const stationName = stationLink.getAttribute('data-station-name');
+            if (stationId && stationName) {
+                goToStationBoard(stationId, stationName);
+            }
+        }
+    });
 </script>
 </body>
 </html>

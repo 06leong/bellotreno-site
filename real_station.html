@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>车站看板 - BelloTreno</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@500;700&family=Roboto:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* 车站看板特定样式 */
+        .station-header {
+            text-align: center;
+            margin: 40px 0 20px;
+        }
+        
+        .station-name {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: var(--md-sys-color-primary);
+            margin-bottom: 10px;
+        }
+        
+        .board-type-switch {
+            display: flex;
+            justify-content: center;
+            gap: 0;
+            margin: 20px auto;
+            max-width: 400px;
+            background: rgba(0,0,0,0.05);
+            border-radius: 24px;
+            padding: 4px;
+        }
+        
+        [data-theme="dark"] .board-type-switch {
+            background: rgba(255,255,255,0.1);
+        }
+        
+        .board-type-btn {
+            flex: 1;
+            padding: 10px 20px;
+            border: none;
+            background: transparent;
+            color: var(--text-primary);
+            font-size: 1rem;
+            font-weight: 500;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .board-type-btn.active {
+            background: var(--md-sys-color-primary);
+            color: white;
+        }
+        
+        .board-type-btn:hover:not(.active) {
+            background: rgba(0,0,0,0.05);
+        }
+        
+        [data-theme="dark"] .board-type-btn:hover:not(.active) {
+            background: rgba(255,255,255,0.1);
+        }
+        
+        .board-container {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 0 16px;
+        }
+        
+        .board-table {
+            width: 100%;
+            background: var(--bg-primary);
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        [data-theme="dark"] .board-table {
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        thead {
+            background: var(--md-sys-color-primary);
+            color: white;
+        }
+        
+        th {
+            padding: 16px 12px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+        
+        td {
+            padding: 14px 12px;
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+            color: var(--text-primary);
+        }
+        
+        [data-theme="dark"] td {
+            border-bottom-color: rgba(255,255,255,0.05);
+        }
+        
+        tbody tr:last-child td {
+            border-bottom: none;
+        }
+        
+        tbody tr:hover {
+            background: rgba(0,0,0,0.02);
+        }
+        
+        [data-theme="dark"] tbody tr:hover {
+            background: rgba(255,255,255,0.05);
+        }
+        
+        .time-col {
+            font-family: 'Roboto Mono', monospace;
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+        
+        .train-col {
+            font-weight: 600;
+        }
+        
+        .status-col {
+            font-weight: 500;
+        }
+        
+        .platform-col {
+            font-family: 'Roboto Mono', monospace;
+            font-weight: 700;
+            font-size: 1.1rem;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-grey);
+        }
+        
+        .loading .material-symbols-outlined {
+            font-size: 48px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        
+        .error-message {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--train-red);
+        }
+        
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            color: var(--md-sys-color-primary);
+            text-decoration: none;
+            font-weight: 500;
+            margin: 20px 0;
+            transition: opacity 0.2s;
+        }
+        
+        .back-link:hover {
+            opacity: 0.7;
+        }
+        
+        /* 响应式 */
+        @media (max-width: 768px) {
+            .station-name { font-size: 1.8rem; }
+            .board-type-switch { max-width: 300px; }
+            .board-type-btn { font-size: 0.9rem; padding: 8px 16px; }
+            
+            table { font-size: 0.85rem; }
+            th, td { padding: 10px 8px; }
+            .time-col, .platform-col { font-size: 0.95rem; }
+        }
+        
+        @media (max-width: 480px) {
+            .station-name { font-size: 1.5rem; }
+            table { font-size: 0.8rem; }
+            th, td { padding: 8px 6px; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- 导航栏 -->
+<nav class="navbar">
+    <a href="index.html" data-i18n="nav_home" class="ripple">首页</a>
+    <a href="about.html" data-i18n="nav_about" class="ripple">关于</a>
+    <div class="lang-switch" onclick="toggleLangMenu()">
+        <span class="material-symbols-outlined">language</span>
+        <span id="currentLang">简体中文</span>
+        <div class="dropdown-menu" id="langMenu">
+            <div class="dropdown-item ripple" onclick="changeLang('zh'); event.stopPropagation();">简体中文</div>
+            <div class="dropdown-item ripple" onclick="changeLang('en'); event.stopPropagation();">English</div>
+            <div class="dropdown-item ripple" onclick="changeLang('it'); event.stopPropagation();">Italiano</div>
+        </div>
+    </div>
+    <div class="theme-switch" onclick="toggleThemeMenu()">
+        <span class="material-symbols-outlined">contrast</span>
+        <span id="currentTheme" data-i18n="theme_auto">跟随系统</span>
+        <div class="dropdown-menu" id="themeMenu">
+            <div class="dropdown-item ripple" onclick="changeTheme('auto'); event.stopPropagation();" data-i18n="theme_auto">跟随系统</div>
+            <div class="dropdown-item ripple" onclick="changeTheme('light'); event.stopPropagation();" data-i18n="theme_light">浅色模式</div>
+            <div class="dropdown-item ripple" onclick="changeTheme('dark'); event.stopPropagation();" data-i18n="theme_dark">深色模式</div>
+        </div>
+    </div>
+</nav>
+
+<!-- 回到顶部按钮 -->
+<div class="back-to-top ripple" onclick="scrollToTop()">
+    <span class="material-symbols-outlined">arrow_upward</span>
+</div>
+
+<div class="container">
+    <div class="station-header">
+        <h1 class="station-name" id="stationName">--</h1>
+        <div class="board-type-switch">
+            <button class="board-type-btn active ripple" id="btnPartenze" onclick="switchBoardType('partenze')">
+                <span data-i18n="departures">离站</span>
+            </button>
+            <button class="board-type-btn ripple" id="btnArrivi" onclick="switchBoardType('arrivi')">
+                <span data-i18n="arrivals">到站</span>
+            </button>
+        </div>
+    </div>
+    
+    <div class="board-container">
+        <div id="loadingIndicator" class="loading">
+            <span class="material-symbols-outlined">refresh</span>
+            <p data-i18n="loading">加载中...</p>
+        </div>
+        
+        <div id="errorMessage" class="error-message" style="display: none;">
+            <span class="material-symbols-outlined" style="font-size: 48px;">error</span>
+            <p data-i18n="load_error">加载失败，请稍后重试</p>
+        </div>
+        
+        <div id="boardContent" style="display: none;"></div>
+    </div>
+</div>
+
+<footer>
+    <span data-i18n="footer"> 本站数据仅供参考，如有问题请关注车站大屏获取最新信息。 | &copy; 2026 BelloTreno</span>
+</footer>
+
+<script src="station.js"></script>
+<script>
+    // 翻译对象
+    const translations = {
+        zh: {
+            nav_home: "首页",
+            nav_about: "关于",
+            theme_auto: "跟随系统",
+            theme_light: "浅色模式",
+            theme_dark: "深色模式",
+            departures: "离站",
+            arrivals: "到站",
+            loading: "加载中...",
+            load_error: "加载失败，请稍后重试",
+            scheduled_time: "计划时间",
+            train: "车次",
+            destination: "目的地",
+            origin: "始发站",
+            status: "状态",
+            platform: "站台",
+            actual_time: "预计/实际到达",
+            footer: " 本站数据仅供参考，如有问题请关注车站大屏获取最新信息。 | © 2026 BelloTreno"
+        },
+        en: {
+            nav_home: "Home",
+            nav_about: "About",
+            theme_auto: "Follow System",
+            theme_light: "Light Mode",
+            theme_dark: "Dark Mode",
+            departures: "Departures",
+            arrivals: "Arrivals",
+            loading: "Loading...",
+            load_error: "Failed to load, please try again later",
+            scheduled_time: "Scheduled",
+            train: "Train",
+            destination: "Destination",
+            origin: "Origin",
+            status: "Status",
+            platform: "Platform",
+            actual_time: "Expected/Actual",
+            footer: "This information is for reference only. Please check station displays for official information. | © 2026 BelloTreno"
+        },
+        it: {
+            nav_home: "Home",
+            nav_about: "Informazioni",
+            theme_auto: "Segui Sistema",
+            theme_light: "Modalità Chiara",
+            theme_dark: "Modalità Scura",
+            departures: "Partenze",
+            arrivals: "Arrivi",
+            loading: "Caricamento...",
+            load_error: "Caricamento fallito, riprova più tardi",
+            scheduled_time: "Orario",
+            train: "Treno",
+            destination: "Destinazione",
+            origin: "Origine",
+            status: "Stato",
+            platform: "Binario",
+            actual_time: "Previsto/Effettivo",
+            footer: "Queste informazioni sono solo di riferimento. Controllare i display delle stazioni per informazioni ufficiali. | © 2026 BelloTreno"
+        }
+    };
+    
+    let currentLang = 'zh';
+    let currentTheme = 'auto';
+    let currentStationId = '';
+    let currentStationName = '';
+    let currentBoardType = 'partenze';
+    
+    // 初始化语言
+    function initLanguage() {
+        const savedLang = localStorage.getItem('language');
+        if (savedLang) {
+            currentLang = savedLang;
+        } else {
+            const browserLang = navigator.language.toLowerCase();
+            if (browserLang.startsWith('zh')) {
+                currentLang = 'zh';
+            } else if (browserLang.startsWith('it')) {
+                currentLang = 'it';
+            } else {
+                currentLang = 'en';
+            }
+        }
+        updateLanguage();
+    }
+    
+    // 更新语言
+    function updateLanguage() {
+        const langNames = { zh: '简体中文', en: 'English', it: 'Italiano' };
+        document.getElementById('currentLang').textContent = langNames[currentLang];
+        document.documentElement.lang = currentLang;
+        
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+            const key = el.getAttribute('data-i18n');
+            if (translations[currentLang][key]) {
+                el.textContent = translations[currentLang][key];
+            }
+        });
+        
+        // 重新加载看板数据以更新语言
+        if (currentStationId) {
+            loadStationBoard();
+        }
+    }
+    
+    // 切换语言
+    function changeLang(lang) {
+        currentLang = lang;
+        localStorage.setItem('language', lang);
+        updateLanguage();
+        document.getElementById('langMenu').classList.remove('show');
+    }
+    
+    // 初始化主题
+    function initTheme() {
+        const savedTheme = localStorage.getItem('theme') || 'auto';
+        currentTheme = savedTheme;
+        applyTheme();
+        updateThemeDisplay();
+    }
+    
+    // 应用主题
+    function applyTheme() {
+        if (currentTheme === 'auto') {
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+        } else {
+            document.documentElement.setAttribute('data-theme', currentTheme);
+        }
+    }
+    
+    // 更新主题显示
+    function updateThemeDisplay() {
+        const themeKey = `theme_${currentTheme}`;
+        document.getElementById('currentTheme').textContent = translations[currentLang][themeKey];
+        document.getElementById('currentTheme').setAttribute('data-i18n', themeKey);
+    }
+    
+    // 切换主题
+    function changeTheme(theme) {
+        currentTheme = theme;
+        localStorage.setItem('theme', theme);
+        applyTheme();
+        updateThemeDisplay();
+        document.getElementById('themeMenu').classList.remove('show');
+    }
+    
+    // 切换下拉菜单
+    function toggleLangMenu() {
+        const menu = document.getElementById('langMenu');
+        menu.classList.toggle('show');
+        document.getElementById('themeMenu').classList.remove('show');
+    }
+    
+    function toggleThemeMenu() {
+        const menu = document.getElementById('themeMenu');
+        menu.classList.toggle('show');
+        document.getElementById('langMenu').classList.remove('show');
+    }
+    
+    // 点击外部关闭下拉菜单
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.lang-switch') && !e.target.closest('.theme-switch')) {
+            document.getElementById('langMenu').classList.remove('show');
+            document.getElementById('themeMenu').classList.remove('show');
+        }
+    });
+    
+    // 监听系统主题变化
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+        if (currentTheme === 'auto') {
+            applyTheme();
+        }
+    });
+    
+    // 回到顶部功能
+    function scrollToTop() {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    
+    // 显示/隐藏回到顶部按钮
+    window.addEventListener('scroll', () => {
+        const backToTop = document.querySelector('.back-to-top');
+        if (window.scrollY > 300) {
+            backToTop.classList.add('show');
+        } else {
+            backToTop.classList.remove('show');
+        }
+    });
+    
+    // 切换看板类型
+    function switchBoardType(type) {
+        currentBoardType = type;
+        
+        // 更新按钮状态
+        document.getElementById('btnPartenze').classList.toggle('active', type === 'partenze');
+        document.getElementById('btnArrivi').classList.toggle('active', type === 'arrivi');
+        
+        // 重新加载数据
+        loadStationBoard();
+    }
+    
+    // 加载车站看板
+    async function loadStationBoard() {
+        const loadingEl = document.getElementById('loadingIndicator');
+        const errorEl = document.getElementById('errorMessage');
+        const contentEl = document.getElementById('boardContent');
+        
+        loadingEl.style.display = 'block';
+        errorEl.style.display = 'none';
+        contentEl.style.display = 'none';
+        
+        try {
+            const data = await fetchStationBoard(currentStationId, currentBoardType);
+            
+            if (!data || data.length === 0) {
+                errorEl.style.display = 'block';
+                errorEl.querySelector('p').textContent = translations[currentLang].load_error || '暂无数据';
+                loadingEl.style.display = 'none';
+                return;
+            }
+            
+            renderStationBoard(data);
+            loadingEl.style.display = 'none';
+            contentEl.style.display = 'block';
+        } catch (error) {
+            console.error('Failed to load station board:', error);
+            errorEl.style.display = 'block';
+            loadingEl.style.display = 'none';
+        }
+    }
+    
+    // 渲染车站看板
+    function renderStationBoard(trains) {
+        const contentEl = document.getElementById('boardContent');
+        const t = translations[currentLang];
+        
+        let tableHtml = '<div class="board-table"><table>';
+        
+        if (currentBoardType === 'partenze') {
+            // 离站看板
+            tableHtml += `
+                <thead>
+                    <tr>
+                        <th>${t.scheduled_time}</th>
+                        <th>${t.train}</th>
+                        <th>${t.destination}</th>
+                        <th>${t.status}</th>
+                        <th>${t.platform}</th>
+                    </tr>
+                </thead>
+                <tbody>
+            `;
+            
+            trains.forEach(train => {
+                const formatted = formatDepartureData(train, currentLang);
+                tableHtml += `
+                    <tr>
+                        <td class="time-col">${formatted.scheduledTime}</td>
+                        <td class="train-col">${formatted.trainNumber}</td>
+                        <td>${formatted.destination}</td>
+                        <td class="status-col" style="color:${formatted.statusColor}">${formatted.status}</td>
+                        <td class="platform-col">${formatted.platformHtml}</td>
+                    </tr>
+                `;
+            });
+        } else {
+            // 到站看板
+            tableHtml += `
+                <thead>
+                    <tr>
+                        <th>${t.scheduled_time}</th>
+                        <th>${t.origin}</th>
+                        <th>${t.train}</th>
+                        <th>${t.actual_time}</th>
+                        <th>${t.status}</th>
+                        <th>${t.platform}</th>
+                    </tr>
+                </thead>
+                <tbody>
+            `;
+            
+            trains.forEach(train => {
+                const formatted = formatArrivalData(train, currentLang);
+                tableHtml += `
+                    <tr>
+                        <td class="time-col">${formatted.scheduledTime}</td>
+                        <td>${formatted.origin}</td>
+                        <td class="train-col">${formatted.trainNumber}</td>
+                        <td class="time-col">${formatted.actualTime}</td>
+                        <td class="status-col" style="color:${formatted.statusColor}">${formatted.status}</td>
+                        <td class="platform-col">${formatted.platformHtml}</td>
+                    </tr>
+                `;
+            });
+        }
+        
+        tableHtml += '</tbody></table></div>';
+        contentEl.innerHTML = tableHtml;
+    }
+    
+    // 初始化页面
+    function initPage() {
+        initLanguage();
+        initTheme();
+        
+        // 从 URL 参数获取车站信息
+        const params = new URLSearchParams(window.location.search);
+        currentStationId = params.get('id') || '';
+        currentStationName = decodeURIComponent(params.get('name') || '');
+        currentBoardType = params.get('type') || 'partenze';
+        
+        if (!currentStationId) {
+            document.getElementById('errorMessage').style.display = 'block';
+            document.getElementById('loadingIndicator').style.display = 'none';
+            return;
+        }
+        
+        document.getElementById('stationName').textContent = currentStationName;
+        
+        // 更新按钮状态
+        document.getElementById('btnPartenze').classList.toggle('active', currentBoardType === 'partenze');
+        document.getElementById('btnArrivi').classList.toggle('active', currentBoardType === 'arrivi');
+        
+        // 加载数据
+        loadStationBoard();
+    }
+    
+    // 页面加载完成后初始化
+    initPage();
+</script>
+
+</body>
+</html>
