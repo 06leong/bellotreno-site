@@ -18,30 +18,30 @@
 
 <!-- 导航栏 -->
 <nav class="navbar">
-    <a href="#" onclick="goHome(); return false;" data-i18n="nav_home">首页</a>
-    <a href="about.html" data-i18n="nav_about">关于</a>
+    <a href="#" onclick="goHome(); return false;" data-i18n="nav_home" class="ripple">首页</a>
+    <a href="about.html" data-i18n="nav_about" class="ripple">关于</a>
     <div class="lang-switch" onclick="toggleLangMenu()">
         <span class="material-symbols-outlined">language</span>
         <span id="currentLang">简体中文</span>
         <div class="dropdown-menu" id="langMenu">
-            <div class="dropdown-item" onclick="changeLang('zh'); event.stopPropagation();">简体中文</div>
-            <div class="dropdown-item" onclick="changeLang('en'); event.stopPropagation();">English</div>
-            <div class="dropdown-item" onclick="changeLang('it'); event.stopPropagation();">Italiano</div>
+            <div class="dropdown-item ripple" onclick="changeLang('zh'); event.stopPropagation();">简体中文</div>
+            <div class="dropdown-item ripple" onclick="changeLang('en'); event.stopPropagation();">English</div>
+            <div class="dropdown-item ripple" onclick="changeLang('it'); event.stopPropagation();">Italiano</div>
         </div>
     </div>
     <div class="theme-switch" onclick="toggleThemeMenu()">
         <span class="material-symbols-outlined">contrast</span>
         <span id="currentTheme" data-i18n="theme_auto">跟随系统</span>
         <div class="dropdown-menu" id="themeMenu">
-            <div class="dropdown-item" onclick="changeTheme('auto'); event.stopPropagation();" data-i18n="theme_auto">跟随系统</div>
-            <div class="dropdown-item" onclick="changeTheme('light'); event.stopPropagation();" data-i18n="theme_light">浅色模式</div>
-            <div class="dropdown-item" onclick="changeTheme('dark'); event.stopPropagation();" data-i18n="theme_dark">深色模式</div>
+            <div class="dropdown-item ripple" onclick="changeTheme('auto'); event.stopPropagation();" data-i18n="theme_auto">跟随系统</div>
+            <div class="dropdown-item ripple" onclick="changeTheme('light'); event.stopPropagation();" data-i18n="theme_light">浅色模式</div>
+            <div class="dropdown-item ripple" onclick="changeTheme('dark'); event.stopPropagation();" data-i18n="theme_dark">深色模式</div>
         </div>
     </div>
 </nav>
 
 <!-- 回到顶部按钮 -->
-<div class="back-to-top" onclick="scrollToTop()">
+<div class="back-to-top ripple" onclick="scrollToTop()">
     <span class="material-symbols-outlined">arrow_upward</span>
 </div>
 
@@ -53,9 +53,14 @@
         <md-filled-text-field id="trainSearch" label="" type="text">
             <md-icon slot="leading-icon">train</md-icon>
         </md-filled-text-field>
-        <div class="disclaimer">
-            <span class="material-symbols-outlined" style="font-size: 18px;">warning</span>
-            <span data-i18n="disclaimer">目前不支持 Italo 和 SNCF 列车。</span>
+        
+        <!-- 最近搜索记录 -->
+        <div id="recentSearchesContainer" class="recent-searches-container" style="display: none;">
+            <div class="recent-searches-label">
+                <span class="material-symbols-outlined">history</span>
+                <span data-i18n="recent_searches">最近搜索</span>
+            </div>
+            <div id="recentSearchesChips" class="recent-searches-chips"></div>
         </div>
     </div>
 
@@ -75,7 +80,7 @@
 </div>
 
 <footer>
-    <span data-i18n="footer">数据来源于ViaggiaTreno, 本站数据仅供参考，如有问题请关注车站大屏获取最新信息。 | &copy; 2026 BelloTreno</span>
+    <span data-i18n="footer"> 本站数据仅供参考，如有问题请关注车站大屏获取最新信息。 | &copy; 2026 BelloTreno</span>
 </footer>
 
 <script>
@@ -158,8 +163,9 @@
             theme_auto: "跟随系统",
             theme_light: "浅色模式",
             theme_dark: "深色模式",
-            search_placeholder: "输入车次（例如 FR9633, IC630, EC144, R2025 或纯数字）",
+            search_placeholder: "输入车次（例如 FR9633, IC630,REG2025 或纯数字）",
             disclaimer: "目前不支持 Italo 和 SNCF 列车。",
+            recent_searches: "最近搜索",
             disambiguation_title: "检测到多个班次，请选择：",
             depart_date: "始发日期",
             origin_station: "始发站ID",
@@ -191,8 +197,9 @@
             theme_auto: "Follow System",
             theme_light: "Light Mode",
             theme_dark: "Dark Mode",
-            search_placeholder: "Enter train number (e.g. FR9633, IC630, EC144, R2025 or numbers)",
+            search_placeholder: "Enter train number (e.g. FR9633, IC630, REG2025 or numbers)",
             disclaimer: "Italo and SNCF trains are not currently supported.",
+            recent_searches: "Recent Searches",
             disambiguation_title: "Multiple trains detected, please select:",
             depart_date: "Departure Date",
             origin_station: "Origin Station ID",
@@ -224,8 +231,9 @@
             theme_auto: "Segui Sistema",
             theme_light: "Modalità Chiara",
             theme_dark: "Modalità Scura",
-            search_placeholder: "Inserisci numero treno (es. FR9633, IC630, EC144, R2025 o numeri)",
+            search_placeholder: "Inserisci numero treno (es. FR9633, IC630, REG2025 o numeri)",
             disclaimer: "Treni Italo e SNCF non sono attualmente supportati.",
+            recent_searches: "Ricerche Recenti",
             disambiguation_title: "Rilevati più treni, seleziona:",
             depart_date: "Data di partenza",
             origin_station: "ID Stazione Origine",
@@ -436,9 +444,117 @@
         return text;
     }
 
-    // 页面初始化
+    // ========== 最近搜索记录功能 ==========
+    
+    // 保存最近搜索记录
+    function saveRecentSearch(trainNumber, trainInfo) {
+        try {
+            // 从localStorage获取现有记录
+            let recentSearches = JSON.parse(localStorage.getItem('recentTrains') || '[]');
+            
+            // 创建搜索记录对象（包含车次号和始发站，方便显示）
+            const searchItem = {
+                number: trainNumber,
+                origin: trainInfo.origine || '',
+                destination: trainInfo.destinazione || '',
+                timestamp: Date.now()
+            };
+            
+            // 去重：如果已存在相同车次号，先移除
+            recentSearches = recentSearches.filter(item => item.number !== trainNumber);
+            
+            // 将新记录添加到数组首位
+            recentSearches.unshift(searchItem);
+            
+            // 限制最多保留5条记录
+            if (recentSearches.length > 5) {
+                recentSearches = recentSearches.slice(0, 5);
+            }
+            
+            // 保存到localStorage
+            localStorage.setItem('recentTrains', JSON.stringify(recentSearches));
+            
+            // 重新渲染chips
+            renderRecentSearches();
+        } catch (err) {
+            console.error('Failed to save recent search:', err);
+        }
+    }
+    
+    // 加载并渲染最近搜索记录
+    function loadRecentSearches() {
+        try {
+            const recentSearches = JSON.parse(localStorage.getItem('recentTrains') || '[]');
+            if (recentSearches.length > 0) {
+                renderRecentSearches();
+            }
+        } catch (err) {
+            console.error('Failed to load recent searches:', err);
+        }
+    }
+    
+    // 渲染最近搜索chips
+    function renderRecentSearches() {
+        try {
+            const recentSearches = JSON.parse(localStorage.getItem('recentTrains') || '[]');
+            const container = document.getElementById('recentSearchesContainer');
+            const chipsContainer = document.getElementById('recentSearchesChips');
+            
+            if (recentSearches.length === 0) {
+                container.style.display = 'none';
+                return;
+            }
+            
+            container.style.display = 'block';
+            chipsContainer.innerHTML = '';
+            
+            recentSearches.forEach(item => {
+                const chip = document.createElement('div');
+                chip.className = 'assist-chip';
+                
+                // 显示格式：车次号 (始发站 → 终点站)
+                const label = `${item.number}`;
+                
+                chip.innerHTML = `
+                    <span class="chip-label">${label}</span>
+                    <span class="chip-remove" onclick="removeRecentSearch('${item.number}', event)">
+                        <span class="material-symbols-outlined">close</span>
+                    </span>
+                `;
+                
+                // 点击chip主体时触发搜索（但不包括删除按钮）
+                chip.querySelector('.chip-label').addEventListener('click', () => {
+                    document.getElementById('trainSearch').value = item.number;
+                    startSearch(item.number.replace(/\D/g, ''));
+                });
+                
+                chipsContainer.appendChild(chip);
+            });
+        } catch (err) {
+            console.error('Failed to render recent searches:', err);
+        }
+    }
+    
+    // 删除单个最近搜索记录
+    function removeRecentSearch(trainNumber, event) {
+        if (event) {
+            event.stopPropagation(); // 阻止事件冒泡，避免触发搜索
+        }
+        
+        try {
+            let recentSearches = JSON.parse(localStorage.getItem('recentTrains') || '[]');
+            recentSearches = recentSearches.filter(item => item.number !== trainNumber);
+            localStorage.setItem('recentTrains', JSON.stringify(recentSearches));
+            renderRecentSearches();
+        } catch (err) {
+            console.error('Failed to remove recent search:', err);
+        }
+    }
+    
+    // ========== 页面初始化 ==========
     initLanguage();
     initTheme();
+    loadRecentSearches(); // 加载最近搜索记录
 
     document.getElementById('trainSearch').addEventListener('keypress', async (e) => {
         if (e.key === 'Enter') {
@@ -495,7 +611,7 @@
             const dateStr = dateObj.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit' });
             
             const div = document.createElement('div');
-            div.className = 'choice-item';
+            div.className = 'choice-item ripple';
             div.innerHTML = `
                 <div style="font-size:1.1rem; font-weight:bold; color:var(--md-sys-color-primary)">${label}</div>
                 <div style="font-size:0.9rem; color:var(--text-grey); margin-top:4px">
@@ -528,6 +644,10 @@
             const data = await res.json();
             currentTrainData = data;
             render(data);
+            
+            // 保存到最近搜索记录
+            const trainNumber = `${data.compCategoria || ''} ${data.numeroTreno || tNum}`.trim();
+            saveRecentSearch(trainNumber, data);
         } catch (err) {
             const msg = currentLang === 'zh' ? "详情加载失败" :
                        currentLang === 'it' ? "Impossibile caricare i dettagli" :
@@ -610,7 +730,7 @@
         const formattedDuration = formatDuration(data.compDurata);
 
         card.innerHTML = `
-            <div class="refresh-btn" onclick="refreshTrainData()" title="${currentLang === 'zh' ? '刷新' : currentLang === 'it' ? 'Aggiorna' : 'Refresh'}">
+            <div class="refresh-btn ripple" onclick="refreshTrainData()" title="${currentLang === 'zh' ? '刷新' : currentLang === 'it' ? 'Aggiorna' : 'Refresh'}">
                 <span class="material-symbols-outlined">refresh</span>
             </div>
             <div class="op-cat-row" style="display: flex; align-items: center;">${operatorHTML} · ${categoryHTML}</div>
