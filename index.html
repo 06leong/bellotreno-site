@@ -22,9 +22,9 @@
     <a href="about.html" data-i18n="nav_about" class="ripple">关于</a>
     <div class="lang-switch" onclick="toggleLangMenu()">
         <span class="material-symbols-outlined">language</span>
-        <span id="currentLang">简体中文</span>
+        <span id="currentLang">Chinese</span>
         <div class="dropdown-menu" id="langMenu">
-            <div class="dropdown-item ripple" onclick="changeLang('zh'); event.stopPropagation();">简体中文</div>
+            <div class="dropdown-item ripple" onclick="changeLang('zh'); event.stopPropagation();">Chinese</div>
             <div class="dropdown-item ripple" onclick="changeLang('en'); event.stopPropagation();">English</div>
             <div class="dropdown-item ripple" onclick="changeLang('it'); event.stopPropagation();">Italiano</div>
         </div>
@@ -290,7 +290,7 @@
 
     // 更新语言
     function updateLanguage() {
-        const langNames = { zh: '简体中文', en: 'English', it: 'Italiano' };
+        const langNames = { zh: 'Chinese', en: 'English', it: 'Italiano' };
         document.getElementById('currentLang').textContent = langNames[currentLang];
         document.documentElement.lang = currentLang;
         
@@ -570,8 +570,21 @@
         document.getElementById('results').style.display = 'none';
         document.getElementById('disambiguation').style.display = 'none';
 
+        // 提取纯数字（去除字母、空格等，只保留数字）
+        // 例如：'REG 2029' → '2029', 'FR 9514' → '9514', ' 2029 ' → '2029'
+        const trainNumber = num.replace(/\D+/g, '').trim();
+        
+        if (!trainNumber) {
+            const msg = currentLang === 'zh' ? "请输入有效的车次号" :
+                       currentLang === 'it' ? "Inserire un numero di treno valido" :
+                       "Please enter a valid train number";
+            return alert(msg);
+        }
+        
+        console.log('原始输入:', num, '→ 提取数字:', trainNumber);
+
         try {
-            const autoRes = await fetch(`${API_BASE}/cercaNumeroTrenoTrenoAutocomplete/${num}`);
+            const autoRes = await fetch(`${API_BASE}/cercaNumeroTrenoTrenoAutocomplete/${trainNumber}`);
             const autoText = await autoRes.text();
             if (!autoText.trim()) {
                 const msg = currentLang === 'zh' ? "未找到该车次" :
@@ -861,6 +874,54 @@
             }
         }
     });
+    
+    // 页面加载时检查 URL 参数，如果有车次号就自动搜索
+    let urlSearchRetryCount = 0;
+    const maxRetries = 10;
+    
+    function checkAndSearchFromURL() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const trainParam = urlParams.get('train');
+        
+        if (trainParam) {
+            // 去除空格
+            const trainNumber = trainParam.trim();
+            console.log('从 URL 参数自动搜索车次:', trainNumber);
+            
+            // 确保元素存在后再操作（使用正确的 ID：trainSearch）
+            const trainInput = document.getElementById('trainSearch');
+            if (!trainInput) {
+                urlSearchRetryCount++;
+                if (urlSearchRetryCount < maxRetries) {
+                    console.warn(`trainSearch 元素未找到，延迟重试... (${urlSearchRetryCount}/${maxRetries})`);
+                    setTimeout(checkAndSearchFromURL, 100);
+                } else {
+                    console.error('trainSearch 元素未找到，已达到最大重试次数');
+                }
+                return;
+            }
+            
+            console.log('找到 trainSearch 元素，开始搜索...');
+            
+            // 填充搜索框
+            trainInput.value = trainNumber;
+            
+            // 延迟执行搜索，确保页面完全加载
+            setTimeout(function() {
+                startSearch(trainNumber);
+                
+                // 清除 URL 参数（保持 URL 简洁）
+                setTimeout(function() {
+                    if (window.history && window.history.replaceState) {
+                        window.history.replaceState({}, document.title, window.location.pathname);
+                    }
+                }, 300);
+            }, 200);
+        }
+    }
+    
+    // 等待 DOM 完全加载后执行
+    window.addEventListener('load', checkAndSearchFromURL);
 </script>
 </body>
 </html>

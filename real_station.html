@@ -115,12 +115,17 @@
             border-bottom: none;
         }
         
+        tbody tr {
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
         tbody tr:hover {
-            background: rgba(0,0,0,0.02);
+            background: rgba(0,0,0,0.05);
         }
         
         [data-theme="dark"] tbody tr:hover {
-            background: rgba(255,255,255,0.05);
+            background: rgba(255,255,255,0.1);
         }
         
         .time-col {
@@ -384,9 +389,9 @@
     <a href="about.html" data-i18n="nav_about" class="ripple">关于</a>
     <div class="lang-switch" onclick="toggleLangMenu()">
         <span class="material-symbols-outlined">language</span>
-        <span id="currentLang">简体中文</span>
+        <span id="currentLang">Chinese</span>
         <div class="dropdown-menu" id="langMenu">
-            <div class="dropdown-item ripple" onclick="changeLang('zh'); event.stopPropagation();">简体中文</div>
+            <div class="dropdown-item ripple" onclick="changeLang('zh'); event.stopPropagation();">Chinese</div>
             <div class="dropdown-item ripple" onclick="changeLang('en'); event.stopPropagation();">English</div>
             <div class="dropdown-item ripple" onclick="changeLang('it'); event.stopPropagation();">Italiano</div>
         </div>
@@ -536,7 +541,7 @@
     
     // 更新语言
     function updateLanguage() {
-        const langNames = { zh: '简体中文', en: 'English', it: 'Italiano' };
+        const langNames = { zh: 'Chinese', en: 'English', it: 'Italiano' };
         document.getElementById('currentLang').textContent = langNames[currentLang];
         document.documentElement.lang = currentLang;
         
@@ -622,6 +627,15 @@
             applyTheme();
         }
     });
+    
+    // 跳转到车次详情页面
+    function goToTrainDetails(trainNumber) {
+        if (!trainNumber) return;
+        // 去除空格并跳转到 index.html
+        const cleanTrainNumber = trainNumber.trim();
+        console.log('跳转到车次详情:', cleanTrainNumber);
+        window.location.href = `index.html?train=${encodeURIComponent(cleanTrainNumber)}`;
+    }
     
     // 回到顶部功能
     function scrollToTop() {
@@ -710,8 +724,10 @@
             
             trains.forEach(train => {
                 const formatted = formatDepartureData(train, currentLang);
+                // 获取原始车次号（不带 <br>）
+                const trainNumber = (train.compNumeroTreno || '').replace(/"/g, '&quot;');
                 tableHtml += `
-                    <tr>
+                    <tr class="train-row" data-train-number="${trainNumber}">
                         <td class="time-col">${formatted.scheduledTime}</td>
                         <td class="train-col">${formatted.trainNumber}</td>
                         <td class="destination-col">${formatted.destination}</td>
@@ -738,8 +754,10 @@
             
             trains.forEach(train => {
                 const formatted = formatArrivalData(train, currentLang);
+                // 获取原始车次号（不带 <br>）
+                const trainNumber = (train.compNumeroTreno || '').replace(/"/g, '&quot;');
                 tableHtml += `
-                    <tr>
+                    <tr class="train-row" data-train-number="${trainNumber}">
                         <td class="time-col">${formatted.scheduledTime}</td>
                         <td class="train-col">${formatted.trainNumber}</td>
                         <td class="origin-col">${formatted.origin}</td>
@@ -753,6 +771,17 @@
         
         tableHtml += '</tbody></table></div>';
         contentEl.innerHTML = tableHtml;
+        
+        // 为所有列车行添加点击事件（事件委托）
+        const trainRows = contentEl.querySelectorAll('.train-row');
+        trainRows.forEach(row => {
+            row.addEventListener('click', function() {
+                const trainNumber = this.getAttribute('data-train-number');
+                if (trainNumber) {
+                    goToTrainDetails(trainNumber);
+                }
+            });
+        });
     }
     
     // 初始化页面

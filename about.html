@@ -34,11 +34,19 @@
             margin-top: 30px;
             margin-bottom: 15px;
         }
+        
+        [data-theme="dark"] h2 {
+            color: white;
+        }
 
         p {
             line-height: 1.8;
             margin-bottom: 15px;
             color: var(--text-primary);
+        }
+        
+        [data-theme="dark"] p {
+            color: white;
         }
 
         a {
@@ -51,30 +59,27 @@
             text-decoration: underline;
         }
 
-        .feature-list {
-            list-style: none;
-            padding: 0;
-        }
-
-        .feature-list li {
-            padding: 12px 0;
-            border-bottom: 1px dashed rgba(0,0,0,0.1);
+        ul {
+            line-height: 1.8;
+            margin-bottom: 15px;
+            padding-left: 20px;
             color: var(--text-primary);
         }
-
-        [data-theme="dark"] .feature-list li {
-            border-bottom-color: rgba(255,255,255,0.1);
+        
+        [data-theme="dark"] ul {
+            color: white;
         }
-
-        .feature-list li:last-child {
-            border-bottom: none;
+        
+        ul li {
+            margin-bottom: 8px;
         }
-
-        .feature-list li::before {
-            content: "✓";
-            color: var(--md-sys-color-primary);
-            font-weight: bold;
-            margin-right: 10px;
+        
+        strong {
+            color: var(--text-primary);
+        }
+        
+        [data-theme="dark"] strong {
+            color: white;
         }
         
         /* 响应式设计 - About页面特定 */
@@ -83,14 +88,14 @@
             h1 { font-size: 2rem; }
             h2 { font-size: 1.3rem; }
             p { font-size: 0.95rem; }
-            .feature-list li { padding: 10px 0; font-size: 0.95rem; }
+            ul { font-size: 0.95rem; }
         }
         
         @media (max-width: 480px) {
             h1 { font-size: 1.8rem; }
             h2 { font-size: 1.2rem; }
             p { font-size: 0.9rem; }
-            .feature-list li { font-size: 0.9rem; }
+            ul { font-size: 0.9rem; }
             .content-card { padding: 20px 12px; border-radius: 16px; }
         }
     </style>
@@ -103,9 +108,9 @@
     <a href="about.html" data-i18n="nav_about" class="ripple">关于</a>
     <div class="lang-switch" onclick="toggleLangMenu()">
         <span class="material-symbols-outlined">language</span>
-        <span id="currentLang">简体中文</span>
+        <span id="currentLang">Chinese</span>
         <div class="dropdown-menu" id="langMenu">
-            <div class="dropdown-item ripple" onclick="changeLang('zh'); event.stopPropagation();">简体中文</div>
+            <div class="dropdown-item ripple" onclick="changeLang('zh'); event.stopPropagation();">Chinese</div>
             <div class="dropdown-item ripple" onclick="changeLang('en'); event.stopPropagation();">English</div>
             <div class="dropdown-item ripple" onclick="changeLang('it'); event.stopPropagation();">Italiano</div>
         </div>
@@ -134,32 +139,41 @@
             <p>BelloTreno 是一个实时意大利铁路列车查询系统，旨在为用户提供准确、及时的列车运行信息。本站通过ViaggiaTreno的官方数据接口，实时获取列车的运行状态、延误信息和到站时间。</p>
         </div>
 
-        <h2 data-i18n="about_features">功能特性</h2>
-        <ul class="feature-list">
-            <li data-i18n="feature_1">实时查询意大利铁路列车运行状态</li>
-            <li data-i18n="feature_2">显示详细的站点信息、到达/出发时间</li>
-            <li data-i18n="feature_3">支持多语言切换（简体中文、英语、意大利语）</li>
-            <li data-i18n="feature_4">深色/浅色主题模式，可跟随系统设置</li>
-            <li data-i18n="feature_5">实时显示列车延误或提前到达信息</li>
-            <li data-i18n="feature_6">显示站台变更信息</li>
-            <li data-i18n="feature_7">可视化的时间轴展示列车运行进度</li>
-        </ul>
-
-        <h2 data-i18n="about_datasource">数据来源</h2>
-        <div data-i18n-section="datasource">
-            <p>本站数据来源于<a href="http://www.viaggiatreno.it" target="_blank">ViaggiaTreno</a>官方接口。数据仅供参考，实际情况请以车站大屏显示为准。</p>
+        <h2 data-i18n="about_roadmap">Roadmap</h2>
+        <div data-i18n-section="roadmap">
+            <p>待更新。</p>
         </div>
 
-        <h2 data-i18n="about_disclaimer">免责声明</h2>
+        <h2 data-i18n="about_technical">技术参考</h2>
+        <div data-i18n-section="technical">
+            <p>特别感谢以下开源项目、博客及社区探索者，他们的工作是本项目得以诞生的基石：</p>
+            <ul>
+                <li><a href="https://github.com/MarcoBuster/railway-opendata" target="_blank">MarcoBuster / railway-opendata</a> 和 <a href="https://github.com/roughconsensusandrunningcode/TrainMonitor/wiki/API-del-sistema-Viaggiatreno" target="_blank">roughconsensusandrunningcode / TrainMonitor</a> 等项目提供了详尽的 API 说明和思路。</li>
+                <li>关于开放数据类问题的一些博客：<a href="https://medium.com/@tert6996/open-data-ed-rfi-che-disastro-1d1b631aabef" target="_blank">Open Data ed RFI: Che disastro.</a> 与 <a href="https://medium.com/@albigiu/trenitalia-shock-non-crederete-mai-a-queste-api-painful-14433096502c" target="_blank">+++TRENITALIA SHOCK+++ NON crederete MAI a queste API painful</a>。</li>
+            </ul>
+        </div>
+
+        <h2 data-i18n="about_official">铁路官方信息</h2>
+        <div data-i18n-section="official">
+            <p>如需获取官方原始信息或查询不受本站支持的列车：</p>
+            <p><strong>查询列车实时信息（通过列车号码）：</strong></p>
+            <ul>
+                <li>Trenitalia: <a href="http://www.viaggiatreno.it/infomobilita/index.jsp" target="_blank">ViaggiaTreno</a> 或 Trenitalia app</li>
+                <li>Italo: <a href="https://italoinviaggio.italotreno.com" target="_blank">Italo in Viaggio</a></li>
+                <li>SNCF: <a href="https://www.sncf-voyageurs.com/en/travel-with-us/booking-and-itinerary/search-by-train-number/" target="_blank">SNCF Train Search</a></li>
+                <li>ÖBB: <a href="https://fahrplan.oebb.at/webapp/" target="_blank">ÖBB Fahrplan</a></li>
+            </ul>
+            <p><strong>意大利车站（FS）实时信息：</strong></p>
+            <ul>
+                <li>RFI 实时监控：<a href="https://www.rfi.it/it/stazioni/pagine-stazioni/servizi-di-qualita/informazioni-al-pubblico/monitor-arrivi-partenze-live.html" target="_blank">Monitor Arrivi/Partenze Live</a></li>
+                <li>车站时刻表：<a href="https://www.rfi.it/it/stazioni/pagine-stazioni/servizi-di-qualita/informazioni-al-pubblico/quadri-orario-on-line.html" target="_blank">Quadri Orario Online</a></li>
+            </ul>
+        </div>
+
+        <h2 data-i18n="about_disclaimer">免责声明与版权</h2>
         <div data-i18n-section="disclaimer">
-            <p>本站提供的列车信息仅供参考使用。由于数据延迟、网络问题或其他技术原因，显示的信息可能与实际情况存在差异。请以车站官方公告和显示屏为准。</p>
-            <p>目前本站不支持查询 Italo 和 SNCF 运营的列车。</p>
-        </div>
-
-        <h2 data-i18n="about_contact">联系方式</h2>
-        <div data-i18n-section="contact">
-            <p>如有任何问题或建议，欢迎通过以下方式联系我们：</p>
-            <p>网站：<a href="https://real.bellotreno.org">https://real.bellotreno.org</a></p>
+            <p>本站仅为个人研究及铁路爱好者交流所用，所有数据均来源于第三方公开接口，本站不保证准确性与实时性。在罢工、天气异常等特殊情况下，请务必以火车站站台实时大屏及官方信息为准。目前仅支持 ViaggiaTreno 上可查询的列车。</p>
+            <p>如有任何问题或建议，欢迎通过 Instagram <a href="https://www.instagram.com/trainfans.it/" target="_blank">trainfans.it</a> 联系我。</p>
         </div>
     </div>
 </div>
@@ -178,17 +192,10 @@
             theme_light: "浅色模式",
             theme_dark: "深色模式",
             about_title: "关于 BelloTreno",
-            about_features: "功能特性",
-            about_datasource: "数据来源",
-            about_disclaimer: "免责声明",
-            about_contact: "联系方式",
-            feature_1: "实时查询意大利铁路列车运行状态",
-            feature_2: "显示详细的站点信息、到达/出发时间",
-            feature_3: "支持多语言切换（简体中文、英语、意大利语）",
-            feature_4: "深色/浅色主题模式，可跟随系统设置",
-            feature_5: "实时显示列车延误或提前到达信息",
-            feature_6: "显示站台变更信息",
-            feature_7: "可视化的时间轴展示列车运行进度",
+            about_roadmap: "Roadmap",
+            about_technical: "技术参考",
+            about_official: "铁路官方信息",
+            about_disclaimer: "免责声明与版权",
             footer: "本站数据仅供参考，如有问题请关注车站大屏获取最新信息。 | © 2026 BelloTreno"
         },
         en: {
@@ -198,17 +205,10 @@
             theme_light: "Light Mode",
             theme_dark: "Dark Mode",
             about_title: "About BelloTreno",
-            about_features: "Features",
-            about_datasource: "Data Source",
-            about_disclaimer: "Disclaimer",
-            about_contact: "Contact",
-            feature_1: "Real-time query of Italian railway train status",
-            feature_2: "Display detailed station information, arrival/departure times",
-            feature_3: "Support for multilingual switching (Simplified Chinese, English, Italian)",
-            feature_4: "Dark/Light theme mode, can follow system settings",
-            feature_5: "Real-time display of train delay or early arrival information",
-            feature_6: "Display platform change information",
-            feature_7: "Visual timeline showing train progress",
+            about_roadmap: "Roadmap",
+            about_technical: "Technical References",
+            about_official: "Official Railway Information",
+            about_disclaimer: "Disclaimer & Copyright",
             footer: "This information is for reference only. Please check station displays for official information. | © 2026 BelloTreno"
         },
         it: {
@@ -218,39 +218,92 @@
             theme_light: "Modalità Chiara",
             theme_dark: "Modalità Scura",
             about_title: "Informazioni su BelloTreno",
-            about_features: "Caratteristiche",
-            about_datasource: "Fonte Dati",
-            about_disclaimer: "Disclaimer",
-            about_contact: "Contatti",
-            feature_1: "Interrogazione in tempo reale dello stato dei treni ferroviari italiani",
-            feature_2: "Visualizza informazioni dettagliate sulla stazione, orari di arrivo/partenza",
-            feature_3: "Supporto per il cambio multilingue (cinese semplificato, inglese, italiano)",
-            feature_4: "Modalità tema scuro/chiaro, può seguire le impostazioni di sistema",
-            feature_5: "Visualizzazione in tempo reale delle informazioni su ritardi o arrivi anticipati dei treni",
-            feature_6: "Visualizza informazioni sul cambio di binario",
-            feature_7: "Timeline visiva che mostra l'avanzamento del treno",
+            about_roadmap: "Roadmap",
+            about_technical: "Riferimenti Tecnici",
+            about_official: "Informazioni Ferroviarie Ufficiali",
+            about_disclaimer: "Disclaimer e Copyright",
             footer: "Queste informazioni sono solo di riferimento. Controllare i display delle stazioni per informazioni ufficiali. | © 2026 BelloTreno"
         }
     };
 
     const aboutContent = {
         zh: {
-            intro: `<p>BelloTreno 是一个实时意大利铁路列车查询系统，旨在为用户提供准确、及时的列车运行信息。本站通过ViaggiaTreno的官方数据接口，实时获取列车的运行状态、延误信息和到站时间。</p>`,
-            datasource: `<p>本站数据来源于<a href="http://www.viaggiatreno.it" target="_blank">ViaggiaTreno</a>官方接口。数据仅供参考，实际情况请以车站大屏显示为准。</p>`,
-            disclaimer: `<p>本站提供的列车信息仅供参考使用。由于数据延迟、网络问题或其他技术原因，显示的信息可能与实际情况存在差异。请以车站官方公告和显示屏为准。</p><p>目前本站不支持查询 Italo 和 SNCF 运营的列车。</p>`,
-            contact: `<p>如有任何问题或建议，欢迎通过以下方式联系我：</p><p>网站：<a href="https://real.bellotreno.org">https://real.bellotreno.org</a></p><p>Instagram：<a href="https://www.instagram.com/trainfans.it/" target="_blank">trainfans.it</a></p>`
+            intro: `<p>BelloTreno 是一个由铁路爱好者所制作的个人业余项目。旨在为用户提供及时的意大利铁路列车运行信息。在意大利，获取实时、透明的铁路运行数据并非易事。尽管 FS 集团旗下的 ViaggiaTreno 提供了宝贵的数据，但其网页过时的界面，促使我想制作一个有简洁好看的UI和展示更多Trenitalia没有显示的数据的网站，通过车次号可以快速查到实时信息，缩短铁路迷、通勤者与真实铁路运行数据之间的距离。</p>
+<p>这并非易事。相比于德国铁路 (DB)（<a href="https://developers.deutschebahn.com/db-api-marketplace/apis/" target="_blank">https://developers.deutschebahn.com/db-api-marketplace/apis/</a>）、法国铁路 (SNCF)（<a href="https://data.sncf.com/" target="_blank">https://data.sncf.com/</a>）和瑞士（<a href="https://opentransportdata.swiss/en/" target="_blank">https://opentransportdata.swiss/en/</a>）提供的完善开发者门户与 API 和数据，意大利铁路数据的开放程度仍显滞后。我们不解为何 ViaggiaTreno 至今仍仅以不安全的 HTTP 形式提供服务，且未部署 SSL 证书。同时，基础设施公司 RFI 虽然拥有显示更全的 Monitor Arrivi/Partenze 实时监控系统（包含显示 SNCF TGV 和单独由 ÖBB 运营的 Railjet/Nightjet 等非 FS 运营列车），但由于 CORS 跨域限制及 API 不公开，这些数据目前仍难以集成。</p>
+<p>我们呼吁 FS 集团能向欧洲同行看齐，真正实现交通数据的透明与共享。</p>`,
+            roadmap: `<p>待更新。</p>`,
+            technical: `<p>特别感谢以下开源项目、博客及社区探索者，他们的工作是本项目得以诞生的基石：</p>
+<ul>
+<li><a href="https://github.com/MarcoBuster/railway-opendata" target="_blank">MarcoBuster / railway-opendata</a> 和 <a href="https://github.com/roughconsensusandrunningcode/TrainMonitor/wiki/API-del-sistema-Viaggiatreno" target="_blank">roughconsensusandrunningcode / TrainMonitor</a> 等项目提供了详尽的 API 说明和思路。</li>
+<li>关于开放数据类问题的一些博客：<a href="https://medium.com/@tert6996/open-data-ed-rfi-che-disastro-1d1b631aabef" target="_blank">Open Data ed RFI: Che disastro.</a> 与 <a href="https://medium.com/@albigiu/trenitalia-shock-non-crederete-mai-a-queste-api-painful-14433096502c" target="_blank">+++TRENITALIA SHOCK+++ NON crederete MAI a queste API painful</a>。</li>
+</ul>`,
+            official: `<p>如需获取官方原始信息或查询不受本站支持的列车：</p>
+<p><strong>查询列车实时信息（通过列车号码）：</strong></p>
+<ul>
+<li>Trenitalia: <a href="http://www.viaggiatreno.it/infomobilita/index.jsp" target="_blank">ViaggiaTreno</a> 或 Trenitalia app</li>
+<li>Italo: <a href="https://italoinviaggio.italotreno.com" target="_blank">Italo in Viaggio</a></li>
+<li>SNCF: <a href="https://www.sncf-voyageurs.com/en/travel-with-us/booking-and-itinerary/search-by-train-number/" target="_blank">SNCF Train Search</a></li>
+<li>ÖBB: <a href="https://fahrplan.oebb.at/webapp/" target="_blank">ÖBB Fahrplan</a></li>
+</ul>
+<p><strong>意大利车站（FS）实时信息：</strong></p>
+<ul>
+<li>RFI 实时监控：<a href="https://www.rfi.it/it/stazioni/pagine-stazioni/servizi-di-qualita/informazioni-al-pubblico/monitor-arrivi-partenze-live.html" target="_blank">Monitor Arrivi/Partenze Live</a></li>
+<li>车站时刻表：<a href="https://www.rfi.it/it/stazioni/pagine-stazioni/servizi-di-qualita/informazioni-al-pubblico/quadri-orario-on-line.html" target="_blank">Quadri Orario Online</a></li>
+</ul>`,
+            disclaimer: `<p>本站仅为个人研究及铁路爱好者交流所用，所有数据均来源于第三方公开接口，本站不保证准确性与实时性。在罢工、天气异常等特殊情况下，请务必以火车站站台实时大屏及官方信息为准。目前仅支持 ViaggiaTreno 上可查询的列车。</p>
+<p>如有任何问题或建议，欢迎通过 Instagram <a href="https://www.instagram.com/trainfans.it/" target="_blank">trainfans.it</a> 联系我。</p>`
         },
         en: {
-            intro: `<p>BelloTreno is a real-time Italian railway train inquiry system designed to provide users with accurate and timely train operation information. This site obtains train operation status, delay information, and arrival times in real-time through ViaggiaTreno's official data interface.</p>`,
-            datasource: `<p>The data on this site comes from the official <a href="http://www.viaggiatreno.it" target="_blank">ViaggiaTreno</a> interface. The data is for reference only, and the actual situation should be subject to the station display screen.</p>`,
-            disclaimer: `<p>The train information provided on this site is for reference only. Due to data delays, network issues, or other technical reasons, the displayed information may differ from the actual situation. Please refer to the official station announcements and displays.</p><p>Currently, this site does not support queries for trains operated by Italo and SNCF.</p>`,
-            contact: `<p>If you have any questions or suggestions, please feel free to contact me through the following methods:</p><p>Website: <a href="https://real.bellotreno.org">https://real.bellotreno.org</a></p><p>Instagram: <a href="https://www.instagram.com/trainfans.it/" target="_blank">trainfans.it</a></p>`
+            intro: `<p>BelloTreno is a personal hobby project created by railway enthusiasts, aiming to provide users with timely information on Italian railway train operations. In Italy, obtaining real-time and transparent railway operation data is not an easy task. Although ViaggiaTreno, under the FS Group, provides valuable data, its outdated web interface has motivated me to create a website with a clean, modern UI that displays more data than Trenitalia shows. Users can quickly find real-time information by train number, bridging the gap between railway enthusiasts, commuters, and actual railway operation data.</p>
+<p>This is no easy task. Compared to the comprehensive developer portals and APIs provided by Deutsche Bahn (<a href="https://developers.deutschebahn.com/db-api-marketplace/apis/" target="_blank">https://developers.deutschebahn.com/db-api-marketplace/apis/</a>), SNCF (<a href="https://data.sncf.com/" target="_blank">https://data.sncf.com/</a>), and Switzerland (<a href="https://opentransportdata.swiss/en/" target="_blank">https://opentransportdata.swiss/en/</a>), the openness of Italian railway data still lags behind. We are puzzled why ViaggiaTreno still only provides services in insecure HTTP format without SSL certificate deployment. Meanwhile, although the infrastructure company RFI has a more comprehensive Monitor Arrivi/Partenze real-time monitoring system (including SNCF TGV and ÖBB-operated Railjet/Nightjet trains not operated by FS), these data are still difficult to integrate due to CORS cross-origin restrictions and non-public APIs.</p>
+<p>We call on the FS Group to align with their European counterparts and truly achieve transparency and sharing of transportation data.</p>`,
+            roadmap: `<p>To be updated.</p>`,
+            technical: `<p>Special thanks to the following open-source projects, blogs, and community explorers, whose work has been the foundation for this project:</p>
+<ul>
+<li><a href="https://github.com/MarcoBuster/railway-opendata" target="_blank">MarcoBuster / railway-opendata</a> and <a href="https://github.com/roughconsensusandrunningcode/TrainMonitor/wiki/API-del-sistema-Viaggiatreno" target="_blank">roughconsensusandrunningcode / TrainMonitor</a> provided detailed API documentation and insights.</li>
+<li>Blog posts about open data issues: <a href="https://medium.com/@tert6996/open-data-ed-rfi-che-disastro-1d1b631aabef" target="_blank">Open Data ed RFI: Che disastro.</a> and <a href="https://medium.com/@albigiu/trenitalia-shock-non-crederete-mai-a-queste-api-painful-14433096502c" target="_blank">+++TRENITALIA SHOCK+++ NON crederete MAI a queste API painful</a>.</li>
+</ul>`,
+            official: `<p>For official information or to query trains not supported by this site:</p>
+<p><strong>Real-time train information (by train number):</strong></p>
+<ul>
+<li>Trenitalia: <a href="http://www.viaggiatreno.it/infomobilita/index.jsp" target="_blank">ViaggiaTreno</a> or Trenitalia app</li>
+<li>Italo: <a href="https://italoinviaggio.italotreno.com" target="_blank">Italo in Viaggio</a></li>
+<li>SNCF: <a href="https://www.sncf-voyageurs.com/en/travel-with-us/booking-and-itinerary/search-by-train-number/" target="_blank">SNCF Train Search</a></li>
+<li>ÖBB: <a href="https://fahrplan.oebb.at/webapp/" target="_blank">ÖBB Fahrplan</a></li>
+</ul>
+<p><strong>Italian station (FS) real-time information:</strong></p>
+<ul>
+<li>RFI real-time monitoring: <a href="https://www.rfi.it/it/stazioni/pagine-stazioni/servizi-di-qualita/informazioni-al-pubblico/monitor-arrivi-partenze-live.html" target="_blank">Monitor Arrivi/Partenze Live</a></li>
+<li>Station timetables: <a href="https://www.rfi.it/it/stazioni/pagine-stazioni/servizi-di-qualita/informazioni-al-pubblico/quadri-orario-on-line.html" target="_blank">Quadri Orario Online</a></li>
+</ul>`,
+            disclaimer: `<p>This site is for personal research and railway enthusiast communication only. All data comes from third-party public interfaces, and this site does not guarantee accuracy or real-time availability. In special circumstances such as strikes or extreme weather, please rely on the station platform displays and official information. Currently, only trains queryable on ViaggiaTreno are supported.</p>
+<p>For any questions or suggestions, please contact me via Instagram: <a href="https://www.instagram.com/trainfans.it/" target="_blank">trainfans.it</a>.</p>`
         },
         it: {
-            intro: `<p>BelloTreno è un sistema di interrogazione in tempo reale dei treni ferroviari italiani progettato per fornire agli utenti informazioni accurate e tempestive sulle operazioni dei treni. Questo sito ottiene lo stato delle operazioni dei treni, le informazioni sui ritardi e gli orari di arrivo in tempo reale attraverso l'interfaccia dati ufficiale di ViaggiaTreno.</p>`,
-            datasource: `<p>I dati su questo sito provengono dall'interfaccia ufficiale di <a href="http://www.viaggiatreno.it" target="_blank">ViaggiaTreno</a>. I dati sono solo di riferimento e la situazione effettiva dovrebbe essere soggetta allo schermo di visualizzazione della stazione.</p>`,
-            disclaimer: `<p>Le informazioni sui treni fornite su questo sito sono solo di riferimento. A causa di ritardi nei dati, problemi di rete o altri motivi tecnici, le informazioni visualizzate potrebbero differire dalla situazione effettiva. Si prega di fare riferimento agli annunci ufficiali della stazione e ai display.</p><p>Attualmente, questo sito non supporta le query per i treni gestiti da Italo e SNCF.</p>`,
-            contact: `<p>Se avete domande o suggerimenti, non esitate a contattarmi attraverso i seguenti metodi:</p><p>Sito web: <a href="https://real.bellotreno.org">https://real.bellotreno.org</a></p><p>Instagram: <a href="https://www.instagram.com/trainfans.it/" target="_blank">trainfans.it</a></p>`
+            intro: `<p>BelloTreno è un progetto personale amatoriale creato da appassionati di ferrovie, con l'obiettivo di fornire agli utenti informazioni tempestive sulle operazioni dei treni ferroviari italiani. In Italia, ottenere dati di operazioni ferroviarie in tempo reale e trasparenti non è un compito facile. Sebbene ViaggiaTreno, del Gruppo FS, fornisca dati preziosi, la sua interfaccia web obsoleta mi ha motivato a creare un sito web con un'interfaccia utente pulita e moderna che visualizza più dati di quelli mostrati da Trenitalia. Gli utenti possono trovare rapidamente informazioni in tempo reale tramite il numero del treno, colmando il divario tra appassionati di ferrovie, pendolari e dati reali delle operazioni ferroviarie.</p>
+<p>Questo non è un compito facile. Rispetto ai portali per sviluppatori completi e alle API fornite da Deutsche Bahn (<a href="https://developers.deutschebahn.com/db-api-marketplace/apis/" target="_blank">https://developers.deutschebahn.com/db-api-marketplace/apis/</a>), SNCF (<a href="https://data.sncf.com/" target="_blank">https://data.sncf.com/</a>) e Svizzera (<a href="https://opentransportdata.swiss/en/" target="_blank">https://opentransportdata.swiss/en/</a>), l'apertura dei dati ferroviari italiani è ancora in ritardo. Siamo perplessi sul perché ViaggiaTreno fornisca ancora servizi solo in formato HTTP non sicuro senza distribuzione di certificati SSL. Nel frattempo, sebbene la società di infrastrutture RFI disponga di un sistema di monitoraggio in tempo reale Monitor Arrivi/Partenze più completo (inclusi treni TGV SNCF e Railjet/Nightjet gestiti da ÖBB non operati da FS), questi dati sono ancora difficili da integrare a causa delle restrizioni CORS e delle API non pubbliche.</p>
+<p>Chiediamo al Gruppo FS di allinearsi con i loro colleghi europei e realizzare veramente la trasparenza e la condivisione dei dati di trasporto.</p>`,
+            roadmap: `<p>Da aggiornare.</p>`,
+            technical: `<p>Un ringraziamento speciale ai seguenti progetti open-source, blog ed esploratori della comunità, il cui lavoro è stato la base per questo progetto:</p>
+<ul>
+<li><a href="https://github.com/MarcoBuster/railway-opendata" target="_blank">MarcoBuster / railway-opendata</a> e <a href="https://github.com/roughconsensusandrunningcode/TrainMonitor/wiki/API-del-sistema-Viaggiatreno" target="_blank">roughconsensusandrunningcode / TrainMonitor</a> hanno fornito documentazione API dettagliata e approfondimenti.</li>
+<li>Post di blog su problemi di dati aperti: <a href="https://medium.com/@tert6996/open-data-ed-rfi-che-disastro-1d1b631aabef" target="_blank">Open Data ed RFI: Che disastro.</a> e <a href="https://medium.com/@albigiu/trenitalia-shock-non-crederete-mai-a-queste-api-painful-14433096502c" target="_blank">+++TRENITALIA SHOCK+++ NON crederete MAI a queste API painful</a>.</li>
+</ul>`,
+            official: `<p>Per informazioni ufficiali o per interrogare treni non supportati da questo sito:</p>
+<p><strong>Informazioni sui treni in tempo reale (per numero di treno):</strong></p>
+<ul>
+<li>Trenitalia: <a href="http://www.viaggiatreno.it/infomobilita/index.jsp" target="_blank">ViaggiaTreno</a> o app Trenitalia</li>
+<li>Italo: <a href="https://italoinviaggio.italotreno.com" target="_blank">Italo in Viaggio</a></li>
+<li>SNCF: <a href="https://www.sncf-voyageurs.com/en/travel-with-us/booking-and-itinerary/search-by-train-number/" target="_blank">Ricerca treni SNCF</a></li>
+<li>ÖBB: <a href="https://fahrplan.oebb.at/webapp/" target="_blank">ÖBB Fahrplan</a></li>
+</ul>
+<p><strong>Informazioni in tempo reale sulle stazioni italiane (FS):</strong></p>
+<ul>
+<li>Monitoraggio in tempo reale RFI: <a href="https://www.rfi.it/it/stazioni/pagine-stazioni/servizi-di-qualita/informazioni-al-pubblico/monitor-arrivi-partenze-live.html" target="_blank">Monitor Arrivi/Partenze Live</a></li>
+<li>Orari delle stazioni: <a href="https://www.rfi.it/it/stazioni/pagine-stazioni/servizi-di-qualita/informazioni-al-pubblico/quadri-orario-on-line.html" target="_blank">Quadri Orario Online</a></li>
+</ul>`,
+            disclaimer: `<p>Questo sito è solo per ricerca personale e comunicazione tra appassionati di ferrovie. Tutti i dati provengono da interfacce pubbliche di terze parti e questo sito non garantisce l'accuratezza o la disponibilità in tempo reale. In circostanze speciali come scioperi o condizioni meteorologiche estreme, si prega di fare affidamento sui display delle piattaforme delle stazioni e sulle informazioni ufficiali. Attualmente sono supportati solo i treni interrogabili su ViaggiaTreno.</p>
+<p>Per qualsiasi domanda o suggerimento, contattami tramite Instagram: <a href="https://www.instagram.com/trainfans.it/" target="_blank">trainfans.it</a>.</p>`
         }
     };
 
@@ -277,7 +330,7 @@
 
     // 更新语言
     function updateLanguage() {
-        const langNames = { zh: '简体中文', en: 'English', it: 'Italiano' };
+        const langNames = { zh: 'Chinese', en: 'English', it: 'Italiano' };
         document.getElementById('currentLang').textContent = langNames[currentLang];
         document.documentElement.lang = currentLang;
         
