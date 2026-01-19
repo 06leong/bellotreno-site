@@ -316,10 +316,3 @@ if (typeof module !== 'undefined' && module.exports) {
     window.formatDepartureData = formatDepartureData;
     window.formatArrivalData = formatArrivalData;
 }
-
-// 调试信息
-console.log('Station.js loaded successfully. Functions available:', {
-    getItalianTimeString: typeof window.getItalianTimeString !== 'undefined',
-    goToStationBoard: typeof window.goToStationBoard !== 'undefined',
-    fetchStationBoard: typeof window.fetchStationBoard !== 'undefined'
-});

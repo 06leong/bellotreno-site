@@ -633,7 +633,6 @@
         if (!trainNumber) return;
         // 去除空格并跳转到 index.html
         const cleanTrainNumber = trainNumber.trim();
-        console.log('跳转到车次详情:', cleanTrainNumber);
         window.location.href = `index.html?train=${encodeURIComponent(cleanTrainNumber)}`;
     }
     
@@ -691,8 +690,6 @@
             renderStationBoard(data);
             loadingEl.style.display = 'none';
             contentEl.style.display = 'block';
-            
-            console.log(`✅ 已刷新 ${currentBoardType} 数据，共 ${data.length} 条记录`);
         } catch (error) {
             console.error('Failed to load station board:', error);
             errorEl.style.display = 'block';

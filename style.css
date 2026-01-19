@@ -34,6 +34,43 @@ body {
     display: flex; 
     flex-direction: column; 
     overflow-x: hidden; 
+    position: relative;
+}
+
+/* 微光网格背景 (Technical Grid) */
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: radial-gradient(rgba(0, 0, 0, 0.15) 1px, transparent 1px);
+    background-size: 24px 24px;
+    pointer-events: none;
+    z-index: 0;
+}
+
+[data-theme="dark"] body::before {
+    background-image: radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+}
+
+/* 弥散光晕 (Mesh Gradient) */
+body::after {
+    content: '';
+    position: fixed;
+    top: -10%;
+    right: -10%;
+    width: 60%;
+    height: 60%;
+    background: radial-gradient(circle, rgba(99, 102, 241, 0.15), transparent 70%);
+    filter: blur(100px);
+    pointer-events: none;
+    z-index: 0;
+}
+
+[data-theme="dark"] body::after {
+    background: radial-gradient(circle, rgba(56, 189, 248, 0.12), transparent 70%);
 }
 
 * { box-sizing: border-box; }
@@ -73,7 +110,8 @@ body {
 .navbar { 
     position: fixed; 
     top: 0; 
-    left: 0; 
+    left: 0;
+    z-index: 100; 
     right: 0; 
     background: var(--bg-primary); 
     border-bottom: 1px solid rgba(0,0,0,0.1); 
@@ -168,7 +206,9 @@ body {
 .container { 
     width: 100%; 
     max-width: 950px; 
-    margin: 0 auto; 
+    margin: 0 auto;
+    position: relative;
+    z-index: 1; 
     padding: 80px 16px 16px; 
     box-sizing: border-box; 
     flex: 1; 
@@ -188,15 +228,125 @@ body {
 
 .logo-link:hover { opacity: 0.8; }
 
+/* Connected Button Group - 搜索模式切换 */
+.search-mode-toggle {
+    display: flex;
+    justify-content: center;
+    margin: 15px auto 12px;
+    width: fit-content;
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.mode-button {
+    font-family: 'Roboto', 'Noto Sans SC', sans-serif;
+    font-size: 0.9rem;
+    font-weight: 500;
+    padding: 10px 20px;
+    border: 2px solid var(--text-primary);
+    background: transparent;
+    color: var(--text-primary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.mode-button .material-symbols-outlined {
+    font-size: 20px;
+}
+
+/* 左侧按钮：右边无圆角，去掉右边框 */
+.mode-button.mode-left {
+    border-radius: 20px 0 0 20px;
+    border-right: none;
+}
+
+/* 右侧按钮：左边无圆角 */
+.mode-button.mode-right {
+    border-radius: 0 20px 20px 0;
+}
+
+/* 激活状态 - 浅色模式 */
+[data-theme="light"] .mode-button.active {
+    background: #233975;
+    color: white;
+    border-color: #233975;
+}
+
+/* 激活状态 - 深色模式 */
+[data-theme="dark"] .mode-button.active {
+    background: #a2e6fb;
+    color: #0d131e;
+    border-color: #a2e6fb;
+}
+
+/* Hover 效果 */
+.mode-button:hover:not(.active) {
+    background: rgba(var(--text-primary-rgb), 0.08);
+}
+
+[data-theme="light"] {
+    --text-primary-rgb: 35, 57, 117;
+}
+
+[data-theme="dark"] {
+    --text-primary-rgb: 162, 230, 251;
+}
+
+/* Ripple 效果 */
+.mode-button::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.4);
+    transform: translate(-50%, -50%);
+    transition: width 0.6s, height 0.6s;
+    pointer-events: none;
+}
+
+[data-theme="light"] .mode-button::after {
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.mode-button:active::after {
+    width: 200px;
+    height: 200px;
+    transition: width 0s, height 0s;
+}
+
 md-filled-text-field { 
     width: 100%; 
     max-width: 100%; 
     --md-filled-text-field-container-shape: 28px; 
+    /* 完全移除底部横线（所有状态） */
+    --md-filled-text-field-active-indicator-height: 0 !important;
+    --md-filled-text-field-focus-active-indicator-height: 0 !important;
+    --md-filled-text-field-hover-active-indicator-height: 0 !important;
 }
 
+/* 浅色模式 - 搜索框颜色 */
+[data-theme="light"] md-filled-text-field { 
+    --md-filled-text-field-input-text-color: #233975; 
+    --md-filled-text-field-label-text-color: #233975; 
+    --md-filled-text-field-focus-label-text-color: #233975; /* 焦点时的 label 颜色 */
+    --md-filled-text-field-caret-color: #233975; /* 光标颜色 */
+}
+
+/* 深色模式 - 搜索框颜色（统一使用 #233975，避免 #a2e6fb 过亮） */
 [data-theme="dark"] md-filled-text-field { 
-    --md-filled-text-field-input-text-color: #000000; 
-    --md-filled-text-field-label-text-color: #000000; 
+    --md-filled-text-field-input-text-color: #233975; 
+    --md-filled-text-field-label-text-color: #233975; 
+    --md-filled-text-field-focus-label-text-color: #233975; /* 焦点时的 label 颜色 */
+    --md-filled-text-field-caret-color: #233975; /* 光标颜色 */
 }
 
 .disclaimer { 
@@ -247,7 +397,7 @@ md-filled-text-field {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 6px 8px 6px 12px;
+    padding: 6px 8px 6px 8px;
     border-radius: 20px;
     background: rgba(0,0,0,0.05);
     transition: background 0.2s;
@@ -268,6 +418,12 @@ md-filled-text-field {
 
 [data-theme="dark"] .assist-chip:hover {
     background: rgba(255,255,255,0.15);
+}
+
+.assist-chip .chip-icon {
+    font-size: 18px;
+    color: var(--text-primary);
+    opacity: 0.8;
 }
 
 .assist-chip .chip-label {
@@ -334,7 +490,7 @@ md-filled-text-field {
 
 /* 头部卡片 */
 .train-header { 
-    background: var(--bg-primary); 
+    background: rgba(244, 251, 250, 0.7); 
     padding: 24px; 
     border-radius: 24px; 
     margin: 0 auto 24px; 
@@ -342,10 +498,15 @@ md-filled-text-field {
     border: 1px solid rgba(0,0,0,0.1); 
     position: relative; 
     max-width: 950px; 
-    overflow-x: hidden; 
+    overflow-x: hidden;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
 }
 
-[data-theme="dark"] .train-header { border-color: rgba(255,255,255,0.2); }
+[data-theme="dark"] .train-header { 
+    background: rgba(13, 19, 30, 0.7); 
+    border-color: rgba(255,255,255,0.2); 
+}
 
 .op-cat-row { 
     font-weight: 700; 
@@ -450,15 +611,20 @@ md-filled-text-field {
     position: relative; 
     margin: 20px auto 0; 
     padding: 40px 20px; 
-    background: var(--bg-primary); 
+    background: rgba(244, 251, 250, 0.7); 
     border-radius: 24px; 
     box-shadow: 0 2px 10px rgba(0,0,0,0.05); 
     border: 1px solid rgba(0,0,0,0.1); 
     max-width: 950px; 
-    overflow-x: hidden; 
+    overflow-x: hidden;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
 }
 
-[data-theme="dark"] .timeline-container { border-color: rgba(255,255,255,0.2); }
+[data-theme="dark"] .timeline-container { 
+    background: rgba(13, 19, 30, 0.7); 
+    border-color: rgba(255,255,255,0.2); 
+}
 
 /* 站点项目 - 每个站点是一个Segment（圆点 + 下方轨道线 + 卡片） */
 .station-item { 
@@ -694,7 +860,9 @@ md-filled-text-field {
 footer { 
     margin-top: auto; 
     padding: 20px 16px; 
-    text-align: center; 
+    text-align: center;
+    position: relative;
+    z-index: 1; 
     font-size: 0.85rem; 
     color: var(--text-grey); 
     width: 100%; 
@@ -722,6 +890,13 @@ footer span {
     .search-section h1 { font-size: 2rem !important; }
     .disclaimer { font-size: 0.7rem; padding: 0 8px; }
     
+    .search-mode-toggle { margin: 12px auto 10px; }
+    .mode-button { 
+        font-size: 0.85rem; 
+        padding: 8px 16px; 
+    }
+    .mode-button .material-symbols-outlined { font-size: 18px; }
+    
     .recent-searches-container { 
         margin-top: 12px; 
         padding: 10px 0; 
@@ -742,9 +917,11 @@ footer span {
     }
     .assist-chip { 
         font-size: 0.8rem; 
-        padding: 4px 6px 4px 10px;
+        padding: 4px 6px 4px 6px;
         flex-shrink: 0;
     }
+    
+    .assist-chip .chip-icon { font-size: 16px; }
     
     #disambiguation { padding: 16px; margin: 0 8px 16px; }
     .choice-item { padding: 12px; }
@@ -805,13 +982,22 @@ footer span {
     .lang-switch span:not(.material-symbols-outlined) { display: none; }
     
     .search-section h1 { font-size: 1.8rem !important; }
+    
+    .mode-button { 
+        font-size: 0.8rem; 
+        padding: 6px 12px; 
+        gap: 4px;
+    }
+    .mode-button .material-symbols-outlined { font-size: 16px; }
+    
     .train-route { font-size: 1.2rem; }
     .train-meta { font-size: 0.8rem; }
     .info-row { gap: 15px; font-size: 0.8rem; }
     
     .recent-searches-label { font-size: 0.75rem; }
     .recent-searches-label .material-symbols-outlined { font-size: 16px; }
-    .assist-chip { font-size: 0.75rem; padding: 4px 6px 4px 8px; }
+    .assist-chip { font-size: 0.75rem; padding: 4px 6px 4px 6px; }
+    .assist-chip .chip-icon { font-size: 14px; }
     .assist-chip .chip-remove .material-symbols-outlined { font-size: 14px; }
     
     footer { font-size: 0.65rem; padding: 14px 8px; }
