@@ -380,7 +380,7 @@ function renderDisambiguation() {
         const [label, triple] = line.split('|');
         const [tNum, sID, ts] = triple.split('-');
         const dateObj = new Date(parseInt(ts));
-        const dateStr = dateObj.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit' });
+        const dateStr = dateObj.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'Europe/Rome' });
 
         const div = document.createElement('div');
         div.className = 'choice-item ripple';
