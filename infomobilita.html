@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="nav_infomobilita">BelloTreno-InfoMobilita</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap"
+        rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script type="module">
+        import 'https://esm.run/@material/web/all.js';
+    </script>
+</head>
+
+<body>
+
+    <!-- 导航栏 -->
+    <nav class="navbar">
+        <a href="index.html" data-i18n="nav_home" class="ripple">首页</a>
+        <a href="infomobilita.html" data-i18n="nav_infomobilita" class="ripple">出行信息</a>
+        <a href="about.html" data-i18n="nav_about" class="ripple">关于</a>
+        <div class="lang-switch" onclick="toggleLangMenu()">
+            <span class="material-symbols-outlined">language</span>
+            <span id="currentLang">Chinese</span>
+            <div class="dropdown-menu" id="langMenu">
+                <div class="dropdown-item ripple" onclick="changeLang('zh'); event.stopPropagation();">Chinese</div>
+                <div class="dropdown-item ripple" onclick="changeLang('en'); event.stopPropagation();">English</div>
+                <div class="dropdown-item ripple" onclick="changeLang('it'); event.stopPropagation();">Italiano</div>
+            </div>
+        </div>
+        <div class="theme-switch" onclick="toggleThemeMenu()">
+            <span class="material-symbols-outlined">contrast</span>
+            <span id="currentTheme" data-i18n="theme_auto">跟随系统</span>
+            <div class="dropdown-menu" id="themeMenu">
+                <div class="dropdown-item ripple" onclick="changeTheme('auto'); event.stopPropagation();"
+                    data-i18n="theme_auto">跟随系统</div>
+                <div class="dropdown-item ripple" onclick="changeTheme('light'); event.stopPropagation();"
+                    data-i18n="theme_light">浅色模式</div>
+                <div class="dropdown-item ripple" onclick="changeTheme('dark'); event.stopPropagation();"
+                    data-i18n="theme_dark">深色模式</div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 回到顶部按钮 -->
+    <div class="back-to-top ripple" onclick="scrollToTop()">
+        <span class="material-symbols-outlined">arrow_upward</span>
+    </div>
+
+    <div class="container">
+        <div class="search-section">
+            <h1 style="color: var(--md-sys-color-primary); font-size: 2.5rem; margin-bottom: 20px;"
+                data-i18n="nav_infomobilita">出行信息</h1>
+
+            <div class="infomobilita-controls">
+                <!-- 胶囊切换 -->
+                <div class="search-mode-toggle" style="width: 480px; max-width: 100%;">
+                    <button id="modeUpdatesBtn" class="mode-button mode-left active"
+                        onclick="switchInfoMode('updates')">
+                        <span class="material-symbols-outlined">dynamic_feed</span>
+                        <span data-i18n="info_updates">实时更新</span>
+                    </button>
+                    <button id="modeNoticesBtn" class="mode-button mode-right" onclick="switchInfoMode('notices')">
+                        <span class="material-symbols-outlined">campaign</span>
+                        <span data-i18n="info_notices">旅行者须知</span>
+                    </button>
+                </div>
+
+                <!-- 地区选择 -->
+                <div class="region-selector-wrapper">
+                    <md-outlined-select id="regionSelect" label="选择大区" data-i18n="select_region">
+                        <md-select-option value="all" selected>
+                            <div slot="headline" data-i18n="region_all">所有大区</div>
+                        </md-select-option>
+                        <md-select-option value="abruzzo" data-i18n="region_abruzzo">
+                            <div slot="headline">Abruzzo</div>
+                        </md-select-option>
+                        <md-select-option value="basilicata" data-i18n="region_basilicata">
+                            <div slot="headline">Basilicata</div>
+                        </md-select-option>
+                        <md-select-option value="calabria" data-i18n="region_calabria">
+                            <div slot="headline">Calabria</div>
+                        </md-select-option>
+                        <md-select-option value="campania" data-i18n="region_campania">
+                            <div slot="headline">Campania</div>
+                        </md-select-option>
+                        <md-select-option value="emilia_romagna" data-i18n="region_emilia_romagna">
+                            <div slot="headline">Emilia Romagna</div>
+                        </md-select-option>
+                        <md-select-option value="friuli_venezia_giulia" data-i18n="region_friuli_venezia_giulia">
+                            <div slot="headline">Friuli Venezia Giulia</div>
+                        </md-select-option>
+                        <md-select-option value="lazio" data-i18n="region_lazio">
+                            <div slot="headline">Lazio</div>
+                        </md-select-option>
+                        <md-select-option value="liguria" data-i18n="region_liguria">
+                            <div slot="headline">Liguria</div>
+                        </md-select-option>
+                        <md-select-option value="lombardia" data-i18n="region_lombardia">
+                            <div slot="headline">Lombardia</div>
+                        </md-select-option>
+                        <md-select-option value="marche" data-i18n="region_marche">
+                            <div slot="headline">Marche</div>
+                        </md-select-option>
+                        <md-select-option value="molise" data-i18n="region_molise">
+                            <div slot="headline">Molise</div>
+                        </md-select-option>
+                        <md-select-option value="piemonte" data-i18n="region_piemonte">
+                            <div slot="headline">Piemonte</div>
+                        </md-select-option>
+                        <md-select-option value="puglia" data-i18n="region_puglia">
+                            <div slot="headline">Puglia</div>
+                        </md-select-option>
+                        <md-select-option value="sardegna" data-i18n="region_sardegna">
+                            <div slot="headline">Sardegna</div>
+                        </md-select-option>
+                        <md-select-option value="sicilia" data-i18n="region_sicilia">
+                            <div slot="headline">Sicilia</div>
+                        </md-select-option>
+                        <md-select-option value="toscana" data-i18n="region_toscana">
+                            <div slot="headline">Toscana</div>
+                        </md-select-option>
+                        <md-select-option value="trentino_alto_adige" data-i18n="region_trentino_alto_adige">
+                            <div slot="headline">Trentino Alto Adige</div>
+                        </md-select-option>
+                        <md-select-option value="umbria" data-i18n="region_umbria">
+                            <div slot="headline">Umbria</div>
+                        </md-select-option>
+                        <md-select-option value="valle_d_aosta" data-i18n="region_valle_d_aosta">
+                            <div slot="headline">Valle d'Aosta</div>
+                        </md-select-option>
+                        <md-select-option value="veneto" data-i18n="region_veneto">
+                            <div slot="headline">Veneto</div>
+                        </md-select-option>
+                    </md-outlined-select>
+                </div>
+            </div>
+
+            <div id="rssResults" class="rss-container">
+                <div id="infoLoading" style="text-align: center; padding: 40px; display: none;">
+                    <md-circular-progress indeterminate></md-circular-progress>
+                </div>
+                <div id="rssContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <span data-i18n="footer">本站数据仅供参考，如有问题请关注车站大屏获取最新信息。 | &copy; 2026 BelloTreno</span>
+    </footer>
+
+    <script src="js/config.js"></script>
+    <script src="js/i18n.js"></script>
+    <script src="js/common.js"></script>
+    <script src="js/infomobilita.js"></script>
+
+</body>
+
+</html>

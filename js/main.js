@@ -4,8 +4,6 @@
  */
 
 // 全局状态变量
-let currentLang = 'zh';
-let currentTheme = 'auto';
 let currentTrainData = null;
 let currentTriple = null;
 let searchMode = 'train'; // 'train' 或 'station'
@@ -14,107 +12,18 @@ let disambiguationData = null; // 存储歧义数据以便语言切换时重新�
 // API_BASE 已在 config.js 中定义，这里直接引用
 const API_BASE = window.API_BASE;
 
-// ========== 语言管理 ==========
-
-// 初始化语言
-function initLanguage() {
-    const savedLang = localStorage.getItem('language');
-    if (savedLang) {
-        currentLang = savedLang;
-    } else {
-        const browserLang = navigator.language.toLowerCase();
-        if (browserLang.startsWith('zh')) {
-            currentLang = 'zh';
-        } else if (browserLang.startsWith('it')) {
-            currentLang = 'it';
-        } else {
-            currentLang = 'en';
-        }
-    }
-    updateLanguage();
-}
-
-// 更新语言
-function updateLanguage() {
-    const langNames = { zh: 'Chinese', en: 'English', it: 'Italiano' };
-    document.getElementById('currentLang').textContent = langNames[currentLang];
-    document.documentElement.lang = currentLang;
-    
-    document.querySelectorAll('[data-i18n]').forEach(el => {
-        const key = el.getAttribute('data-i18n');
-        if (translations[currentLang][key]) {
-            el.textContent = translations[currentLang][key];
-        }
-    });
-    
-    // 更新搜索框label（根据当前搜索模式）
-    updateSearchLabel();
-    
-    // 如果有歧义面板显示，重新渲染
-    if (disambiguationData) {
-        renderDisambiguation();
-    }
-    
-    // 如果有车次信息显示，重新渲染
-    if (currentTrainData) {
-        render(currentTrainData);
-    }
-}
-
-// 切换语言
-function changeLang(lang) {
-    currentLang = lang;
-    localStorage.setItem('language', lang);
-    updateLanguage();
-    document.getElementById('langMenu').classList.remove('show');
-}
-
-// ========== 主题管理 ==========
-
-// 初始化主题
-function initTheme() {
-    const savedTheme = localStorage.getItem('theme') || 'auto';
-    currentTheme = savedTheme;
-    applyTheme();
-    updateThemeDisplay();
-}
-
-// 应用主题
-function applyTheme() {
-    if (currentTheme === 'auto') {
-        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
-    } else {
-        document.documentElement.setAttribute('data-theme', currentTheme);
-    }
-}
-
-// 更新主题显示
-function updateThemeDisplay() {
-    const themeKey = `theme_${currentTheme}`;
-    document.getElementById('currentTheme').textContent = translations[currentLang][themeKey];
-    document.getElementById('currentTheme').setAttribute('data-i18n', themeKey);
-}
-
-// 切换主题
-function changeTheme(theme) {
-    currentTheme = theme;
-    localStorage.setItem('theme', theme);
-    applyTheme();
-    updateThemeDisplay();
-    document.getElementById('themeMenu').classList.remove('show');
-}
-
 // ========== 搜索模式管理 ==========
 
 // 更新搜索框 label
 function updateSearchLabel() {
     const trainSearch = document.getElementById('trainSearch');
+    if (!trainSearch) return;
+
     if (searchMode === 'train') {
-        trainSearch.label = translations[currentLang].search_label_train;
+        trainSearch.label = translations[window.currentLang].search_label_train;
         trainSearch.querySelector('md-icon').textContent = 'train';
     } else {
-        trainSearch.label = translations[currentLang].search_label_station;
+        trainSearch.label = translations[window.currentLang].search_label_station;
         trainSearch.querySelector('md-icon').textContent = 'location_on';
     }
 }
@@ -122,53 +31,55 @@ function updateSearchLabel() {
 // 切换搜索模式（车次/车站）
 function switchSearchMode(mode) {
     searchMode = mode;
-    
+
     // 更新按钮激活状态
     const trainBtn = document.getElementById('modeTrainBtn');
     const stationBtn = document.getElementById('modeStationBtn');
-    
-    if (mode === 'train') {
-        trainBtn.classList.add('active');
-        stationBtn.classList.remove('active');
-    } else {
-        trainBtn.classList.remove('active');
-        stationBtn.classList.add('active');
+
+    if (trainBtn && stationBtn) {
+        if (mode === 'train') {
+            trainBtn.classList.add('active');
+            stationBtn.classList.remove('active');
+        } else {
+            trainBtn.classList.remove('active');
+            stationBtn.classList.add('active');
+        }
     }
-    
+
     // 更新搜索框 label 和图标
     updateSearchLabel();
-    
+
     // 清空输入框
-    document.getElementById('trainSearch').value = '';
-    
+    const trainSearch = document.getElementById('trainSearch');
+    if (trainSearch) trainSearch.value = '';
+
     // 隐藏结果
-    document.getElementById('results').style.display = 'none';
-    document.getElementById('disambiguation').style.display = 'none';
+    const results = document.getElementById('results');
+    const disambiguation = document.getElementById('disambiguation');
+    if (results) results.style.display = 'none';
+    if (disambiguation) disambiguation.style.display = 'none';
 }
 
-// ========== UI 交互功能 ==========
+// ========== 语言 & 主题钩子 ==========
 
-// 切换下拉菜单
-function toggleLangMenu() {
-    const menu = document.getElementById('langMenu');
-    menu.classList.toggle('show');
-    document.getElementById('themeMenu').classList.remove('show');
-}
+window.onLanguageChanged = function () {
+    // 更新搜索框label（根据当前搜索模式）
+    updateSearchLabel();
 
-function toggleThemeMenu() {
-    const menu = document.getElementById('themeMenu');
-    menu.classList.toggle('show');
-    document.getElementById('langMenu').classList.remove('show');
-}
+    // 如果有歧义面板显示，重新渲染
+    if (disambiguationData) {
+        renderDisambiguation();
+    }
 
-// 返回首页
+    // 如果有车次信息显示，重新渲染
+    if (currentTrainData) {
+        render(currentTrainData);
+    }
+};
+
+// 重定向函数 (首页特有)
 function goHome() {
-    window.location.href = '/';
-}
-
-// 回到顶部功能
-function scrollToTop() {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.location.href = 'index.html';
 }
 
 // ========== 工具函数 ==========
@@ -180,9 +91,9 @@ function formatDuration(duration) {
     if (parts.length === 2) {
         const hours = parseInt(parts[0]);
         const mins = parseInt(parts[1]);
-        if (currentLang === 'zh') {
+        if (window.currentLang === 'zh') {
             return `${hours}小时${mins}分钟`;
-        } else if (currentLang === 'it') {
+        } else if (window.currentLang === 'it') {
             return `${hours}h:${mins}min`;
         } else {
             return `${hours}h:${mins}min`;
@@ -194,15 +105,15 @@ function formatDuration(duration) {
 // 翻译状态
 function translateStatus(text) {
     if (!text) return "";
-    
-    if (currentLang === 'zh') {
+
+    if (window.currentLang === 'zh') {
         return text
             .replace(/non partito/gi, "未出发")
             .replace(/con un anticipo di/g, "提前")
             .replace(/con un ritardo di/g, "晚点")
             .replace(/in orario/g, "准点")
             .replace(/(\d+)\s*min\./g, "$1分钟");
-    } else if (currentLang === 'en') {
+    } else if (window.currentLang === 'en') {
         return text
             .replace(/non partito/gi, "Not Departed")
             .replace(/con un anticipo di/g, "Early by")
@@ -210,7 +121,7 @@ function translateStatus(text) {
             .replace(/in orario/g, "On Time")
             .replace(/(\d+)\s*min\./g, "$1 min");
     }
-    
+
     // 意大利语保持原文
     return text;
 }
@@ -241,21 +152,21 @@ function renderTimeHtml(label, schedMs, realMs, delayMin) {
 function saveRecentSearch(trainNumber, trainInfo) {
     try {
         let recentSearches = JSON.parse(localStorage.getItem('recentSearches') || '[]');
-        
+
         const searchItem = {
             id: trainNumber,
             name: `${trainNumber} ${trainInfo.origine || ''} → ${trainInfo.destinazione || ''}`.trim(),
             type: 'train',
             timestamp: Date.now()
         };
-        
+
         recentSearches = recentSearches.filter(item => !(item.type === 'train' && item.id === trainNumber));
         recentSearches.unshift(searchItem);
-        
+
         if (recentSearches.length > 5) {
             recentSearches = recentSearches.slice(0, 5);
         }
-        
+
         localStorage.setItem('recentSearches', JSON.stringify(recentSearches));
         renderRecentSearches();
     } catch (err) {
@@ -267,21 +178,21 @@ function saveRecentSearch(trainNumber, trainInfo) {
 function saveRecentStationSearch(stationId, stationName) {
     try {
         let recentSearches = JSON.parse(localStorage.getItem('recentSearches') || '[]');
-        
+
         const searchItem = {
             id: stationId,
             name: stationName,
             type: 'station',
             timestamp: Date.now()
         };
-        
+
         recentSearches = recentSearches.filter(item => !(item.type === 'station' && item.id === stationId));
         recentSearches.unshift(searchItem);
-        
+
         if (recentSearches.length > 5) {
             recentSearches = recentSearches.slice(0, 5);
         }
-        
+
         localStorage.setItem('recentSearches', JSON.stringify(recentSearches));
         renderRecentSearches();
     } catch (err) {
@@ -305,7 +216,7 @@ function loadRecentSearches() {
             localStorage.setItem('recentSearches', JSON.stringify(newSearches));
             localStorage.removeItem('recentTrains');
         }
-        
+
         const recentSearches = JSON.parse(localStorage.getItem('recentSearches') || '[]');
         if (recentSearches.length > 0) {
             renderRecentSearches();
@@ -321,22 +232,22 @@ function renderRecentSearches() {
         const recentSearches = JSON.parse(localStorage.getItem('recentSearches') || '[]');
         const container = document.getElementById('recentSearchesContainer');
         const chipsContainer = document.getElementById('recentSearchesChips');
-        
+
         if (recentSearches.length === 0) {
             container.style.display = 'none';
             return;
         }
-        
+
         container.style.display = 'block';
         chipsContainer.innerHTML = '';
-        
+
         recentSearches.forEach(item => {
             const chip = document.createElement('div');
             chip.className = 'assist-chip';
-            
+
             // 根据类型选择图标
             const icon = item.type === 'station' ? 'location_on' : 'train';
-            
+
             chip.innerHTML = `
                 <span class="material-symbols-outlined chip-icon">${icon}</span>
                 <span class="chip-label">${item.name}</span>
@@ -344,7 +255,7 @@ function renderRecentSearches() {
                     <span class="material-symbols-outlined">close</span>
                 </span>
             `;
-            
+
             // 点击chip主体时触发搜索
             chip.querySelector('.chip-label').addEventListener('click', () => {
                 if (item.type === 'train') {
@@ -357,7 +268,7 @@ function renderRecentSearches() {
                     goToStationBoard(item.id, item.name);
                 }
             });
-            
+
             chipsContainer.appendChild(chip);
         });
     } catch (err) {
@@ -370,7 +281,7 @@ function removeRecentSearch(id, type, event) {
     if (event) {
         event.stopPropagation();
     }
-    
+
     try {
         let recentSearches = JSON.parse(localStorage.getItem('recentSearches') || '[]');
         recentSearches = recentSearches.filter(item => !(item.id === id && item.type === type));
@@ -390,11 +301,11 @@ async function startSearch(input) {
     if (searchMode === 'train') {
         // ========== 车次搜索模式 ==========
         const trainNumber = input.replace(/\D+/g, '').trim();
-        
+
         if (!trainNumber) {
             const msg = currentLang === 'zh' ? "请输入有效的车次号" :
-                       currentLang === 'it' ? "Inserire un numero di treno valido" :
-                       "Please enter a valid train number";
+                currentLang === 'it' ? "Inserire un numero di treno valido" :
+                    "Please enter a valid train number";
             return alert(msg);
         }
 
@@ -402,9 +313,9 @@ async function startSearch(input) {
             const autoRes = await fetch(`${API_BASE}/cercaNumeroTrenoTrenoAutocomplete/${trainNumber}`);
             const autoText = await autoRes.text();
             if (!autoText.trim()) {
-                const msg = currentLang === 'zh' ? "未找到该车次" :
-                           currentLang === 'it' ? "Treno non trovato" :
-                           "Train not found";
+                const msg = window.currentLang === 'zh' ? "未找到该车次" :
+                    window.currentLang === 'it' ? "Treno non trovato" :
+                        "Train not found";
                 return alert(msg);
             }
 
@@ -416,36 +327,36 @@ async function startSearch(input) {
             }
         } catch (err) {
             const msg = currentLang === 'zh' ? "搜索失败" :
-                       currentLang === 'it' ? "Ricerca fallita" :
-                       "Search failed";
+                currentLang === 'it' ? "Ricerca fallita" :
+                    "Search failed";
             alert(msg);
         }
     } else if (searchMode === 'station') {
         // ========== 车站搜索模式 ==========
         const keyword = input.trim();
-        
+
         if (!keyword) {
-            const msg = currentLang === 'zh' ? "请输入车站名" :
-                       currentLang === 'it' ? "Inserire il nome della stazione" :
-                       "Please enter station name";
+            const msg = window.currentLang === 'zh' ? "请输入车站名" :
+                window.currentLang === 'it' ? "Inserire il nome della stazione" :
+                    "Please enter station name";
             return alert(msg);
         }
 
         try {
             const stationRes = await fetch(`${API_BASE}/cercaStazione/${encodeURIComponent(keyword)}`);
             const stationData = await stationRes.json();
-            
+
             if (!stationData || stationData.length === 0) {
-                const msg = translations[currentLang].no_station_found;
+                const msg = translations[window.currentLang].no_station_found;
                 return alert(msg);
             }
-            
+
             showStationDisambiguation(stationData);
         } catch (err) {
             console.error('车站搜索失败:', err);
-            const msg = currentLang === 'zh' ? "搜索失败" :
-                       currentLang === 'it' ? "Ricerca fallita" :
-                       "Search failed";
+            const msg = window.currentLang === 'zh' ? "搜索失败" :
+                window.currentLang === 'it' ? "Ricerca fallita" :
+                    "Search failed";
             alert(msg);
         }
     }
@@ -460,17 +371,17 @@ function showDisambiguation(lines) {
 
 function renderDisambiguation() {
     if (!disambiguationData) return;
-    
+
     const list = document.getElementById('choicesList');
     const panel = document.getElementById('disambiguation');
     list.innerHTML = '';
-    
+
     disambiguationData.forEach(line => {
         const [label, triple] = line.split('|');
         const [tNum, sID, ts] = triple.split('-');
         const dateObj = new Date(parseInt(ts));
         const dateStr = dateObj.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit' });
-        
+
         const div = document.createElement('div');
         div.className = 'choice-item ripple';
         div.innerHTML = `
@@ -496,14 +407,14 @@ function showStationDisambiguation(stations) {
     const list = document.getElementById('choicesList');
     const panel = document.getElementById('disambiguation');
     const panelTitle = panel.querySelector('h3');
-    
+
     const titleText = currentLang === 'zh' ? '选择车站：' :
-                     currentLang === 'it' ? 'Seleziona stazione:' :
-                     'Select station:';
+        currentLang === 'it' ? 'Seleziona stazione:' :
+            'Select station:';
     panelTitle.textContent = titleText;
-    
+
     list.innerHTML = '';
-    
+
     stations.forEach(station => {
         const div = document.createElement('div');
         div.className = 'choice-item ripple';
@@ -523,7 +434,7 @@ function showStationDisambiguation(stations) {
         };
         list.appendChild(div);
     });
-    
+
     panel.style.display = 'block';
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -537,21 +448,21 @@ async function fetchDetails(triple) {
         const res = await fetch(`${API_BASE}/andamentoTreno/${originID}/${tNum}/${ts}`);
         if (res.status === 204) {
             const msg = currentLang === 'zh' ? "该班次暂无实时数据（可能已过期或尚未生成）" :
-                       currentLang === 'it' ? "Nessun dato in tempo reale per questo treno (potrebbe essere scaduto o non ancora generato)" :
-                       "No real-time data for this train (may be expired or not yet generated)";
+                currentLang === 'it' ? "Nessun dato in tempo reale per questo treno (potrebbe essere scaduto o non ancora generato)" :
+                    "No real-time data for this train (may be expired or not yet generated)";
             return alert(msg);
         }
         const data = await res.json();
         currentTrainData = data;
         render(data);
-        
+
         // 保存到最近搜索记录
         const trainNumber = `${data.compCategoria || ''} ${data.numeroTreno || tNum}`.trim();
         saveRecentSearch(trainNumber, data);
     } catch (err) {
         const msg = currentLang === 'zh' ? "详情加载失败" :
-                   currentLang === 'it' ? "Impossibile caricare i dettagli" :
-                   "Failed to load details";
+            currentLang === 'it' ? "Impossibile caricare i dettagli" :
+                "Failed to load details";
         alert(msg);
     }
 }
@@ -589,10 +500,10 @@ function render(data) {
 
     const operator = CLIENT_MAP[data.codiceCliente] || "Other";
     const category = CAT_MAP[catCode] || data.categoriaDescrizione || catCode || "Treno";
-    
+
     const operatorLink = CLIENT_LINK_MAP[operator] || "#";
     const operatorHTML = operatorLink !== "#" ? `<a href="${operatorLink}" target="_blank" style="color: inherit; text-decoration: none;">${operator}</a>` : operator;
-    
+
     const imageKey = `${data.codiceCliente}-${catCode}`;
     const categoryImage = CAT_IMAGE_MAP[imageKey];
     const categoryHTML = categoryImage ? `<img src="${categoryImage}" alt="${category}" style="height: 1.3rem; vertical-align: middle; margin-left: 8px;">` : category;
@@ -600,11 +511,11 @@ function render(data) {
     const displayOrigin = data.origineEstera || data.origine;
     const displayDest = data.destinazioneEstera || data.destinazione;
     const delayMsg = translateStatus(data.compRitardoAndamento[0]);
-    const isEarly = delayMsg.includes(translations[currentLang].early_by) || 
-                   delayMsg.includes(translations[currentLang].on_time) ||
-                   delayMsg.toLowerCase().includes("anticipo") ||
-                   delayMsg.toLowerCase().includes("orario") ||
-                   delayMsg.toLowerCase().includes("early");
+    const isEarly = delayMsg.includes(translations[currentLang].early_by) ||
+        delayMsg.includes(translations[currentLang].on_time) ||
+        delayMsg.toLowerCase().includes("anticipo") ||
+        delayMsg.toLowerCase().includes("orario") ||
+        delayMsg.toLowerCase().includes("early");
 
     const formattedDuration = formatDuration(data.compDurata);
 
@@ -639,11 +550,11 @@ function render(data) {
 
     // Timeline 渲染
     timeline.innerHTML = '';
-    
+
     let lastReachedIdx = -1;
     if (!data.nonPartito) {
-        data.fermate.forEach((f, i) => { 
-            if (f.arrivoReale !== null || f.partenzaReale !== null) lastReachedIdx = i; 
+        data.fermate.forEach((f, i) => {
+            if (f.arrivoReale !== null || f.partenzaReale !== null) lastReachedIdx = i;
         });
     }
 
@@ -652,7 +563,7 @@ function render(data) {
     data.fermate.forEach((f, i) => {
         const isLast = i === totalStations - 1;
         const isFirst = i === 0;
-        
+
         // 圆点状态
         let dotClass = 'dot-future';
         if (lastReachedIdx >= 0) {
@@ -662,22 +573,22 @@ function render(data) {
                 dotClass = 'dot-current';
             }
         }
-        
+
         // 轨道段状态
         const isSegmentActive = (i < lastReachedIdx);
         const segmentClass = isSegmentActive ? 'segment-line segment-active' : 'segment-line';
-        
+
         const stationItemClasses = ['station-item', dotClass];
 
         const pPlat = f.binarioProgrammatoPartenzaDescrizione || f.binarioProgrammatoArrivoDescrizione;
         const ePlat = f.binarioEffettivoPartenzaDescrizione || f.binarioEffettivoArrivoDescrizione;
-        let platHTML = (ePlat && pPlat && ePlat !== pPlat) 
+        let platHTML = (ePlat && pPlat && ePlat !== pPlat)
             ? `<span class="plat-old">${pPlat}</span><span class="plat-new">${ePlat}</span>`
             : `<span class="plat-normal">${pPlat || "--"}</span>`;
 
         const stayMinutes = (f.partenza_teorica && f.arrivo_teorico) ? Math.round((f.partenza_teorica - f.arrivo_teorico) / 60000) : null;
         const stayTime = stayMinutes ? `${stayMinutes} ${translations[currentLang].minutes}` : "N/A";
-        
+
         // 方向信息
         let directionBadge = '';
         if (f.orientamento) {
@@ -717,7 +628,7 @@ function render(data) {
         `;
         timeline.innerHTML += stationHTML;
     });
-    
+
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -734,7 +645,7 @@ function initApp() {
 // DOMContentLoaded 事件
 document.addEventListener('DOMContentLoaded', () => {
     initApp();
-    
+
     // 搜索框回车事件
     document.getElementById('trainSearch').addEventListener('keypress', async (e) => {
         if (e.key === 'Enter') {
@@ -742,7 +653,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (input) startSearch(input);
         }
     });
-    
+
     // 点击外部关闭下拉菜单
     document.addEventListener('click', (e) => {
         if (!e.target.closest('.lang-switch') && !e.target.closest('.theme-switch')) {
@@ -750,14 +661,14 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('themeMenu').classList.remove('show');
         }
     });
-    
+
     // 监听系统主题变化
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
         if (currentTheme === 'auto') {
             applyTheme();
         }
     });
-    
+
     // 显示/隐藏回到顶部按钮
     window.addEventListener('scroll', () => {
         const backToTop = document.querySelector('.back-to-top');
@@ -767,9 +678,9 @@ document.addEventListener('DOMContentLoaded', () => {
             backToTop.classList.remove('show');
         }
     });
-    
+
     // 为站名链接添加事件监听器（事件代理）
-    document.addEventListener('click', function(e) {
+    document.addEventListener('click', function (e) {
         const stationLink = e.target.closest('.station-link');
         if (stationLink) {
             const stationId = stationLink.getAttribute('data-station-id');
@@ -788,10 +699,10 @@ const maxRetries = 10;
 function checkAndSearchFromURL() {
     const urlParams = new URLSearchParams(window.location.search);
     const trainParam = urlParams.get('train');
-    
+
     if (trainParam) {
         const trainNumber = trainParam.trim();
-        
+
         const trainInput = document.getElementById('trainSearch');
         if (!trainInput) {
             urlSearchRetryCount++;
@@ -803,13 +714,13 @@ function checkAndSearchFromURL() {
             }
             return;
         }
-        
+
         trainInput.value = trainNumber;
-        
-        setTimeout(function() {
+
+        setTimeout(function () {
             startSearch(trainNumber);
-            
-            setTimeout(function() {
+
+            setTimeout(function () {
                 if (window.history && window.history.replaceState) {
                     window.history.replaceState({}, document.title, window.location.pathname);
                 }

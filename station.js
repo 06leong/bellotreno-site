@@ -4,14 +4,14 @@
 // 获取意大利当前时间字符串（考虑夏令时）
 function getItalianTimeString() {
     const now = new Date();
-    
+
     // 获取意大利时区的时间
     const italianTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Rome' }));
-    
+
     // 判断是否为夏令时 (CEST: 3月最后一个周日 至 10月最后一个周日)
     const year = italianTime.getFullYear();
     const month = italianTime.getMonth(); // 0-11
-    
+
     // 简化判断：3月-10月可能是夏令时
     let isDST = false;
     if (month > 2 && month < 9) {
@@ -27,13 +27,13 @@ function getItalianTimeString() {
         lastSunday.setDate(31 - lastSunday.getDay());
         isDST = italianTime.getDate() < lastSunday.getDate();
     }
-    
+
     const timezone = isDST ? 'GMT+0200' : 'GMT+0100';
-    
+
     // 格式化时间字符串
     const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    
+
     const weekday = weekdays[italianTime.getDay()];
     const monthName = months[italianTime.getMonth()];
     const day = String(italianTime.getDate()).padStart(2, '0');
@@ -41,17 +41,17 @@ function getItalianTimeString() {
     const hour = String(italianTime.getHours()).padStart(2, '0');
     const minute = String(italianTime.getMinutes()).padStart(2, '0');
     const second = String(italianTime.getSeconds()).padStart(2, '0');
-    
+
     // 格式: Sun Jan 18 2026 08:52:00 GMT+0100
     return `${weekday} ${monthName} ${day} ${yearStr} ${hour}:${minute}:${second} ${timezone}`;
 }
 
 // 跳转到车站看板页面
 function goToStationBoard(stationId, stationName) {
-    // 使用 URL 参数传递车站信息
+    // 使用 URLSearchParams 会自动处理编码，不要手动 encodeURIComponent
     const params = new URLSearchParams({
         id: stationId,
-        name: encodeURIComponent(stationName),
+        name: stationName,
         type: 'partenze' // 默认显示离站
     });
     window.location.href = `real_station.html?${params.toString()}`;
@@ -64,7 +64,7 @@ async function fetchStationBoard(stationId, type = 'partenze') {
     // 使用 window.API_BASE 或者直接使用完整 URL
     const apiBase = window.API_BASE || "https://api.bellotreno.org/?url=https://www.viaggiatreno.it/infomobilita/resteasy/viaggiatreno";
     const url = `${apiBase}/${type}/${stationId}/${encodedTime}`;
-    
+
     try {
         const response = await fetch(url);
         if (!response.ok) {
@@ -92,23 +92,23 @@ const OPERATOR_MAP = {
 // 辅助函数：格式化车次号，添加换行（如 "REG 24435" → "REG<br>24435"）
 function formatTrainNumber(trainNumberStr) {
     if (!trainNumberStr) return '';
-    
+
     // 去除首尾空格
     trainNumberStr = trainNumberStr.trim();
-    
+
     // 匹配格式：字母部分 + 空格（一个或多个）+ 数字部分
     // 支持格式：FR 9633, REG 24435, IC 630, EC 144 等
     const match = trainNumberStr.match(/^([A-Z]+)\s+(\d+)$/);
     if (match) {
         return `${match[1]}<br>${match[2]}`;
     }
-    
+
     // 尝试更宽松的匹配：任何字母后跟数字（可能没有空格）
     const matchNoSpace = trainNumberStr.match(/^([A-Z]+)(\d+)$/);
     if (matchNoSpace) {
         return `${matchNoSpace[1]}<br>${matchNoSpace[2]}`;
     }
-    
+
     // 如果格式不匹配，返回原始值
     return trainNumberStr;
 }
@@ -138,22 +138,22 @@ function formatDepartureData(train, currentLang = 'zh') {
             minutes: 'min'
         }
     };
-    
+
     const t = translations[currentLang];
-    
+
     // 时间
     const scheduledTime = train.compOrarioPartenza || '--:--';
-    
+
     // 车次号 - 添加换行
     const trainNumber = formatTrainNumber(train.compNumeroTreno || '');
-    
+
     // 目的地
     const destination = train.destinazioneEstera || train.destinazione || '';
-    
+
     // 状态
     let status = '';
     let statusColor = 'green';
-    
+
     if (train.provvedimento == 1) {
         status = t.cancelled;
         statusColor = 'red';
@@ -167,13 +167,13 @@ function formatDepartureData(train, currentLang = 'zh') {
         status = t.on_time;
         statusColor = 'green';
     }
-    
+
     // 站台 - 添加呼吸灯效果（如果火车在站）
     const actualPlatform = train.binarioEffettivoPartenzaDescrizione || '';
     const scheduledPlatform = train.binarioProgrammatoPartenzaDescrizione || '';
     const inStazione = train.inStazione === true;
     let platformHtml = '';
-    
+
     if (actualPlatform && scheduledPlatform && actualPlatform !== scheduledPlatform) {
         // 站台变更 - 红色高亮实际站台，灰色删除线原站台
         const pulseClass = inStazione ? ' class="platform-pulse"' : '';
@@ -187,7 +187,7 @@ function formatDepartureData(train, currentLang = 'zh') {
     } else {
         platformHtml = '--';
     }
-    
+
     return {
         scheduledTime,
         trainNumber,
@@ -225,18 +225,18 @@ function formatArrivalData(train, currentLang = 'zh') {
             minutes: 'min'
         }
     };
-    
+
     const t = translations[currentLang];
-    
+
     // 计划到达时间
     const scheduledTime = train.compOrarioArrivo || '--:--';
-    
+
     // 始发站
     const origin = train.origine || '';
-    
+
     // 车次号 - 添加换行
     const trainNumber = formatTrainNumber(train.compNumeroTreno || '');
-    
+
     // 实际/预计到达时间（从 compOrarioEffettivoArrivo 中提取）
     let actualTime = scheduledTime;
     if (train.compOrarioEffettivoArrivo) {
@@ -246,11 +246,11 @@ function formatArrivalData(train, currentLang = 'zh') {
             actualTime = match[1];
         }
     }
-    
+
     // 状态
     let status = '';
     let statusColor = 'green';
-    
+
     if (train.provvedimento == 1) {
         status = t.cancelled;
         statusColor = 'red';
@@ -264,13 +264,13 @@ function formatArrivalData(train, currentLang = 'zh') {
         status = t.on_time;
         statusColor = 'green';
     }
-    
+
     // 到达站台 - 添加呼吸灯效果（如果火车在站）
     const actualPlatform = train.binarioEffettivoArrivoDescrizione || '';
     const scheduledPlatform = train.binarioProgrammatoArrivoDescrizione || '';
     const inStazione = train.inStazione === true;
     let platformHtml = '';
-    
+
     if (actualPlatform && scheduledPlatform && actualPlatform !== scheduledPlatform) {
         // 站台变更 - 红色高亮实际站台，灰色删除线原站台
         const pulseClass = inStazione ? ' class="platform-pulse"' : '';
@@ -284,7 +284,7 @@ function formatArrivalData(train, currentLang = 'zh') {
     } else {
         platformHtml = '--';
     }
-    
+
     return {
         scheduledTime,
         origin,

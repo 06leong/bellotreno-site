@@ -1,10 +1,13 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BelloTreno - 意大利火车实时情况</title>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@500;700&family=Roboto:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+    <title>BelloTreno</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@500;700&family=Roboto:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap"
+        rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     <script type="module">
@@ -14,93 +17,101 @@
         /* 页面特定样式可以保留在这里 */
     </style>
 </head>
+
 <body>
 
-<!-- 导航栏 -->
-<nav class="navbar">
-    <a href="#" onclick="goHome(); return false;" data-i18n="nav_home" class="ripple">首页</a>
-    <a href="about.html" data-i18n="nav_about" class="ripple">关于</a>
-    <div class="lang-switch" onclick="toggleLangMenu()">
-        <span class="material-symbols-outlined">language</span>
-        <span id="currentLang">Chinese</span>
-        <div class="dropdown-menu" id="langMenu">
-            <div class="dropdown-item ripple" onclick="changeLang('zh'); event.stopPropagation();">Chinese</div>
-            <div class="dropdown-item ripple" onclick="changeLang('en'); event.stopPropagation();">English</div>
-            <div class="dropdown-item ripple" onclick="changeLang('it'); event.stopPropagation();">Italiano</div>
-        </div>
-    </div>
-    <div class="theme-switch" onclick="toggleThemeMenu()">
-        <span class="material-symbols-outlined">contrast</span>
-        <span id="currentTheme" data-i18n="theme_auto">跟随系统</span>
-        <div class="dropdown-menu" id="themeMenu">
-            <div class="dropdown-item ripple" onclick="changeTheme('auto'); event.stopPropagation();" data-i18n="theme_auto">跟随系统</div>
-            <div class="dropdown-item ripple" onclick="changeTheme('light'); event.stopPropagation();" data-i18n="theme_light">浅色模式</div>
-            <div class="dropdown-item ripple" onclick="changeTheme('dark'); event.stopPropagation();" data-i18n="theme_dark">深色模式</div>
-        </div>
-    </div>
-</nav>
-
-<!-- 回到顶部按钮 -->
-<div class="back-to-top ripple" onclick="scrollToTop()">
-    <span class="material-symbols-outlined">arrow_upward</span>
-</div>
-
-<div class="container">
-    <div class="search-section">
-        <a href="#" class="logo-link" onclick="goHome(); return false;">
-            <h1 style="color: var(--md-sys-color-primary); font-size: 2.5rem; margin-bottom: 10px;">BelloTreno</h1>
-        </a>
-        
-        <!-- Connected Button Group -->
-        <div class="search-mode-toggle">
-            <button id="modeTrainBtn" class="mode-button mode-left active" onclick="switchSearchMode('train')">
-                <span class="material-symbols-outlined">train</span>
-                <span data-i18n="mode_train">车次</span>
-            </button>
-            <button id="modeStationBtn" class="mode-button mode-right" onclick="switchSearchMode('station')">
-                <span class="material-symbols-outlined">location_on</span>
-                <span data-i18n="mode_station">车站</span>
-            </button>
-        </div>
-        
-        <md-filled-text-field id="trainSearch" label="" type="text">
-            <md-icon slot="leading-icon">train</md-icon>
-        </md-filled-text-field>
-        
-        <!-- 最近搜索记录 -->
-        <div id="recentSearchesContainer" class="recent-searches-container" style="display: none;">
-            <div class="recent-searches-label">
-                <span class="material-symbols-outlined">history</span>
-                <span data-i18n="recent_searches">最近搜索</span>
+    <!-- 导航栏 -->
+    <nav class="navbar">
+        <a href="#" onclick="goHome(); return false;" data-i18n="nav_home" class="ripple">首页</a>
+        <a href="infomobilita.html" data-i18n="nav_infomobilita" class="ripple">出行信息</a>
+        <a href="about.html" data-i18n="nav_about" class="ripple">关于</a>
+        <div class="lang-switch" onclick="toggleLangMenu()">
+            <span class="material-symbols-outlined">language</span>
+            <span id="currentLang">Chinese</span>
+            <div class="dropdown-menu" id="langMenu">
+                <div class="dropdown-item ripple" onclick="changeLang('zh'); event.stopPropagation();">Chinese</div>
+                <div class="dropdown-item ripple" onclick="changeLang('en'); event.stopPropagation();">English</div>
+                <div class="dropdown-item ripple" onclick="changeLang('it'); event.stopPropagation();">Italiano</div>
             </div>
-            <div id="recentSearchesChips" class="recent-searches-chips"></div>
+        </div>
+        <div class="theme-switch" onclick="toggleThemeMenu()">
+            <span class="material-symbols-outlined">contrast</span>
+            <span id="currentTheme" data-i18n="theme_auto">跟随系统</span>
+            <div class="dropdown-menu" id="themeMenu">
+                <div class="dropdown-item ripple" onclick="changeTheme('auto'); event.stopPropagation();"
+                    data-i18n="theme_auto">跟随系统</div>
+                <div class="dropdown-item ripple" onclick="changeTheme('light'); event.stopPropagation();"
+                    data-i18n="theme_light">浅色模式</div>
+                <div class="dropdown-item ripple" onclick="changeTheme('dark'); event.stopPropagation();"
+                    data-i18n="theme_dark">深色模式</div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 回到顶部按钮 -->
+    <div class="back-to-top ripple" onclick="scrollToTop()">
+        <span class="material-symbols-outlined">arrow_upward</span>
+    </div>
+
+    <div class="container">
+        <div class="search-section">
+            <a href="#" class="logo-link" onclick="goHome(); return false;">
+                <h1 style="color: var(--md-sys-color-primary); font-size: 2.5rem; margin-bottom: 10px;">BelloTreno</h1>
+            </a>
+
+            <!-- Connected Button Group -->
+            <div class="search-mode-toggle">
+                <button id="modeTrainBtn" class="mode-button mode-left active" onclick="switchSearchMode('train')">
+                    <span class="material-symbols-outlined">train</span>
+                    <span data-i18n="mode_train">车次</span>
+                </button>
+                <button id="modeStationBtn" class="mode-button mode-right" onclick="switchSearchMode('station')">
+                    <span class="material-symbols-outlined">location_on</span>
+                    <span data-i18n="mode_station">车站</span>
+                </button>
+            </div>
+
+            <md-filled-text-field id="trainSearch" label="" type="text">
+                <md-icon slot="leading-icon">train</md-icon>
+            </md-filled-text-field>
+
+            <!-- 最近搜索记录 -->
+            <div id="recentSearchesContainer" class="recent-searches-container" style="display: none;">
+                <div class="recent-searches-label">
+                    <span class="material-symbols-outlined">history</span>
+                    <span data-i18n="recent_searches">最近搜索</span>
+                </div>
+                <div id="recentSearchesChips" class="recent-searches-chips"></div>
+            </div>
+        </div>
+
+        <!-- 歧义消除面板 -->
+        <div id="disambiguation">
+            <h3 style="margin-top:0; color: var(--md-sys-color-primary)" data-i18n="disambiguation_title">检测到多个班次，请选择：
+            </h3>
+            <div id="choicesList"></div>
+        </div>
+
+        <!-- 结果展示区 -->
+        <div id="results">
+            <div id="trainCard" class="train-header"></div>
+            <div class="timeline-container">
+                <div id="timelineBody"></div>
+            </div>
         </div>
     </div>
 
-    <!-- 歧义消除面板 -->
-    <div id="disambiguation">
-        <h3 style="margin-top:0; color: var(--md-sys-color-primary)" data-i18n="disambiguation_title">检测到多个班次，请选择：</h3>
-        <div id="choicesList"></div>
-    </div>
-
-    <!-- 结果展示区 -->
-    <div id="results">
-        <div id="trainCard" class="train-header"></div>
-        <div class="timeline-container">
-            <div id="timelineBody"></div>
-        </div>
-    </div>
-</div>
-
-<footer>
-    <span data-i18n="footer"> 本站数据仅供参考，如有问题请关注车站大屏获取最新信息。 | &copy; 2026 BelloTreno</span>
-</footer>
+    <footer>
+        <span data-i18n="footer"> 本站数据仅供参考，如有问题请关注车站大屏获取最新信息。 | &copy; 2026 BelloTreno</span>
+    </footer>
 
 
-<script src="js/config.js"></script>
-<script src="js/i18n.js"></script>
-<script src="station.js"></script>
-<script src="js/main.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/i18n.js"></script>
+    <script src="js/common.js"></script>
+    <script src="station.js"></script>
+    <script src="js/main.js"></script>
 
 </body>
+
 </html>

@@ -1244,3 +1244,154 @@ footer span {
         padding: 0 4px;
     }
 }
+
+/* Infomobilità 页面样式 */
+.infomobilita-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 30px;
+}
+
+.region-selector-wrapper {
+    width: 100%;
+    max-width: 320px;
+}
+
+.rss-container {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-top: 20px;
+    text-align: left;
+}
+
+.rss-item {
+    background: rgba(244, 251, 250, 0.7);
+    padding: 20px;
+    border-radius: 20px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    position: relative;
+    overflow: hidden;
+}
+
+[data-theme="dark"] .rss-item {
+    background: rgba(13, 19, 30, 0.7);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.rss-item:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+}
+
+.rss-title {
+    font-weight: 700;
+    font-size: 1.15rem;
+    color: var(--text-primary);
+    margin-bottom: 12px;
+    line-height: 1.5;
+}
+
+.rss-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.85rem;
+    color: var(--text-grey);
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.rss-region-badge {
+    background: rgba(0, 106, 106, 0.1);
+    color: var(--md-sys-color-primary);
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-weight: 600;
+}
+
+[data-theme="dark"] .rss-region-badge {
+    background: rgba(77, 182, 172, 0.15);
+    color: #4db6ac;
+}
+
+.rss-link-btn {
+    margin-top: 15px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--md-sys-color-primary);
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 0.95rem;
+    transition: opacity 0.2s;
+}
+
+.mode-button.active {
+    background: var(--md-sys-color-primary);
+    color: var(--md-sys-color-on-primary);
+    border-color: var(--md-sys-color-primary);
+    box-shadow: 0 4px 12px rgba(0, 106, 106, 0.3);
+}
+
+.mode-button.active .material-symbols-outlined {
+    color: var(--md-sys-color-on-primary);
+}
+
+/* Material Design 3 Select Styling */
+md-outlined-select {
+    width: 100%;
+    --md-outlined-select-container-shape: 16px;
+    --md-outlined-select-text-field-container-shape: 16px;
+}
+
+[data-theme="dark"] md-outlined-select {
+    --md-outlined-select-text-field-content-color: #e2e2e2;
+    --md-outlined-select-text-field-label-text-color: #b0b0b0;
+    --md-outlined-select-text-field-input-text-color: #e2e2e2;
+    --md-outlined-select-text-field-focus-input-text-color: #ffffff;
+    --md-outlined-select-text-field-hover-input-text-color: #ffffff;
+    /* 强制内部 input 的颜色 */
+    --md-sys-color-on-surface: #e2e2e2;
+    --md-sys-color-on-surface-variant: #b0b0b0;
+}
+
+/* 修复下拉菜单选项在深色模式下的颜色 - 设为黑色以在浅色背景上可见 */
+[data-theme="dark"] md-select-option {
+    --md-menu-item-label-text-color: #000000;
+    --md-sys-color-on-surface: #000000;
+    color: #000000;
+}
+
+/* 兜底：如果变量没生效，尝试直接针对 shadow DOM 可能导出的部分（虽然这种选择器不标准，但有时生效） 
+   在这里我们优先使用变量。M3 的文本颜色通常由 on-surface 决定。
+*/
+
+#infoLoading {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 200px;
+}
+
+#infoLoading md-circular-progress {
+    --md-circular-progress-size: 48px;
+}
+
+/* 适配移动端胶囊 */
+@media (max-width: 600px) {
+    .search-mode-toggle {
+        width: 100% !important;
+    }
+
+    .mode-button {
+        padding: 10px 12px;
+        font-size: 0.85rem;
+    }
+}
