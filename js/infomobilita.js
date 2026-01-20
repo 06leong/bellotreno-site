@@ -142,7 +142,22 @@ function renderRSS(items) {
         const region = item.querySelector("region")?.textContent || item.getElementsByTagName("rfi:region")[0]?.textContent || '';
 
         const date = new Date(pubDateStr);
-        const formattedDate = isNaN(date.getTime()) ? pubDateStr : date.toLocaleString(window.currentLang === 'zh' ? 'zh-CN' : (window.currentLang === 'it' ? 'it-IT' : 'en-GB'));
+        let formattedDate = pubDateStr;
+
+        if (!isNaN(date.getTime())) {
+            const options = {
+                timeZone: 'Europe/Rome',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            };
+            const locale = window.currentLang === 'zh' ? 'zh-CN' : (window.currentLang === 'it' ? 'it-IT' : 'en-GB');
+            formattedDate = new Intl.DateTimeFormat(locale, options).format(date);
+        }
 
         const rssCard = document.createElement('div');
         rssCard.className = 'rss-item ripple';
