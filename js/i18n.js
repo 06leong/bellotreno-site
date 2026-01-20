@@ -16,7 +16,7 @@ const translations = {
         mode_train: "车次",
         mode_station: "车站",
         search_label_train: "输入车次号 (如 FR9292, RV2025)",
-        search_label_station: "输入车站名 (如 Milano, Roma)",
+        search_label_station: "输入车站名 (如 Milano, Venezia)",
         no_station_found: "未找到匹配车站",
         disambiguation_title: "检测到多个班次，请选择：",
         depart_date: "始发日期",
