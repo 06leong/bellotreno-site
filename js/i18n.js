@@ -84,6 +84,7 @@ const translations = {
         about_technical: "技术参考",
         about_official: "铁路官方信息",
         about_disclaimer: "免责声明与版权",
+        visitor_counter: "您是本站第 {count} 位访客",
         footer: " 本站数据仅供参考，如有问题请关注车站大屏获取最新信息。 | © 2026 BelloTreno"
     },
     en: {
@@ -166,6 +167,7 @@ const translations = {
         about_technical: "Technical References",
         about_official: "Official Railway Info",
         about_disclaimer: "Disclaimer & Copyright",
+        visitor_counter: "You are the {count}th visitor to this site",
         footer: "This information is for reference only. Please check station displays for official information. | © 2026 BelloTreno"
     },
     it: {
@@ -248,6 +250,7 @@ const translations = {
         about_technical: "Riferimenti tecnici",
         about_official: "Info ferroviarie ufficiali",
         about_disclaimer: "Disclaimer e Copyright",
+        visitor_counter: "Sei il visitatore numero {count} di questo sito",
         footer: "Queste informazioni sono solo di riferimento. Controllare i display delle stazioni per informazioni ufficiali. | © 2026 BelloTreno"
     }
 };

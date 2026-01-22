@@ -64,6 +64,13 @@ function updateLanguage() {
         }
     });
 
+    // 更新访客计数显示
+    const visitorCountEl = document.getElementById('visitorCount');
+    if (visitorCountEl && window.visitorCountData !== undefined) {
+        const template = (typeof translations !== 'undefined' && translations[window.currentLang]) ? translations[window.currentLang]['visitor_counter'] : '{count}';
+        visitorCountEl.textContent = template.replace('{count}', window.visitorCountData);
+    }
+
     // 触发页面特定的语言更新钩子
     if (window.onLanguageChanged) window.onLanguageChanged();
 }
@@ -136,6 +143,18 @@ function scrollToTop() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
+async function initVisitorCounter() {
+    const workerUrl = 'https://site-counter.liangandrew626.workers.dev/';
+    try {
+        const response = await fetch(workerUrl);
+        const data = await response.json();
+        window.visitorCountData = data.count;
+        updateLanguage(); // 重新触发语言更新以显示数字
+    } catch (error) {
+        console.error('Failed to fetch visitor count:', error);
+    }
+}
+
 // 导出到全局
 window.initLanguage = initLanguage;
 window.updateLanguage = updateLanguage;
@@ -147,11 +166,13 @@ window.changeTheme = changeTheme;
 window.toggleLangMenu = toggleLangMenu;
 window.toggleThemeMenu = toggleThemeMenu;
 window.scrollToTop = scrollToTop;
+window.initVisitorCounter = initVisitorCounter;
 
 // 全局初始化绑定
 document.addEventListener('DOMContentLoaded', () => {
     initLanguage();
     initTheme();
+    initVisitorCounter();
 
     // 点击外部关闭下拉菜单
     document.addEventListener('click', (e) => {

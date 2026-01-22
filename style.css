@@ -1394,4 +1394,36 @@ md-outlined-select {
         padding: 10px 12px;
         font-size: 0.85rem;
     }
+
+    /* Footer & Visitor Stats */
+    footer {
+        padding: 20px;
+        background: var(--bg-primary);
+        border-top: 1px solid rgba(0, 0, 0, 0.05);
+        text-align: center;
+        font-size: 0.85rem;
+        color: var(--text-grey);
+    }
+
+    [data-theme="dark"] footer {
+        border-top-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .footer-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .visitor-stats {
+        font-size: 0.8rem;
+        color: var(--text-grey);
+        opacity: 0.8;
+    }
+
+    #visitorCount {
+        font-weight: 700;
+        color: var(--md-sys-color-primary);
+    }
 }
