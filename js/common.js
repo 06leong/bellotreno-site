@@ -146,7 +146,7 @@ function scrollToTop() {
 async function initVisitorCounter() {
     const workerUrl = 'https://site-counter.liangandrew626.workers.dev/';
     try {
-        const response = await fetch(workerUrl);
+        const response = await fetch(workerUrl, { credentials: 'include' });
         const data = await response.json();
         window.visitorCountData = data.count;
         updateLanguage(); // 重新触发语言更新以显示数字
