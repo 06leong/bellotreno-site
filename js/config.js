@@ -12,7 +12,7 @@ const CLIENT_MAP = {
     2: "Trenitalia",
     4: "Trenitalia",
     18: "Trenitalia TPER",
-    30: "Ferrovie del Sud Est",
+    910: "Ferrovie del Sud Est",
     63: "Trenord",
     64: "ÖBB"
 };
@@ -81,10 +81,10 @@ const CAT_IMAGE_MAP = {
     "18-REG": "pic/regn.png",
     "18-RV": "pic/regn.png",
     "18-RE": "pic/regn.png",
-    // Ferrovie del Sud Est (30)
-    "30-REG": "pic/regn.png",
-    "30-RV": "pic/regn.png",
-    "30-RE": "pic/regn.png",
+    // Ferrovie del Sud Est (910)
+    "910-REG": "pic/regn.png",
+    "910-RV": "pic/regn.png",
+    "910-RE": "pic/regn.png",
     // Trenord (63)
     "63-REG": "pic/regn.png",
     "63-RV": "pic/regn.png",
