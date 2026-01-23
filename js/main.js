@@ -508,8 +508,8 @@ function render(data) {
     const categoryImage = CAT_IMAGE_MAP[imageKey];
     const categoryHTML = categoryImage ? `<img src="${categoryImage}" alt="${category}" style="height: 1.3rem; vertical-align: middle; margin-left: 8px;">` : category;
 
-    const displayOrigin = data.origineEstera || data.origine;
-    const displayDest = data.destinazioneEstera || data.destinazione;
+    const displayOrigin = (data.origineEstera && data.origineEstera !== data.destinazione) ? data.origineEstera : data.origine;
+    const displayDest = (data.destinazioneEstera && data.destinazioneEstera !== data.origine) ? data.destinazioneEstera : data.destinazione;
     const delayMsg = translateStatus(data.compRitardoAndamento[0]);
     const isEarly = delayMsg.includes(translations[currentLang].early_by) ||
         delayMsg.includes(translations[currentLang].on_time) ||

@@ -84,7 +84,7 @@ const OPERATOR_MAP = {
     2: "Trenitalia",
     4: "Trenitalia",
     18: "Trenitalia TPER",
-    30: "Ferrovie del Sud Est",
+    910: "Ferrovie del Sud Est",
     63: "Trenord",
     64: "ÖBB"
 };
@@ -114,7 +114,7 @@ function formatTrainNumber(trainNumberStr) {
 }
 
 // 格式化离站看板数据
-function formatDepartureData(train, currentLang = 'zh') {
+function formatDepartureData(train, currentLang = 'zh', currentStation = '') {
     const translations = {
         zh: {
             cancelled: '已取消',
@@ -148,7 +148,10 @@ function formatDepartureData(train, currentLang = 'zh') {
     const trainNumber = formatTrainNumber(train.compNumeroTreno || '');
 
     // 目的地
-    const destination = train.destinazioneEstera || train.destinazione || '';
+    const destination = (train.destinazioneEstera &&
+        train.destinazioneEstera !== train.origine &&
+        train.destinazioneEstera.toUpperCase() !== currentStation.toUpperCase())
+        ? train.destinazioneEstera : (train.destinazione || '');
 
     // 状态
     let status = '';
@@ -201,7 +204,7 @@ function formatDepartureData(train, currentLang = 'zh') {
 }
 
 // 格式化到站看板数据
-function formatArrivalData(train, currentLang = 'zh') {
+function formatArrivalData(train, currentLang = 'zh', currentStation = '') {
     const translations = {
         zh: {
             cancelled: '已取消',
@@ -232,7 +235,10 @@ function formatArrivalData(train, currentLang = 'zh') {
     const scheduledTime = train.compOrarioArrivo || '--:--';
 
     // 始发站
-    const origin = train.origine || '';
+    const origin = (train.origineEstera &&
+        train.origineEstera !== train.destinazione &&
+        train.origineEstera.toUpperCase() !== currentStation.toUpperCase())
+        ? train.origineEstera : (train.origine || '');
 
     // 车次号 - 添加换行
     const trainNumber = formatTrainNumber(train.compNumeroTreno || '');

@@ -576,7 +576,7 @@
             `;
 
                 trains.forEach(train => {
-                    const formatted = formatDepartureData(train, window.currentLang);
+                    const formatted = formatDepartureData(train, window.currentLang, currentStationName);
                     // 获取原始车次号（不带 <br>）
                     const trainNumber = (train.compNumeroTreno || '').replace(/"/g, '&quot;');
                     tableHtml += `
@@ -606,7 +606,7 @@
             `;
 
                 trains.forEach(train => {
-                    const formatted = formatArrivalData(train, window.currentLang);
+                    const formatted = formatArrivalData(train, window.currentLang, currentStationName);
                     // 获取原始车次号（不带 <br>）
                     const trainNumber = (train.compNumeroTreno || '').replace(/"/g, '&quot;');
                     tableHtml += `
