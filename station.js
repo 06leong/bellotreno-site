@@ -98,15 +98,33 @@ function formatTrainNumber(trainNumberStr) {
 
     // 匹配格式：字母部分 + 空格（一个或多个）+ 数字部分
     // 支持格式：FR 9633, REG 24435, IC 630, EC 144 等
-    const match = trainNumberStr.match(/^([A-Z]+)\s+(\d+)$/);
+    const match = trainNumberStr.match(/^([A-Z\s]+?)\s*(\d+)$/);
     if (match) {
-        return `${match[1]}<br>${match[2]}`;
-    }
+        let catCode = match[1].trim();
+        const num = match[2];
 
-    // 尝试更宽松的匹配：任何字母后跟数字（可能没有空格）
-    const matchNoSpace = trainNumberStr.match(/^([A-Z]+)(\d+)$/);
-    if (matchNoSpace) {
-        return `${matchNoSpace[1]}<br>${matchNoSpace[2]}`;
+        // 优先判定：EC FR 跨境红箭强制识别为 FR
+        if (catCode.toUpperCase().includes("EC FR")) {
+            catCode = "FR";
+        }
+
+        // 计算车次号徽章类
+        let badgeClass = '';
+        if (['REG', 'RE', 'RV', 'MET'].includes(catCode)) {
+            badgeClass = 'badge-regional';
+        } else if (['FR', 'FB', 'FA'].includes(catCode)) {
+            badgeClass = 'badge-arrow';
+        } else if (['IC', 'ICN'].includes(catCode)) {
+            badgeClass = 'badge-intercity';
+        } else if (['EC', 'EN'].includes(catCode)) {
+            badgeClass = 'badge-international';
+        }
+
+        if (badgeClass) {
+            // 在车站大屏中，车次号通常分两行显示
+            return `<span class="train-badge ${badgeClass}">${catCode}<br>${num}</span>`;
+        }
+        return `${catCode}<br>${num}`;
     }
 
     // 如果格式不匹配，返回原始值

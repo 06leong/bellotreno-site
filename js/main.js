@@ -493,6 +493,12 @@ function render(data) {
 
     // 识别车次类型
     let catCode = (data.categoria || "").trim();
+
+    // 优先判定：EC FR 跨境红箭强制识别为 FR
+    if (data.compNumeroTreno && data.compNumeroTreno.toUpperCase().includes("EC FR")) {
+        catCode = "FR";
+    }
+
     if (!catCode && data.compNumeroTreno) {
         const match = data.compNumeroTreno.match(/([A-Z]+)/);
         if (match) catCode = match[1];
@@ -519,6 +525,22 @@ function render(data) {
 
     const formattedDuration = formatDuration(data.compDurata);
 
+    // 计算车次号徽章类
+    let badgeClass = '';
+    if (['REG', 'RE', 'RV', 'MET'].includes(catCode)) {
+        badgeClass = 'badge-regional';
+    } else if (['FR', 'FB', 'FA'].includes(catCode)) {
+        badgeClass = 'badge-arrow';
+    } else if (['IC', 'ICN'].includes(catCode)) {
+        badgeClass = 'badge-intercity';
+    } else if (['EC', 'EN'].includes(catCode)) {
+        badgeClass = 'badge-international';
+    }
+
+    const trainNumBadge = badgeClass
+        ? `<span class="train-badge ${badgeClass}">${data.compNumeroTreno}</span>`
+        : `<b>${data.compNumeroTreno}</b>`;
+
     card.innerHTML = `
         <div class="refresh-btn ripple" onclick="refreshTrainData()" title="${currentLang === 'zh' ? '刷新' : currentLang === 'it' ? 'Aggiorna' : 'Refresh'}">
             <span class="material-symbols-outlined">refresh</span>
@@ -528,7 +550,7 @@ function render(data) {
             <div>
                 <div class="train-route">${displayOrigin} ➜ ${displayDest}</div>
                 <div class="train-meta">
-                    ${translations[currentLang].train_num}: <b>${data.compNumeroTreno}</b> | ${translations[currentLang].duration}: <b>${formattedDuration}</b>
+                    ${translations[currentLang].train_num}: ${trainNumBadge} | ${translations[currentLang].duration}: <b>${formattedDuration}</b>
                 </div>
             </div>
             <div class="train-status-section">
@@ -621,7 +643,7 @@ function render(data) {
                     </div>
                     <div class="info-row secondary">
                         <div class="time-item"><span class="time-label">${translations[currentLang].platform}:</span> ${platHTML}</div>
-                        <div class="time-item" style="color: var(--text-grey);"><span class="time-label">Progressivo:</span> <b>${f.progressivo}</b></div>
+                        <div class="time-item"><span class="time-label">Progressivo:</span> <b>${f.progressivo}</b></div>
                     </div>
                 </div>
             </div>

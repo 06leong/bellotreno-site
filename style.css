@@ -840,6 +840,7 @@ md-filled-text-field {
     font-size: 0.95rem;
     margin-bottom: 8px;
     flex-wrap: wrap;
+    align-items: baseline;
 }
 
 .info-row.secondary {
@@ -855,6 +856,10 @@ md-filled-text-field {
 
 .time-item {
     color: inherit;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    line-height: 1.5;
 }
 
 .time-val-sched {
@@ -1419,5 +1424,51 @@ md-outlined-select {
     #visitorCount {
         font-weight: 700;
         color: var(--md-sys-color-primary);
+    }
+}
+
+/* 车次类别徽章 (Train Category Badge) */
+.train-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 2px 10px;
+    border-radius: 8px;
+    /* 圆角矩形样子和卡片一致形状 */
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: #ffffff !important;
+    text-transform: uppercase;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    vertical-align: middle;
+}
+
+/* 区域列车组 (REG, RE, RV, MET): #70a84a (草绿色) */
+.badge-regional {
+    background-color: #70a84a;
+}
+
+/* 箭系列高铁 (FR, FB, FA): #bc3433 (红箭色) */
+.badge-arrow {
+    background-color: #bc3433;
+}
+
+/* 城际列车 (IC, ICN): #008ad8 (城际蓝) */
+.badge-intercity {
+    background-color: #008ad8;
+}
+
+/* 国际列车 (EC, EN): #3c8149 (森林绿) */
+.badge-international {
+    background-color: #3c8149;
+}
+
+/* 移动端自适应 (Mobile Responsive) */
+@media (max-width: 480px) {
+    .train-badge {
+        font-size: 0.75rem;
+        padding: 1px 6px;
+        border-radius: 6px;
     }
 }

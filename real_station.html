@@ -65,6 +65,10 @@
             font-size: 0.95rem;
         }
 
+        .th-center {
+            text-align: center !important;
+        }
+
         td {
             padding: 14px 12px;
             border-bottom: 1px solid rgba(0, 0, 0, 0.05);
@@ -96,11 +100,13 @@
             font-family: 'Roboto Mono', monospace;
             font-weight: 600;
             font-size: 1.1rem;
+            text-align: center;
         }
 
         .train-col {
             font-weight: 600;
             min-width: 80px;
+            text-align: center;
         }
 
         .destination-col,
@@ -372,10 +378,11 @@
 
             /* 表头字体调整 */
             th {
-                font-size: 0.7rem;
-                line-height: 1.2;
-                padding: 6px 6px;
+                font-size: 0.7rem !important;
+                line-height: 1.2 !important;
+                padding: 6px 6px !important;
                 font-weight: 600;
+                vertical-align: middle !important;
             }
 
             /* 确保表格容器可以滚动 */
@@ -565,8 +572,8 @@
                 tableHtml += `
                 <thead>
                     <tr>
-                        <th>${t.scheduled_time}</th>
-                        <th>${t.train}</th>
+                        <th class="th-center">${t.scheduled_time}</th>
+                        <th class="train-col">${t.train}</th>
                         <th>${t.destination}</th>
                         <th>${t.status}</th>
                         <th>${t.platform}</th>
@@ -594,10 +601,10 @@
                 tableHtml += `
                 <thead>
                     <tr>
-                        <th>${t.scheduled_time}</th>
-                        <th>${t.train}</th>
+                        <th class="th-center">${t.scheduled_time}</th>
+                        <th class="train-col">${t.train}</th>
                         <th>${t.origin}</th>
-                        <th>${t.actual_time}</th>
+                        <th class="th-center">${t.actual_time}</th>
                         <th>${t.status}</th>
                         <th>${t.platform}</th>
                     </tr>
