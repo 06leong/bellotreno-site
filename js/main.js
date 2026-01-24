@@ -504,10 +504,26 @@ function render(data) {
         if (match) catCode = match[1];
     }
 
-    const operator = CLIENT_MAP[data.codiceCliente] || "Other";
+    // 特殊处理：如果车次号包含 TS，识别为 TS (Treno Storico)
+    if (data.compNumeroTreno && data.compNumeroTreno.toUpperCase().includes("TS")) {
+        catCode = "TS";
+    }
+
+    if (catCode === "TS") {
+        catCode = "TS"; // Ensure it's set
+    }
+
+    let operator = CLIENT_MAP[data.codiceCliente] || "Other";
+    let operatorLink = CLIENT_LINK_MAP[operator] || "#";
+
+    // 特殊处理：如果是历史列车，更换运营商信息
+    if (catCode === "TS") {
+        operator = "FondazioneFS";
+        operatorLink = "https://www.fondazionefs.it";
+    }
+
     const category = CAT_MAP[catCode] || data.categoriaDescrizione || catCode || "Treno";
 
-    const operatorLink = CLIENT_LINK_MAP[operator] || "#";
     const operatorHTML = operatorLink !== "#" ? `<a href="${operatorLink}" target="_blank" style="color: inherit; text-decoration: none;">${operator}</a>` : operator;
 
     const imageKey = `${data.codiceCliente}-${catCode}`;
@@ -535,6 +551,8 @@ function render(data) {
         badgeClass = 'badge-intercity';
     } else if (['EC', 'EN'].includes(catCode)) {
         badgeClass = 'badge-international';
+    } else if (catCode === 'TS') {
+        badgeClass = 'badge-storico';
     }
 
     const trainNumBadge = badgeClass

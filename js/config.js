@@ -38,7 +38,8 @@ const CAT_MAP = {
     "FB": "Frecciabianca",
     "FA": "Frecciargento",
     "EN": "EuroNight",
-    "RE": "Regionale"
+    "RE": "Regionale",
+    "TS": "Treno Storico"
 };
 
 // 服务类型图片映射 (运营商代码 + 类型代码)
@@ -77,6 +78,9 @@ const CAT_IMAGE_MAP = {
     "1-EN": "pic/EN.png",
     "2-EN": "pic/EN.png",
     "4-EN": "pic/EN.png",
+    "1-TS": "pic/FS.png",
+    "2-TS": "pic/FS.png",
+    "4-TS": "pic/FS.png",
     // Trenitalia TPER (18)
     "18-REG": "pic/regn.png",
     "18-RV": "pic/regn.png",

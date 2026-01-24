@@ -1464,6 +1464,12 @@ md-outlined-select {
     background-color: #3c8149;
 }
 
+.badge-storico {
+    background-color: #827654;
+    color: white;
+}
+
+
 /* 移动端自适应 (Mobile Responsive) */
 @media (max-width: 480px) {
     .train-badge {

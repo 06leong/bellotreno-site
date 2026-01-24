@@ -108,6 +108,11 @@ function formatTrainNumber(trainNumberStr) {
             catCode = "FR";
         }
 
+        // 识别 TS (Treno Storico)
+        if (catCode.toUpperCase().includes("TS")) {
+            catCode = "TS";
+        }
+
         // 计算车次号徽章类
         let badgeClass = '';
         if (['REG', 'RE', 'RV', 'MET'].includes(catCode)) {
@@ -118,6 +123,8 @@ function formatTrainNumber(trainNumberStr) {
             badgeClass = 'badge-intercity';
         } else if (['EC', 'EN'].includes(catCode)) {
             badgeClass = 'badge-international';
+        } else if (catCode === 'TS') {
+            badgeClass = 'badge-storico';
         }
 
         if (badgeClass) {
