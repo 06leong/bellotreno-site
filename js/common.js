@@ -144,7 +144,7 @@ function scrollToTop() {
 }
 
 async function initVisitorCounter() {
-    const workerUrl = 'https://site-counter.liangandrew626.workers.dev/';
+    const workerUrl = 'https://site-counter.bellotreno.workers.dev/';
     try {
         const response = await fetch(workerUrl);
         const data = await response.json();

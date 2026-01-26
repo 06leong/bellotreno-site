@@ -4,7 +4,7 @@
  */
 
 // API 基础路径（全局变量，供所有模块使用）
-window.API_BASE = "https://api.bellotreno.org/?url=https://www.viaggiatreno.it/infomobilita/resteasy/viaggiatreno";
+window.API_BASE = "https://ah.bellotreno.workers.dev/?url=https://www.viaggiatreno.it/infomobilita/resteasy/viaggiatreno";
 
 // 运营商代码映射 1AV 2REG 4IC
 const CLIENT_MAP = {
