@@ -125,6 +125,8 @@ function formatTrainNumber(trainNumberStr) {
             badgeClass = 'badge-international';
         } else if (catCode === 'TS') {
             badgeClass = 'badge-storico';
+        } else if (catCode === 'EXP') {
+            badgeClass = 'badge-espresso';
         }
 
         if (badgeClass) {

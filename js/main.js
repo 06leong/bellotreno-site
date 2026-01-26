@@ -553,6 +553,8 @@ function render(data) {
         badgeClass = 'badge-international';
     } else if (catCode === 'TS') {
         badgeClass = 'badge-storico';
+    } else if (catCode === 'EXP') {
+        badgeClass = 'badge-espresso';
     }
 
     const trainNumBadge = badgeClass

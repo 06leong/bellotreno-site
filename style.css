@@ -1442,6 +1442,10 @@ md-outlined-select {
     text-transform: uppercase;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     vertical-align: middle;
+    line-height: 1.1;
+    position: relative;
+    top: -1px;
+    /* 特殊修正，使徽章中线与文字视觉中线对齐 */
 }
 
 /* 区域列车组 (REG, RE, RV, MET): #70a84a (草绿色) */
@@ -1467,6 +1471,10 @@ md-outlined-select {
 .badge-storico {
     background-color: #827654;
     color: white;
+}
+
+.badge-espresso {
+    background-color: #35556b;
 }
 
 

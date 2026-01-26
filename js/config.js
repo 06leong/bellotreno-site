@@ -6,7 +6,7 @@
 // API 基础路径（全局变量，供所有模块使用）
 window.API_BASE = "https://api.bellotreno.org/?url=https://www.viaggiatreno.it/infomobilita/resteasy/viaggiatreno";
 
-// 运营商代码映射
+// 运营商代码映射 1AV 2REG 4IC
 const CLIENT_MAP = {
     1: "Trenitalia",
     2: "Trenitalia",
@@ -39,7 +39,8 @@ const CAT_MAP = {
     "FA": "Frecciargento",
     "EN": "EuroNight",
     "RE": "Regionale",
-    "TS": "Treno Storico"
+    "TS": "Treno Storico",
+    "EXP": "Espresso"
 };
 
 // 服务类型图片映射 (运营商代码 + 类型代码)
@@ -81,6 +82,9 @@ const CAT_IMAGE_MAP = {
     "1-TS": "pic/FS.png",
     "2-TS": "pic/FS.png",
     "4-TS": "pic/FS.png",
+    "1-EXP": "pic/Espresso.png",
+    "2-EXP": "pic/Espresso.png",
+    "4-EXP": "pic/Espresso.png",
     // Trenitalia TPER (18)
     "18-REG": "pic/regn.png",
     "18-RV": "pic/regn.png",
