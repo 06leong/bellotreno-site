@@ -62,7 +62,7 @@ async function fetchStationBoard(stationId, type = 'partenze') {
     const timeString = getItalianTimeString();
     const encodedTime = encodeURIComponent(timeString);
     // 使用 window.API_BASE 或者直接使用完整 URL
-    const apiBase = window.API_BASE || "https://api.bellotreno.org/?url=https://www.viaggiatreno.it/infomobilita/resteasy/viaggiatreno";
+    const apiBase = window.API_BASE || "https://ah.bellotreno.workers.dev/?url=https://www.viaggiatreno.it/infomobilita/resteasy/viaggiatreno";
     const url = `${apiBase}/${type}/${stationId}/${encodedTime}`;
 
     try {

@@ -95,7 +95,7 @@ async function fetchRSS() {
     // 记录请求时的状态，用于后续校验
     const requestKey = `${currentMode}_${currentRegion}`;
 
-    const proxyUrl = `https://api.bellotreno.org/?url=${encodeURIComponent(targetUrl)}&ts=${Date.now()}`;
+    const proxyUrl = `https://ah.bellotreno.workers.dev/?url=${encodeURIComponent(targetUrl)}&ts=${Date.now()}`;
 
     try {
         const response = await fetch(proxyUrl);
