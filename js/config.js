@@ -12,6 +12,7 @@ const CLIENT_MAP = {
     2: "Trenitalia",
     4: "Trenitalia",
     18: "Trenitalia TPER",
+    77: "FS Treni Turistici Italiani",
     910: "Ferrovie del Sud Est",
     63: "Trenord",
     64: "ÖBB"
@@ -23,7 +24,8 @@ const CLIENT_LINK_MAP = {
     "Trenitalia TPER": "https://www.trenitaliatper.it",
     "Ferrovie del Sud Est": "https://www.trenitalia.com",
     "Trenord": "https://www.trenord.it",
-    "ÖBB": "https://www.oebb.at"
+    "ÖBB": "https://www.oebb.at",
+    "FS Treni Turistici Italiani": "https://www.fstrenituristici.it"
 };
 
 // 列车类型代码映射
@@ -99,5 +101,7 @@ const CAT_IMAGE_MAP = {
     "63-RE": "pic/regn.png",
     // ÖBB (64)
     "64-EC": "pic/RJ.png",
-    "64-EN": "pic/NJ.png"
+    "64-EN": "pic/NJ.png",
+    // FS Treni Turistici Italiani (77)
+    "77-EXP": "pic/TTI.png"
 };

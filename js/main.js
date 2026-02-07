@@ -527,7 +527,13 @@ function render(data) {
     const operatorHTML = operatorLink !== "#" ? `<a href="${operatorLink}" target="_blank" style="color: inherit; text-decoration: none;">${operator}</a>` : operator;
 
     const imageKey = `${data.codiceCliente}-${catCode}`;
-    const categoryImage = CAT_IMAGE_MAP[imageKey];
+    let categoryImage = CAT_IMAGE_MAP[imageKey];
+
+    // 特殊处理：FS Treni Turistici Italiani (77) 始终使用 TTI.png
+    if (data.codiceCliente === 77) {
+        categoryImage = "pic/TTI.png";
+    }
+
     const categoryHTML = categoryImage ? `<img src="${categoryImage}" alt="${category}" style="height: 1.3rem; vertical-align: middle; margin-left: 8px;">` : category;
 
     const displayOrigin = (data.origineEstera && data.origineEstera !== data.destinazione) ? data.origineEstera : data.origine;

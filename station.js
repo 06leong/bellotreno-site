@@ -84,6 +84,7 @@ const OPERATOR_MAP = {
     2: "Trenitalia",
     4: "Trenitalia",
     18: "Trenitalia TPER",
+    77: "FS Treni Turistici Italiani",
     910: "Ferrovie del Sud Est",
     63: "Trenord",
     64: "ÖBB"
