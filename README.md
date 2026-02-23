@@ -1,6 +1,4 @@
 # BelloTreno
 
-意大利铁路列车实时查询系统
-
-个人项目，仅供学习和铁路爱好者交流使用。
+ A personal project for the Italian railway real-time timetable, intended for learning.
 
