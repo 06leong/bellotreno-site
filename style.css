@@ -24,6 +24,136 @@
     --alert-text: #ffd54f;
 }
 
+/* ===== 系统深色偏好原生支持 =====
+   当 JS 尚未设置 data-theme 时，CSS 自动匹配系统深色模式
+   使用 :root:not([data-theme="light"]) 确保用户明确选浅色时不会冲突 */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --text-primary: #a2e6fb;
+        --bg-primary: #0d131e;
+        --md-sys-color-surface: #0d131e;
+        --md-sys-color-primary: #4db6ac;
+        --train-grey: #455a64;
+        --text-grey: #78909c;
+        --alert-bg: #1a2332;
+        --alert-text: #ffd54f;
+        --text-primary-rgb: 162, 230, 251;
+    }
+
+    :root:not([data-theme="light"]) body::before {
+        background-image: radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+    }
+
+    :root:not([data-theme="light"]) body::after {
+        background: radial-gradient(circle, rgba(56, 189, 248, 0.12), transparent 70%);
+    }
+
+    :root:not([data-theme="light"]) .navbar {
+        border-bottom-color: rgba(255, 255, 255, 0.1);
+    }
+
+    :root:not([data-theme="light"]) .theme-switch,
+    :root:not([data-theme="light"]) .lang-switch {
+        background: rgba(255, 255, 255, 0.1);
+    }
+
+    :root:not([data-theme="light"]) .theme-switch:hover,
+    :root:not([data-theme="light"]) .lang-switch:hover {
+        background: rgba(255, 255, 255, 0.15);
+    }
+
+    :root:not([data-theme="light"]) .dropdown-menu {
+        border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    :root:not([data-theme="light"]) .dropdown-item:hover {
+        background: rgba(255, 255, 255, 0.1);
+    }
+
+    :root:not([data-theme="light"]) .mode-button.active {
+        background: #a2e6fb;
+        color: #0d131e;
+        border-color: #a2e6fb;
+    }
+
+    :root:not([data-theme="light"]) .mode-button::after {
+        background: rgba(255, 255, 255, 0.4);
+    }
+
+    :root:not([data-theme="light"]) md-filled-text-field {
+        --md-filled-text-field-input-text-color: #233975;
+        --md-filled-text-field-label-text-color: #233975;
+        --md-filled-text-field-focus-label-text-color: #233975;
+        --md-filled-text-field-caret-color: #233975;
+    }
+
+    :root:not([data-theme="light"]) .assist-chip {
+        background: rgba(255, 255, 255, 0.1);
+    }
+
+    :root:not([data-theme="light"]) .assist-chip:hover {
+        background: rgba(255, 255, 255, 0.15);
+    }
+
+    :root:not([data-theme="light"]) .assist-chip .chip-remove:hover {
+        background: rgba(255, 255, 255, 0.2);
+    }
+
+    :root:not([data-theme="light"]) .choice-item {
+        border-bottom-color: rgba(255, 255, 255, 0.1);
+    }
+
+    :root:not([data-theme="light"]) .train-header {
+        background: rgba(13, 19, 30, 0.7);
+        border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    :root:not([data-theme="light"]) .refresh-btn {
+        background: rgba(255, 255, 255, 0.1);
+    }
+
+    :root:not([data-theme="light"]) .timeline-container {
+        background: rgba(13, 19, 30, 0.7);
+        border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    :root:not([data-theme="light"]) .station-card {
+        background: rgba(255, 255, 255, 0.05);
+        border-color: rgba(255, 255, 255, 0.1);
+        color: #ffffff;
+    }
+
+    :root:not([data-theme="light"]) .direction-badge {
+        background: rgba(128, 128, 128, 0.3);
+    }
+
+    :root:not([data-theme="light"]) .rss-item {
+        background: rgba(13, 19, 30, 0.7);
+        border-color: rgba(255, 255, 255, 0.15);
+    }
+
+    :root:not([data-theme="light"]) .rss-region-badge {
+        background: rgba(77, 182, 172, 0.15);
+        color: #4db6ac;
+    }
+
+    :root:not([data-theme="light"]) md-outlined-select {
+        --md-outlined-select-text-field-content-color: #e2e2e2;
+        --md-outlined-select-text-field-label-text-color: #b0b0b0;
+        --md-outlined-select-text-field-input-text-color: #e2e2e2;
+        --md-outlined-select-text-field-focus-input-text-color: #ffffff;
+        --md-outlined-select-text-field-hover-input-text-color: #ffffff;
+        --md-sys-color-on-surface: #e2e2e2;
+        --md-sys-color-on-surface-variant: #b0b0b0;
+    }
+
+    :root:not([data-theme="light"]) md-select-option {
+        --md-menu-item-label-text-color: #000000;
+        --md-sys-color-on-surface: #000000;
+        color: #000000;
+    }
+}
+
 body {
     font-family: 'Roboto', 'Noto Sans SC', sans-serif;
     margin: 0;

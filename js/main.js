@@ -684,8 +684,8 @@ function render(data) {
 
 // 初始化应用
 function initApp() {
-    initLanguage();
-    initTheme();
+    // initLanguage 和 initTheme 已由 common.js 的 DOMContentLoaded 处理
+    // 这里只处理 main.js 特有的初始化
     updateSearchLabel();
     loadRecentSearches();
 }

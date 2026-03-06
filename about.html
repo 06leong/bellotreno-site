@@ -10,6 +10,7 @@
         rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <script src="js/theme-init.js"></script>
     <style>
         /* About 页面特定样式 */
         .content-card {
@@ -128,6 +129,29 @@
             .content-card {
                 padding: 20px 12px;
                 border-radius: 16px;
+            }
+        }
+
+        /* 系统深色偏好原生支持 */
+        @media (prefers-color-scheme: dark) {
+            :root:not([data-theme="light"]) .content-card {
+                border-color: rgba(255, 255, 255, 0.2);
+            }
+
+            :root:not([data-theme="light"]) h2 {
+                color: white;
+            }
+
+            :root:not([data-theme="light"]) p {
+                color: white;
+            }
+
+            :root:not([data-theme="light"]) ul {
+                color: white;
+            }
+
+            :root:not([data-theme="light"]) strong {
+                color: white;
             }
         }
     </style>

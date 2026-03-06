@@ -88,6 +88,9 @@ function changeLang(lang) {
 function initTheme() {
     const savedTheme = localStorage.getItem('theme') || 'auto';
     window.currentTheme = savedTheme;
+    // theme-init.js 已在 <head> 中处理了 dark/light 的 data-theme 设置
+    // CSS @media (prefers-color-scheme: dark) 已处理了 auto 模式的初始渲染
+    // 这里确保 data-theme 属性完整设置（auto 模式也需要设置以激活组件级选择器）
     applyTheme();
     updateThemeDisplay();
 }

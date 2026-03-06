@@ -10,6 +10,7 @@
         rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <script src="js/theme-init.js"></script>
     <style>
         /* 车站看板特定样式 */
         .station-header {
@@ -385,10 +386,38 @@
                 vertical-align: middle !important;
             }
 
-            /* 确保表格容器可以滚动 */
             .board-table {
                 overflow-x: auto;
                 -webkit-overflow-scrolling: touch;
+            }
+        }
+
+        /* 系统深色偏好原生支持 */
+        @media (prefers-color-scheme: dark) {
+            :root:not([data-theme="light"]) .board-table {
+                box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+            }
+
+            :root:not([data-theme="light"]) td {
+                border-bottom-color: rgba(255, 255, 255, 0.05);
+            }
+
+            :root:not([data-theme="light"]) tbody tr:hover {
+                background: rgba(255, 255, 255, 0.1);
+            }
+
+            :root:not([data-theme="light"]) .platform-pulse {
+                background: linear-gradient(135deg, #a2e6fb 0%, rgba(162, 230, 251, 0.2) 100%);
+                color: #0d131e !important;
+                box-shadow: 0 0 15px rgba(162, 230, 251, 0.6);
+            }
+
+            :root:not([data-theme="light"]) .scroll-hint {
+                background: rgba(255, 255, 255, 0.05);
+            }
+
+            :root:not([data-theme="light"]) tbody tr {
+                border-bottom-color: rgba(255, 255, 255, 0.08);
             }
         }
     </style>
