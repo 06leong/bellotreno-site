@@ -202,7 +202,13 @@
 
             <h2 data-i18n="about_roadmap">Roadmap</h2>
             <div data-i18n-section="roadmap">
-                <p>待更新。</p>
+                <ul>
+                    <li>由于 API 问题，需修复 Bologna Centrale/AV 站台显示错误的情况。</li>
+                    <li>对于 EC 列车，在查看到达时刻表时无法显示外国始发站，仅显示边境站，缺少原始始发站信息。</li>
+                    <li>尝试集成 Opentransportdata，实现 Tilo、SBB REG 等列车信息显示。目前 ViaggiaTreno 数据仅能显示终点站到瑞士边境站 Chiasso，而不能显示如
+                        RE80 终点站 Locarno 等完整信息。</li>
+                    <li>部分地方铁路公司（SAD、TT、TFT、TUA、EAV、FUC 等）未找到对应 API，需要 RFI 信息支持。</li>
+                </ul>
             </div>
 
             <h2 data-i18n="about_technical">技术参考</h2>
@@ -270,7 +276,12 @@
             zh: {
                 intro: `<p>BelloTreno 是一个由铁路爱好者所制作的个人业余项目。旨在为用户提供及时的意大利铁路列车运行信息。在意大利，获取实时、透明的铁路运行数据并非易事。相比于德国铁路 (DB)（<a href="https://developers.deutschebahn.com/db-api-marketplace/apis/" target="_blank">https://developers.deutschebahn.com/db-api-marketplace/apis/</a>）、法国铁路 (SNCF)（<a href="https://data.sncf.com/" target="_blank">https://data.sncf.com/</a>）和瑞士（<a href="https://opentransportdata.swiss/en/" target="_blank">https://opentransportdata.swiss/en/</a>）提供的完善开发者门户与 API 和数据，意大利铁路数据的开放程度仍显滞后。</p>
 <p>我们呼吁 FS 集团能向欧洲同行看齐，真正实现交通数据的透明与共享。</p>`,
-                roadmap: `<p>待更新。</p>`,
+                roadmap: `<ul>
+<li>由于 API 问题，需修复 Bologna Centrale/AV 站台显示错误的情况。</li>
+<li>对于 EC 列车，在查看到达时刻表时无法显示外国始发站，仅显示边境站，缺少原始始发站信息。</li>
+<li>尝试集成 Opentransportdata，实现 Tilo、SBB REG 等列车信息显示。目前 ViaggiaTreno 数据仅能显示终点站到瑞士边境站 Chiasso，而不能显示如 RE80 终点站 Locarno 等完整信息。</li>
+<li>部分地方铁路公司（SAD、TT、TFT、TUA、EAV、FUC 等）未找到对应 API，需要 RFI 信息支持。</li>
+</ul>`,
                 technical: `<p>特别感谢以下开源项目、博客及社区探索者，他们的工作是本项目得以诞生的基石：</p>
 <ul>
 <li><a href="https://github.com/MarcoBuster/railway-opendata" target="_blank">MarcoBuster / railway-opendata</a> 和 <a href="https://github.com/roughconsensusandrunningcode/TrainMonitor/wiki/API-del-sistema-Viaggiatreno" target="_blank">roughconsensusandrunningcode / TrainMonitor</a> 等项目提供了详尽的 API 说明和思路。</li>
@@ -295,7 +306,12 @@
             en: {
                 intro: `<p>BelloTreno is a personal hobby project created by railway enthusiasts, aiming to provide users with timely information on Italian railway train operations. In Italy, obtaining real-time and transparent railway operation data is not an easy task. Compared to the comprehensive developer portals and APIs provided by Deutsche Bahn (<a href="https://developers.deutschebahn.com/db-api-marketplace/apis/" target="_blank">https://developers.deutschebahn.com/db-api-marketplace/apis/</a>), SNCF (<a href="https://data.sncf.com/" target="_blank">https://data.sncf.com/</a>), and Switzerland (<a href="https://opentransportdata.swiss/en/" target="_blank">https://opentransportdata.swiss/en/</a>), the openness of Italian railway data still lags behind.</p>
 <p>We call on the FS Group to align with their European counterparts and truly achieve transparency and sharing of transportation data.</p>`,
-                roadmap: `<p>To be updated.</p>`,
+                roadmap: `<ul>
+<li>Fix incorrect platform display for Bologna Centrale/AV due to API issues.</li>
+<li>For EC trains, the arrival timetable cannot display the foreign origin station — only the border station is shown, missing the original origin information.</li>
+<li>Attempt to integrate Opentransportdata to display Tilo and SBB REG train information. Currently, ViaggiaTreno data only shows terminus up to the Swiss border station Chiasso, and cannot display full destinations such as RE80's terminus Locarno.</li>
+<li>Some local railway companies (SAD, TT, TFT, TUA, EAV, FUC, etc.) have no corresponding API found; RFI data support is needed.</li>
+</ul>`,
                 technical: `<p>Special thanks to the following open-source projects, blogs, and community explorers, whose work has been the foundation for this project:</p>
 <ul>
 <li><a href="https://github.com/MarcoBuster/railway-opendata" target="_blank">MarcoBuster / railway-opendata</a> and <a href="https://github.com/roughconsensusandrunningcode/TrainMonitor/wiki/API-del-sistema-Viaggiatreno" target="_blank">roughconsensusandrunningcode / TrainMonitor</a> provided detailed API documentation and insights.</li>
@@ -320,7 +336,12 @@
             it: {
                 intro: `<p>BelloTreno è un progetto personale amatoriale creato da appassionati di ferrovie, con l'obiettivo di fornire agli utenti informazioni tempestive sulle operazioni dei treni ferroviari italiani. In Italia, ottenere dati di operazioni ferroviarie in tempo reale e trasparenti non è un compito facile. Rispetto ai portali per sviluppatori completi e alle API fornite da Deutsche Bahn (<a href="https://developers.deutschebahn.com/db-api-marketplace/apis/" target="_blank">https://developers.deutschebahn.com/db-api-marketplace/apis/</a>), SNCF (<a href="https://data.sncf.com/" target="_blank">https://data.sncf.com/</a>) e Svizzera (<a href="https://opentransportdata.swiss/en/" target="_blank">https://opentransportdata.swiss/en/</a>), l'apertura dei dati ferroviari italiani è ancora in ritardo.</p>
 <p>Chiediamo al Gruppo FS di allinearsi con i loro colleghi europei e realizzare veramente la trasparenza e la condivisione dei dati di trasporto。</p>`,
-                roadmap: `<p>Da aggiornare.</p>`,
+                roadmap: `<ul>
+<li>Correggere la visualizzazione errata dei binari di Bologna Centrale/AV a causa di problemi API.</li>
+<li>Per i treni EC, l'orario di arrivo non riesce a mostrare la stazione di origine estera — viene mostrata solo la stazione di confine, mancando le informazioni sulla stazione di origine originale.</li>
+<li>Tentativo di integrare Opentransportdata per visualizzare le informazioni sui treni Tilo e SBB REG. Attualmente i dati di ViaggiaTreno mostrano solo il capolinea fino alla stazione di confine svizzera Chiasso, senza poter mostrare destinazioni complete come il capolinea RE80 Locarno.</li>
+<li>Per alcune compagnie ferroviarie locali (SAD, TT, TFT, TUA, EAV, FUC, ecc.) non è stata trovata un'API corrispondente; è necessario il supporto dei dati RFI.</li>
+</ul>`,
                 technical: `<p>Un ringraziamento speciale ai seguenti progetti open-source, blog ed esploratori della comunità, il cui lavoro è stato la base per questo progetto:</p>
 <ul>
 <li><a href="https://github.com/MarcoBuster/railway-opendata" target="_blank">MarcoBuster / railway-opendata</a> e <a href="https://github.com/roughconsensusandrunningcode/TrainMonitor/wiki/API-del-sistema-Viaggiatreno" target="_blank">roughconsensusandrunningcode / TrainMonitor</a> hanno fornito documentazione API dettagliata e approfondimenti.</li>
