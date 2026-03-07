@@ -1,20 +1,3 @@
- /$$$$$$$            /$$ /$$             /$$                                            
-| $$__  $$          | $$| $$            | $$                                            
-| $$  \ $$  /$$$$$$ | $$| $$  /$$$$$$  /$$$$$$    /$$$$$$   /$$$$$$  /$$$$$$$   /$$$$$$ 
-| $$$$$$$  /$$__  $$| $$| $$ /$$__  $$|_  $$_/   /$$__  $$ /$$__  $$| $$__  $$ /$$__  $$
-| $$__  $$| $$$$$$$$| $$| $$| $$  \ $$  | $$    | $$  \__/| $$$$$$$$| $$  \ $$| $$  \ $$
-| $$  \ $$| $$_____/| $$| $$| $$  | $$  | $$ /$$| $$      | $$_____/| $$  | $$| $$  | $$
-| $$$$$$$/|  $$$$$$$| $$| $$|  $$$$$$/  |  $$$$/| $$      |  $$$$$$$| $$  | $$|  $$$$$$/
-|_______/  \_______/|__/|__/ \______/    \___/  |__/       \_______/|__/  |__/ \______/ 
-                                                                                        
-                                                                                        
-                                                                                        
-                                                                                        
+[![Typing SVG](https://readme-typing-svg.demolab.com?font=Honk&size=150&pause=1000&color=BDBDBD&center=true&multiline=true&repeat=false&width=1500&height=300&lines=Bellotreno)](https://git.io/typing-svg)
 
- A personal project for the Italian railway real-time timetable, intended for learning.
-
-                                                                                                                                      
-                                                                                                                                      
-                                                                                                                                      
-                                                                                                                                      
-                                                                                                                                      
+ [![Typing SVG](https://readme-typing-svg.demolab.com?font=Orbitron&size=33&pause=1000&color=BDBDBD&center=true&multiline=true&width=1500&height=80&lines=A+personal+project+for+the+Italian+railway+real+timetable%2C+intended+for+learning.)](https://git.io/typing-svg)                                                                                                                                                                                               
