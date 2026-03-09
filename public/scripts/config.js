@@ -1,12 +1,9 @@
 /**
- * BelloTreno 配置文件
- * 包含所有配置常量和映射表
+ * BelloTreno Configuration
  */
 
-// API 基础路径（全局变量，供所有模块使用）
 window.API_BASE = "https://ah.bellotreno.workers.dev/?url=https://www.viaggiatreno.it/infomobilita/resteasy/viaggiatreno";
 
-// 运营商代码映射 1AV 2REG 4IC
 const CLIENT_MAP = {
     1: "Trenitalia",
     2: "Trenitalia",
@@ -17,8 +14,8 @@ const CLIENT_MAP = {
     63: "Trenord",
     64: "ÖBB"
 };
+window.CLIENT_MAP = CLIENT_MAP;
 
-// 运营商官网链接
 const CLIENT_LINK_MAP = {
     "Trenitalia": "https://www.trenitalia.com",
     "Trenitalia TPER": "https://www.trenitaliatper.it",
@@ -28,7 +25,6 @@ const CLIENT_LINK_MAP = {
     "FS Treni Turistici Italiani": "https://www.fstrenituristici.it"
 };
 
-// 列车类型代码映射
 const CAT_MAP = {
     "REG": "Regionale",
     "RV": "Regionale Veloce",
@@ -45,9 +41,7 @@ const CAT_MAP = {
     "EXP": "Espresso"
 };
 
-// 服务类型图片映射 (运营商代码 + 类型代码)
 const CAT_IMAGE_MAP = {
-    // Trenitalia (1, 2, 4)
     "1-IC": "pic/IC.png",
     "2-IC": "pic/IC.png",
     "4-IC": "pic/IC.png",
@@ -87,21 +81,16 @@ const CAT_IMAGE_MAP = {
     "1-EXP": "pic/Espresso.png",
     "2-EXP": "pic/Espresso.png",
     "4-EXP": "pic/Espresso.png",
-    // Trenitalia TPER (18)
     "18-REG": "pic/regn.png",
     "18-RV": "pic/regn.png",
     "18-RE": "pic/regn.png",
-    // Ferrovie del Sud Est (910)
     "910-REG": "pic/regn.png",
     "910-RV": "pic/regn.png",
     "910-RE": "pic/regn.png",
-    // Trenord (63)
     "63-REG": "pic/regn.png",
     "63-RV": "pic/regn.png",
     "63-RE": "pic/regn.png",
-    // ÖBB (64)
     "64-EC": "pic/RJ.png",
     "64-EN": "pic/NJ.png",
-    // FS Treni Turistici Italiani (77)
     "77-EXP": "pic/TTI.png"
 };

@@ -1,0 +1,5 @@
+# Redirect old .html URLs to clean Astro URLs
+/index.html / 301
+/about.html /about 301
+/infomobilita.html /infomobilita 301
+/real_station.html /station 301

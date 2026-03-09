@@ -37,32 +37,46 @@ let currentMode = 'updates';
 let currentRegion = 'all';
 let isFetching = false;
 
-// 初始化
+
 document.addEventListener('DOMContentLoaded', () => {
     initRegionSelect();
     fetchRSS();
 });
 
-// 注册语言改变后的回调，以便重新获取数据或更新翻译
+
 window.onLanguageChanged = () => {
     fetchRSS();
 };
 
 function initRegionSelect() {
-    const select = document.getElementById('regionSelect');
-    if (select) {
-        select.addEventListener('change', (e) => {
-            currentRegion = e.target.value;
-            fetchRSS();
-        });
-    }
+    // Legacy select initialization removed
 }
+
+window.changeDropdownRegion = function (val, text, i18nKey) {
+    const btnText = document.getElementById('regionBtnText');
+    if (btnText) {
+        btnText.textContent = text;
+        if (i18nKey) {
+            btnText.setAttribute('data-i18n', i18nKey);
+        } else {
+            btnText.removeAttribute('data-i18n');
+        }
+    }
+
+    currentRegion = val;
+    fetchRSS();
+
+    // Close the dropdown cleanly
+    if (document.activeElement) {
+        document.activeElement.blur();
+    }
+};
 
 function switchInfoMode(mode) {
     if (currentMode === mode) return;
     currentMode = mode;
 
-    // 更新按钮激活状态
+
     document.getElementById('modeUpdatesBtn').classList.toggle('active', mode === 'updates');
     document.getElementById('modeNoticesBtn').classList.toggle('active', mode === 'notices');
 
@@ -78,7 +92,7 @@ function toggleLoading(show) {
     if (loader && content) {
         loader.style.display = show ? 'flex' : 'none';
         content.style.opacity = show ? '0.3' : '1';
-        // 不要在加载时清空，以免内容闪烁，除非是完全不同的请求
+
     }
 }
 
@@ -92,7 +106,7 @@ async function fetchRSS() {
     const regionSuffix = REGIONS[currentRegion] || '';
     const targetUrl = `${RSS_BASE_URLS[currentMode]}${regionSuffix}.xml`;
 
-    // 记录请求时的状态，用于后续校验
+
     const requestKey = `${currentMode}_${currentRegion}`;
 
     const proxyUrl = `https://ah.bellotreno.workers.dev/?url=${encodeURIComponent(targetUrl)}&ts=${Date.now()}`;
@@ -102,7 +116,7 @@ async function fetchRSS() {
         if (!response.ok) throw new Error('Network response was not ok');
         const xmlText = await response.text();
 
-        // 校验请求状态是否已改变
+
         if (requestKey !== `${currentMode}_${currentRegion}`) return;
 
         const parser = new DOMParser();
@@ -114,7 +128,7 @@ async function fetchRSS() {
             return;
         }
 
-        // 按日期排序（最新在前）
+
         itemsArray.sort((a, b) => {
             const dateA = new Date(a.querySelector("pubDate")?.textContent || 0);
             const dateB = new Date(b.querySelector("pubDate")?.textContent || 0);
@@ -160,17 +174,23 @@ function renderRSS(items) {
         }
 
         const rssCard = document.createElement('div');
-        rssCard.className = 'rss-item ripple';
+        rssCard.className = 'card bg-base-100 shadow-sm border border-base-200 hover:shadow-md transition-shadow mb-4';
         rssCard.innerHTML = `
-            <div class="rss-title">${title}</div>
-            <div class="rss-meta">
-                <span><span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle;">schedule</span> ${formattedDate}</span>
-                ${region ? `<span class="rss-region-badge">${region}</span>` : ''}
+            <div class="card-body p-6">
+                <h3 class="card-title text-lg text-base-content leading-snug">${title}</h3>
+                <div class="flex items-center justify-between gap-3 mt-4 flex-wrap">
+                    <div class="flex items-center gap-2 text-sm text-base-content/60">
+                        <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">schedule</span> ${formattedDate}</span>
+                        ${region ? `<span class="badge badge-sm badge-ghost text-[#006a6a] dark:text-[#4db6ac] bg-[#006a6a]/10 dark:bg-[#4db6ac]/10 border-transparent">${region}</span>` : ''}
+                    </div>
+                    <div class="card-actions">
+                        <a href="${link}" target="_blank" class="btn btn-sm bg-[#006a6a] hover:bg-[#005050] text-white dark:bg-[#4db6ac] dark:text-gray-900 dark:hover:bg-[#3ca096] border-none rounded-full px-4 gap-1">
+                            <span data-i18n="read_more">${getI18n('read_more')}</span>
+                            <span class="material-symbols-outlined text-[16px]">open_in_new</span>
+                        </a>
+                    </div>
+                </div>
             </div>
-            <a href="${link}" target="_blank" class="rss-link-btn">
-                <span data-i18n="read_more">${getI18n('read_more')}</span>
-                <span class="material-symbols-outlined">open_in_new</span>
-            </a>
         `;
         contentContainer.appendChild(rssCard);
     });
@@ -183,7 +203,7 @@ function getI18n(key) {
     if (typeof translations !== 'undefined' && translations[window.currentLang] && translations[window.currentLang][key]) {
         return translations[window.currentLang][key];
     }
-    // 特殊处理 read_more，因为可能未在 i18n.js 中全局定义
+
     if (key === 'read_more') {
         const fallbacks = { zh: '阅读全文', en: 'Read more', it: 'Leggi tutto' };
         return fallbacks[window.currentLang] || fallbacks.en;

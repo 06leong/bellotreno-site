@@ -1,0 +1,66 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="BelloTreno - Infomobilità" pageScripts={["/scripts/infomobilita.js"]}>
+    <Fragment slot="head"></Fragment>
+
+    <div class="container">
+        <div class="text-center mt-10 mb-6">
+            <h1 class="text-[2.5rem] font-bold mb-6 text-primary"
+                data-i18n="nav_infomobilita">出行信息</h1>
+
+            <div class="infomobilita-controls flex flex-col items-center gap-6">
+                <div class="flex justify-center mx-auto w-[480px] max-w-full bg-base-200/50 p-1 rounded-full border border-base-200 shadow-sm backdrop-blur">
+                    <button id="modeUpdatesBtn" class="mode-button mode-left active relative flex-1 flex items-center justify-center gap-1.5 py-2 px-4 text-sm font-medium rounded-full cursor-pointer transition-all"
+                        onclick="switchInfoMode('updates')">
+                        <span class="material-symbols-outlined text-[1.25rem]">dynamic_feed</span>
+                        <span data-i18n="info_updates">实时更新</span>
+                    </button>
+                    <button id="modeNoticesBtn" class="mode-button mode-right relative flex-1 flex items-center justify-center gap-1.5 py-2 px-4 text-sm font-medium rounded-full cursor-pointer transition-all" 
+                        onclick="switchInfoMode('notices')">
+                        <span class="material-symbols-outlined text-[1.25rem]">campaign</span>
+                        <span data-i18n="info_notices">旅行者须知</span>
+                    </button>
+                </div>
+
+                <div class="dropdown w-[480px] max-w-full mx-auto" id="regionDropdown">
+                    <div tabindex="0" role="button" class="btn btn-lg w-full bg-base-100 border border-base-300 focus:outline-none focus:border-primary transition-all text-base-content shadow-sm rounded-full flex justify-center hover:bg-base-200/50 font-normal h-14 min-h-[3.5rem]">
+                        <span id="regionBtnText" data-i18n="region_all" class="text-[1.125rem]">所有大区</span>
+                        <span class="material-symbols-outlined absolute right-5 text-base-content/50">expand_more</span>
+                    </div>
+                    <ul tabindex="0" class="dropdown-content z-[2] menu p-2 shadow-lg bg-base-100 border border-base-200 rounded-box w-full max-h-64 flex-nowrap overflow-y-auto mt-2">
+                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('all', '所有大区', 'region_all')">所有大区</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('abruzzo', 'Abruzzo')">Abruzzo</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('basilicata', 'Basilicata')">Basilicata</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('calabria', 'Calabria')">Calabria</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('campania', 'Campania')">Campania</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('emilia_romagna', 'Emilia Romagna')">Emilia Romagna</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('friuli_venezia_giulia', 'Friuli Venezia Giulia')">Friuli Venezia Giulia</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('lazio', 'Lazio')">Lazio</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('liguria', 'Liguria')">Liguria</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('lombardia', 'Lombardia')">Lombardia</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('marche', 'Marche')">Marche</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('molise', 'Molise')">Molise</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('piemonte', 'Piemonte')">Piemonte</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('puglia', 'Puglia')">Puglia</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('sardegna', 'Sardegna')">Sardegna</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('sicilia', 'Sicilia')">Sicilia</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('toscana', 'Toscana')">Toscana</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('trentino_alto_adige', 'Trentino Alto Adige')">Trentino Alto Adige</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('umbria', 'Umbria')">Umbria</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('valle_d_aosta', 'Valle d\'Aosta')">Valle d'Aosta</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('veneto', 'Veneto')">Veneto</a></li>
+                    </ul>
+                </div>
+            </div>
+
+            <div id="rssResults" class="rss-container mt-10 text-left">
+                <div id="infoLoading" style="text-align: center; padding: 40px; display: none;">
+                    <span class="loading loading-spinner loading-lg text-primary"></span>
+                </div>
+                <div id="rssContent"></div>
+            </div>
+        </div>
+    </div>
+</BaseLayout>
