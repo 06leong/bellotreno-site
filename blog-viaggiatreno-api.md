@@ -1,12 +1,10 @@
-# ViaggiaTreno API 完全指南：逆向解析意大利铁路实时数据接口
-
-> **Caution：** 本文信息来自个人研究、社区逆向分析。非 FS（意大利国铁集团）官方文档。不保证信息的完整性和长期有效性。API 随时可能变更。
+# ViaggiaTreno API 介绍
+> **Caution：** 本文信息来自个人研究、社区分析。非 FS（意大利国铁集团）官方文档。不保证信息的完整性和长期有效性。API 随时可能变更。
 
 ## 什么是 ViaggiaTreno
 
-[ViaggiaTreno](http://www.viaggiatreno.it) 是FS集团Trenitalia运营的列车实时信息系统。它的 Web 前端通过一套 HTTP API 获取列车运行、车站时刻表、铁路公告等数据。
+[ViaggiaTreno](http://www.viaggiatreno.it/infomobilita/index.jsp) 是FS集团Trenitalia (包含Trenord,Trenitalai TPER,FSE,FondazioneFS/TTI)运营的列车实时信息系统。它的 Web 前端通过一套 HTTP API 获取列车运行、车站时刻表、铁路公告等数据。
 
-这套 API **没有官方公开文档**，但由于其前端 JavaScript 直接调用这些接口，已被广泛逆向使用。本文将积累的信息和做一些解析。
 
 ### Base URL
 
@@ -1722,19 +1720,6 @@ GET /datimeteo/{codiceRegione}
 | `domaniTempoPomeriggio` | int | 明日下午天气代码 |
 | `domaniTempoSera` | int | 明日晚间天气代码 |
 
-**天气代码映射（基于实测数据提取）：**
-
-| 代码 | 天气 | 夜间版本（+100） |
-|---|---|---|
-| 1 | 晴 | 101 |
-| 3 | 多云间晴 | 103 |
-| 4 | 阴天 | 104 |
-| 5 | 小雨 | 105 |
-| 8 | 局部多云 | 108 |
-| 9 | 阵雨 | 109 |
-| 10 | 中到大雨 | 110 |
-| 14 | 雾 | 114 |
-```
 
 ---
 
@@ -1897,93 +1882,43 @@ stateDiagram-v2
     部分取消 --> 该站取消: actualFermataType=3
 ```
 
-### 响应格式分布
-
-```mermaid
-pie title 端点响应格式分布（29个端点）
-    "application/json" : 21
-    "text/plain" : 8
-```
-
----
 
 ## 完整端点速查表
 
-| # | 端点 | 方法 | 响应格式 | 来源 |
+| # | 端点 | 方法 | 响应格式 | 
 |---|---|---|---|---|
-| 1 | `/cercaNumeroTrenoTrenoAutocomplete/{n}` | GET | text/plain | 社区+官方 |
-| 2 | `/cercaNumeroTreno/{n}` | GET | JSON | 官方JS |
-| 3 | `/andamentoTreno/{id}/{n}/{ts}` | GET | JSON | 社区+官方 |
-| 4 | `/tratteCanvas/{id}/{n}/{ts}` | GET | JSON | 社区+官方 |
-| 5 | `/autocompletaStazione/{text}` | GET | text/plain | 社区+官方 |
-| 6 | `/autocompletaStazioneNTS/{text}` | GET | text/plain | 官方JS |
-| 7 | `/autocompletaStazioneImpostaViaggio/{text}` | GET | text/plain | 官方JS |
-| 8 | `/cercaStazione/{text}` | GET | JSON | 社区+官方 |
-| 9 | `/partenze/{id}/{dt}` | GET | JSON | 社区+官方 |
-| 10 | `/arrivi/{id}/{dt}` | GET | JSON | 社区+官方 |
-| 11 | `/regione/{id}` | GET | int | 社区+官方 |
-| 12 | `/dettaglioStazione/{id}/{reg}` | GET | JSON | 社区+官方 |
-| 13 | `/getCoordinateStazione/{id}` | GET | JSON | 官方JS |
-| 14 | `/coordinateCitta/{id}` | GET | JSON | 官方JS |
-| 15 | `/elencoStazioni/{reg}` | GET | JSON | 社区+官方 |
-| 16 | `/elencoStazioniCitta/{stazione}` | GET | JSON | 官方JS |
-| 17 | `/elencoTratte/{reg}/{zoom}/{cat}/{av}/{ts}` | GET | JSON | 官方JS |
-| 18 | `/dettagliTratta/{reg}/{ab}/{ba}/{cat}/{av}` | GET | JSON | 官方JS |
-| 19 | `/dettaglioViaggio/{from}/{to}` | GET | JSON | 官方JS |
-| 20 | `/news/{codRegione}/{lingua}` | GET | JSON | 官方JS |
-| 21 | `/infomobilitaTicker` | GET | text/plain | 官方JS |
-| 22 | `/infomobilitaRSS/{isInfoLavori}` | GET | text/plain | 官方JS |
-| 23 | `/infomobilitaRSSBox/{isInfoLavori}` | GET | text/plain | 官方JS |
-| 24 | `/language/{idLingua}` | GET | JSON | 官方JS |
-| 25 | `/property/{name}` | GET | text/plain | 官方JS |
-| 26 | `/statistiche/{timestamp}` | GET | JSON | 官方JS |
-| 27 | `/datimeteo/{codiceRegione}` | GET | JSON | 官方JS |
+| 1 | `/cercaNumeroTrenoTrenoAutocomplete/{n}` | GET | text/plain | 
+| 2 | `/cercaNumeroTreno/{n}` | GET | JSON |
+| 3 | `/andamentoTreno/{id}/{n}/{ts}` | GET | JSON | 
+| 4 | `/tratteCanvas/{id}/{n}/{ts}` | GET | JSON | 
+| 5 | `/autocompletaStazione/{text}` | GET | text/plain | 
+| 6 | `/autocompletaStazioneNTS/{text}` | GET | text/plain | 
+| 7 | `/autocompletaStazioneImpostaViaggio/{text}` | GET | text/plain | 
+| 8 | `/cercaStazione/{text}` | GET | JSON | 
+| 9 | `/partenze/{id}/{dt}` | GET | JSON | 
+| 10 | `/arrivi/{id}/{dt}` | GET | JSON | 
+| 11 | `/regione/{id}` | GET | int | 
+| 12 | `/dettaglioStazione/{id}/{reg}` | GET | JSON | 
+| 13 | `/getCoordinateStazione/{id}` | GET | JSON | 
+| 14 | `/coordinateCitta/{id}` | GET | JSON | 
+| 15 | `/elencoStazioni/{reg}` | GET | JSON |
+| 16 | `/elencoStazioniCitta/{stazione}` | GET | JSON | 
+| 17 | `/elencoTratte/{reg}/{zoom}/{cat}/{av}/{ts}` | GET | JSON |
+| 18 | `/dettagliTratta/{reg}/{ab}/{ba}/{cat}/{av}` | GET | JSON | 
+| 19 | `/dettaglioViaggio/{from}/{to}` | GET | JSON | 
+| 20 | `/news/{codRegione}/{lingua}` | GET | JSON | 
+| 21 | `/infomobilitaTicker` | GET | text/plain |
+| 22 | `/infomobilitaRSS/{isInfoLavori}` | GET | text/plain |
+| 23 | `/infomobilitaRSSBox/{isInfoLavori}` | GET | text/plain |
+| 24 | `/language/{idLingua}` | GET | JSON | 
+| 25 | `/property/{name}` | GET | text/plain | 
+| 26 | `/statistiche/{timestamp}` | GET | JSON | 
+| 27 | `/datimeteo/{codiceRegione}` | GET | JSON | 
 | 28 | `[News] /smartcaring` | GET | JSON | 官方JS |
 | 29 | `[News] /infomobility` | GET | JSON | 官方JS |
-| ~~30~~ | ~~/soluzioniViaggioNew/{from}/{to}/{dt}~~ | ~~GET~~ | ~~JSON~~ | ~~已停用~~ |
 
----
 
-## 坐标 API 对比
 
-| API | 坐标 | 站名 | 大区 | 城市名 | 地图配置 | 需要大区代码？ |
-|---|---|---|---|---|---|---|
-| `getCoordinateStazione` | ✅ | ❌ | ❌ | ❌ | ❌ | 否 |
-| `coordinateCitta` | ✅ | ❌ | ❌ | ❌ | ❌ | 否 |
-| `dettaglioStazione` | ✅ | ✅ | ✅ | ✅ | ✅ | **是** |
-
----
-
-## 编组方向（Orientamento）解码
-
-`orientamento` 字段和 `compOrientamento` 数组揭示了列车的编组方向信息：
-
-| `orientamento` 值 | `compOrientamento[0]`（意大利语） | `compOrientamento[7]`（中文） | 含义 |
-|---|---|---|---|
-| `"A"` | `"Executive in coda"` | `"Executive在后几节车厢"` | 商务/Executive 车厢在列车尾部 |
-| `"B"` | `"Executive in testa"` | `"Executive在前几节车厢"` | 商务/Executive 车厢在列车头部 |
-| `null` | `"--"` | `"--"` | 无编组方向信息（REG/IC 等通常无此数据） |
-
-> 仅 `tipoProdotto: "100"` 的高速列车（FR/FA/FB）会返回编组方向，`tipoProdotto: "0"` 的普通列车（REG/IC）始终为 null/`"--"`。`fermate` 数组中各站的 `orientamento` 可能不同，因为列车在途中可能折返（如罗马停靠后反向行驶）。
-
----
-
-## 开发注意事项
-
-1. **CORS 限制**：浏览器端无法直接调用，需通过服务端代理（如 Cloudflare Workers、Nginx 反代）
-2. **无速率限制文档**：建议合理控制请求频率，添加 debounce/throttle
-3. **数据时效性**：`andamentoTreno` 仅返回当天数据
-4. **夜行列车限制**：跨午夜列车数据可能不完整
-5. **字段一致性差**：出发表 `origine` 为 null，到达表 `destinazione` 为 null
-6. **`compOrarioEffettivoArrivo` 格式异常**：在时间前拼接了图标路径，需正则提取
-7. **无维护承诺**：`soluzioniViaggioNew` 已于 2024 年停用就是先例
-8. **时间参数格式严格**：`partenze`/`arrivi` 必须符合 JS `Date.toString()` 格式，含正确夏令时偏移
-9. **SmartCaring 数据量**：返回全部历史通知，需按 `startValidity` 筛选当天
-10. **`language` 端点不区分语言**：所有语言代码返回相同的英文翻译
-
----
-
-## 相关资源
 
 - [ViaggiaTreno 官网](http://www.viaggiatreno.it)
 - [rest-jsapi 官方 JS 存根](http://www.viaggiatreno.it/infomobilitamobile/rest-jsapi)
