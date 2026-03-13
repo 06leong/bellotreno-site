@@ -630,7 +630,7 @@ GET /andamentoTreno/{idStazione}/{numeroTreno}/{timestamp}
 | `ritardo` | int | 综合延误（分钟） | `1` | `3` | `-1` |
 | `ritardoPartenza` | int | 出发延误（分钟） | `1` | `3` | `0` |
 | `ritardoArrivo` | int | 到达延误（分钟，负=提前） | `0` | `3` | `-1` |
-| `progressivo` | int | 公里进度（1=始发，100=终到。可超过 100） | `1` | `110` | `119` |
+| `progressivo` | int | 进度(可能为经过检测点数) | `1` | `110` | `119` |
 | `orientamento` | string/null | 该站的编组方向 | `"A"` | `"B"` | `"B"` |
 | `binarioProgrammatoPartenzaDescrizione` | string/null | 计划出发站台号 | `"8"` | `"21"` | `null` |
 | `binarioEffettivoPartenzaDescrizione` | string/null | 实际出发站台号 | `"8"` | `"17"` | `null` |
@@ -651,7 +651,6 @@ GET /andamentoTreno/{idStazione}/{numeroTreno}/{timestamp}
 | `arrivoTeoricoZero` | long/null | 原始理论到达（总为 null） | `null` | `null` | `null` |
 | `materiale_label` | string/null | 车辆型号标签（总为 null） | `null` | `null` | `null` |
 
-> **关键规律：** 始发站（`tipoFermata: "P"`）仅有出发时间，`arrivoReale`/`arrivo_teorico` 为 null；终到站（`tipoFermata: "A"`）仅有到达时间，`partenzaReale`/`partenza_teorica` 为 null。`progressivo` 并非严格 0-100，实测 FR 9505 终到站为 119。
 
 **延误等级与图标映射（基于实测 `compImgRitardo` / `compClassRitardoTxt`）：**
 
