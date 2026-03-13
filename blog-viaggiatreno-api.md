@@ -1870,7 +1870,7 @@ stateDiagram-v2
 ## 完整端点速查表
 
 | # | 端点 | 方法 | 响应格式 | 
-|---|---|---|---|---|
+|---|---|---|---|
 | 1 | `/cercaNumeroTrenoTrenoAutocomplete/{n}` | GET | text/plain | 
 | 2 | `/cercaNumeroTreno/{n}` | GET | JSON |
 | 3 | `/andamentoTreno/{id}/{n}/{ts}` | GET | JSON | 
