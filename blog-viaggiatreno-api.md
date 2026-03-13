@@ -652,18 +652,6 @@ GET /andamentoTreno/{idStazione}/{numeroTreno}/{timestamp}
 | `materiale_label` | string/null | 车辆型号标签（总为 null） | `null` | `null` | `null` |
 
 
-**延误等级与图标映射（基于实测 `compImgRitardo` / `compClassRitardoTxt`）：**
-
-| 延误范围 | `compImgRitardo` 图标 | `compClassRitardoTxt` | `compClassRitardoLine` | 含义 |
-|---|---|---|---|---|
-| 未出发 | `nonpartito.png` | `null` | `null` | 尚未出发 |
-| -∞ ~ 0 min | `regolare.png` | `""` | `regolare_line` | 准点或提前 |
-| 1 ~ 10 min | `regolare.png` | `""` | `regolare_line` | 轻微延误（仍显示为"正常"） |
-| 11 ~ 30 min | `ritardo01.png` | `"ritardo01_txt"` | `"ritardo01_line"` | 中等延误 |
-| 31+ min | `ritardo02.png` | `"ritardo02_txt"` | `"ritardo02_line"` | 严重延误 |
-| 检测失败 | `alert3.png` | — | — | 列车位置无法检测（`compRitardo[0]` = `"Mancato rilevamento"`） |
-
-> **"Mancato rilevamento"（检测失败）状态：** 列车在运行中但 GPS/信号系统暂时无法定位。此时 `ritardo` 字段值可能不准确。实测 FR 8814 从 Lecce 出发时出现此状态，`compRitardo` 的非IT语言部分可能为 `null`。
 
 **时间精度：** 所有时间戳向下取整至 30 秒，延误为整数分钟（向上取整）。
 
@@ -827,7 +815,7 @@ GET /cercaStazione/{text}
 | `label` | string/null | 城市标签（仅主要车站有值） | `"Trieste"` / `null` |
 | `id` | string | 车站代码 | `"S03317"` |
 
-> `label` 字段规律：只有每个城市的主要车站（中央站、机场站）有 `label` 值，小站为 `null`。可用于判断车站重要性。
+
 
 ---
 
@@ -1071,11 +1059,8 @@ Thu%20Mar%2012%202026%2013:31:00%20GMT%2B0100
 | `compInStazionePartenza` | string[9] | string[9] | 在站出发状态（9语言）：`["Partito","Departed",...]` |
 | `compInStazioneArrivo` | string[9] | string[9] | 在站到达状态（9语言）：`["Arrivato","Arrived",...]` |
 
-> **`compOrarioEffettivoArrivo` 格式异常：** 到达表中该字段将图标路径与时间拼接：`"/vt_static/img/.../regolare.png13:48"`。提取实际时间需正则：`/(\d{2}:\d{2})$/`。
 
 > **`categoria` 字段的陷阱：** FR 列车的 `categoria` 为空字符串 `""`，而 `categoriaDescrizione` 为 `" FR"`（注意前导空格）。EC Frecciarossa 的 `categoriaDescrizione` 为 `"EC FR"`。判断列车类别应优先使用 `compNumeroTreno`。
-
-> **`tipoProdotto` 的含义：** `"100"` 表示高速/商务列车（Frecciarossa 等），`"0"` 表示普通列车（REG/IC 等）。可用于区分是否需要显示编组方向。
 
 ---
 
@@ -1188,7 +1173,7 @@ GET /dettaglioStazione/{idStazione}/{codiceRegione}
 | `dettZoomStaz[].pinpointVisibile` | bool | 标注点是否可见 | `true` |
 | `dettZoomStaz[].labelVisibile` | bool | 文字标签是否可见 | `true` |
 
-`dettZoomStaz` 控制在地图上该站标注从多大缩放级别开始显示（小站只在高缩放时可见）。
+
 
 ---
 
@@ -1228,7 +1213,7 @@ GET /getCoordinateStazione/{codStazione}
 
 ---
 
-#### 城市坐标
+#### 简洁车站坐标
 
 ```
 GET /coordinateCitta/{codStazione}
@@ -1563,7 +1548,7 @@ GET /resteasy/news/smartcaring
 | 施工 | `lavori di manutenzione programmati` |
 | 系统故障 | `Causa guasto sistemi` |
 
-> **注意：** SmartCaring 返回的是该车次**全部历史通知**（非仅当天），数据量可能很大（FR 9505 返回了 68 KB）。筛选当天通知需用 `startValidity` 与当天零时做比较。
+> **注意：** SmartCaring 返回的是该车次**全部历史通知**（非仅当天），数据量可能很大。筛选当天通知需用 `startValidity` 与当天零时做比较。
 
 ---
 
@@ -1917,9 +1902,3 @@ stateDiagram-v2
 | 29 | `[News] /infomobility` | GET | JSON | 官方JS |
 
 
-
-
-- [ViaggiaTreno 官网](http://www.viaggiatreno.it)
-- [rest-jsapi 官方 JS 存根](http://www.viaggiatreno.it/infomobilitamobile/rest-jsapi)
-- [TrainMonitor Demo（Python 用例）](https://github.com/roughconsensusandrunningcode/TrainMonitor/blob/master/demo-trainstatus.py)
-- [sabas/trenitalia（大区编码表）](https://github.com/sabas/trenitalia/blob/master/regioni.tsv)
