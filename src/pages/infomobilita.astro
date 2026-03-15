@@ -12,12 +12,12 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
             <div class="infomobilita-controls flex flex-col items-center gap-6">
                 <div class="flex justify-center mx-auto w-[480px] max-w-full bg-base-200/50 p-1 rounded-full border border-base-200 shadow-sm backdrop-blur">
-                    <button id="modeUpdatesBtn" class="mode-button mode-left active relative flex-1 flex items-center justify-center gap-1.5 py-2 px-4 text-sm font-medium rounded-full cursor-pointer transition-all"
+                    <button id="modeUpdatesBtn" class="board-tab active flex-1 flex items-center justify-center gap-1.5 py-2 px-4 text-sm font-medium rounded-full cursor-pointer transition-all"
                         onclick="switchInfoMode('updates')">
                         <span class="material-symbols-outlined text-[1.25rem]">dynamic_feed</span>
                         <span data-i18n="info_updates">实时更新</span>
                     </button>
-                    <button id="modeNoticesBtn" class="mode-button mode-right relative flex-1 flex items-center justify-center gap-1.5 py-2 px-4 text-sm font-medium rounded-full cursor-pointer transition-all" 
+                    <button id="modeNoticesBtn" class="board-tab flex-1 flex items-center justify-center gap-1.5 py-2 px-4 text-sm font-medium rounded-full cursor-pointer transition-all" 
                         onclick="switchInfoMode('notices')">
                         <span class="material-symbols-outlined text-[1.25rem]">campaign</span>
                         <span data-i18n="info_notices">旅行者须知</span>

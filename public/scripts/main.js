@@ -12,6 +12,22 @@ let disambiguationData = null;
 
 const API_BASE = window.API_BASE;
 
+async function fetchStatistiche() {
+    try {
+        const res = await fetch(API_BASE + '/statistiche/0');
+        if (!res.ok) return;
+        const data = await res.json();
+        const circolanti = document.getElementById('statsCircolanti');
+        const giorno = document.getElementById('statsGiorno');
+        const bar = document.getElementById('statsBar');
+        if (circolanti) circolanti.textContent = data.treniCircolanti.toLocaleString();
+        if (giorno) giorno.textContent = data.treniGiorno.toLocaleString();
+        if (bar) bar.classList.remove('opacity-0');
+    } catch (e) {
+        console.error('Stats fetch failed:', e);
+    }
+}
+
 
 
 
@@ -32,21 +48,6 @@ function updateSearchLabel() {
 
 function switchSearchMode(mode) {
     searchMode = mode;
-
-
-    const trainBtn = document.getElementById('modeTrainBtn');
-    const stationBtn = document.getElementById('modeStationBtn');
-
-    if (trainBtn && stationBtn) {
-        if (mode === 'train') {
-            trainBtn.classList.add('active');
-            stationBtn.classList.remove('active');
-        } else {
-            trainBtn.classList.remove('active');
-            stationBtn.classList.add('active');
-        }
-    }
-
 
     updateSearchLabel();
 
@@ -694,6 +695,7 @@ function initApp() {
 
 document.addEventListener('DOMContentLoaded', () => {
     initApp();
+    fetchStatistiche();
 
 
     document.getElementById('trainSearch').addEventListener('keydown', async (e) => {

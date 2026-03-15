@@ -5,15 +5,27 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 <BaseLayout title="BelloTreno - Station" pageScripts={["/scripts/station.js"]}>
     <div class="w-full max-w-[850px] mx-auto px-4 flex flex-col items-center overflow-x-hidden">
         <div class="w-full text-center mt-20 md:mt-24 mb-6">
-            <h1 class="text-3xl md:text-4xl font-bold text-primary mb-6 leading-normal px-2" id="stationName">--</h1>
+            <h1 class="text-3xl md:text-4xl font-bold text-primary mb-2 leading-normal px-2" id="stationName">--</h1>
+
+            <div id="weatherBar" class="flex items-center justify-center gap-2 sm:gap-3 mb-4 text-xs sm:text-sm text-base-content/60 transition-opacity duration-500 opacity-0">
+                <span class="material-symbols-outlined text-[1.3rem]">device_thermostat</span>
+                <span><span data-i18n="weather_current">当前</span> <span id="weatherTemp" class="font-medium">--</span></span>
+                <span class="text-base-content/20">|</span>
+                <div class="flex items-center gap-2 sm:gap-3">
+                    <span><span data-i18n="weather_am">上午</span> <span id="weatherAM">--</span></span>
+                    <span><span data-i18n="weather_pm">下午</span> <span id="weatherPM">--</span></span>
+                    <span><span data-i18n="weather_eve">晚间</span> <span id="weatherEve">--</span></span>
+                </div>
+            </div>
+
             <div class="flex justify-center mx-auto mb-4 w-[280px] bg-base-200/50 p-1 rounded-full border border-base-200 shadow-sm backdrop-blur">
-                <button class="mode-button mode-left active relative flex-1 flex items-center justify-center gap-1.5 py-2 px-4 text-sm font-medium rounded-full cursor-pointer transition-all" id="btnPartenze"
+                <button class="board-tab active flex-1 flex items-center justify-center gap-1.5 py-2 px-4 text-sm font-medium rounded-full cursor-pointer transition-all" id="btnPartenze"
                     onclick="switchBoardType('partenze')">
-                    <span class="material-symbols-outlined text-[1.25rem]">train</span>
+                    <span class="material-symbols-outlined text-[1.25rem]">departure_board</span>
                     <span data-i18n="departures">离站</span>
                 </button>
-                <button class="mode-button mode-right relative flex-1 flex items-center justify-center gap-1.5 py-2 px-4 text-sm font-medium rounded-full cursor-pointer transition-all" id="btnArrivi" onclick="switchBoardType('arrivi')">
-                    <span class="material-symbols-outlined text-[1.25rem]">train</span>
+                <button class="board-tab flex-1 flex items-center justify-center gap-1.5 py-2 px-4 text-sm font-medium rounded-full cursor-pointer transition-all" id="btnArrivi" onclick="switchBoardType('arrivi')">
+                    <span class="material-symbols-outlined text-[1.25rem]">directions_railway</span>
                     <span data-i18n="arrivals">到站</span>
                 </button>
             </div>
@@ -166,6 +178,31 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             });
         }
 
+        async function fetchStationWeather(stationId) {
+            const apiBase = window.API_BASE;
+            try {
+                const regRes = await fetch(apiBase + '/regione/' + stationId);
+                if (!regRes.ok) return;
+                const codReg = parseInt(await regRes.text());
+                if (isNaN(codReg)) return;
+
+                const meteoRes = await fetch(apiBase + '/datimeteo/' + codReg);
+                if (!meteoRes.ok) return;
+                const meteoData = await meteoRes.json();
+
+                const stationWeather = meteoData[stationId];
+                if (!stationWeather) return;
+
+                document.getElementById('weatherTemp').textContent = stationWeather.oggiTemperatura + '°C';
+                document.getElementById('weatherAM').textContent = stationWeather.oggiTemperaturaMattino + '°';
+                document.getElementById('weatherPM').textContent = stationWeather.oggiTemperaturaPomeriggio + '°';
+                document.getElementById('weatherEve').textContent = stationWeather.oggiTemperaturaSera + '°';
+                document.getElementById('weatherBar').classList.remove('opacity-0');
+            } catch (e) {
+                console.error('Weather fetch failed:', e);
+            }
+        }
+
         function initPage() {
             const params = new URLSearchParams(window.location.search);
             currentStationId = params.get('id') || '';
@@ -183,6 +220,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             document.getElementById('btnArrivi').classList.toggle('active', currentBoardType === 'arrivi');
 
             loadStationBoard();
+            fetchStationWeather(currentStationId);
         }
 
         initPage();

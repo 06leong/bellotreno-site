@@ -114,77 +114,29 @@ body::after {
     overflow-x: hidden;
 }
 
-/* ===== Mode Toggle Buttons ===== */
+/* ===== Board Tab Buttons ===== */
 
-.mode-button {
-    font-family: 'Roboto', 'Noto Sans SC', sans-serif;
-    font-size: 0.9rem;
-    font-weight: 500;
-    padding: 10px 20px;
-    border: 2px solid var(--color-base-content);
+.board-tab {
     background: transparent;
     color: var(--color-base-content);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-    position: relative;
-    overflow: hidden;
-    flex: 1;
+    border: none;
+    opacity: 0.5;
 }
 
-.mode-button .material-symbols-outlined {
-    font-size: 20px;
-}
-
-.mode-button.mode-left {
-    border-radius: 20px 0 0 20px;
-    border-right: none;
-}
-
-.mode-button.mode-right {
-    border-radius: 0 20px 20px 0;
-}
-
-.mode-button.active {
-    background: var(--color-base-content);
-    color: var(--color-base-100);
-    border-color: var(--color-base-content);
-    box-shadow: 0 4px 12px color-mix(in oklch, var(--color-base-content) 30%, transparent);
-}
-
-.mode-button.active .material-symbols-outlined {
-    color: var(--color-base-100);
-}
-
-.mode-button:hover:not(.active) {
+.board-tab:hover {
+    opacity: 0.8;
     background: color-mix(in oklch, var(--color-base-content) 8%, transparent);
 }
 
-.mode-button::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 0;
-    height: 0;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.4);
-    transform: translate(-50%, -50%);
-    transition: width 0.6s, height 0.6s;
-    pointer-events: none;
+.board-tab.active {
+    opacity: 1;
+    background: var(--color-primary);
+    color: var(--color-primary-content);
+    box-shadow: 0 2px 8px color-mix(in oklch, var(--color-primary) 40%, transparent);
 }
 
-[data-theme="light"] .mode-button::after {
-    background: rgba(0, 0, 0, 0.1);
-}
-
-.mode-button:active::after {
-    width: 200px;
-    height: 200px;
-    transition: width 0s, height 0s;
+.board-tab.active .material-symbols-outlined {
+    color: var(--color-primary-content);
 }
 
 /* ===== Recent Searches ===== */
@@ -396,26 +348,33 @@ body::after {
     justify-content: space-between;
     align-items: flex-end;
     gap: 20px;
-    flex-wrap: wrap;
+}
+
+.train-info-wrapper > div:first-child {
+    flex: 1;
+    min-width: 0;
 }
 
 .train-route {
-    font-size: 2rem;
+    font-size: 1.6rem;
     font-weight: 800;
     color: var(--color-base-content);
     letter-spacing: -0.5px;
-    word-wrap: break-word;
+    overflow-wrap: break-word;
+    word-break: break-word;
 }
 
 .train-meta {
     font-size: 1rem;
     color: var(--color-base-content);
     margin-top: 8px;
-    word-wrap: break-word;
+    overflow-wrap: break-word;
 }
 
 .train-status-section {
     text-align: right;
+    flex-shrink: 0;
+    max-width: 40%;
 }
 
 .train-delay {
@@ -861,15 +820,6 @@ footer span {
         padding: 70px 12px 12px;
     }
 
-    .mode-button {
-        font-size: 0.85rem;
-        padding: 8px 16px;
-    }
-
-    .mode-button .material-symbols-outlined {
-        font-size: 18px;
-    }
-
     .recent-searches-container {
         margin-top: 12px;
         padding: 10px 0;
@@ -947,6 +897,7 @@ footer span {
     .train-status-section {
         text-align: left;
         width: 100%;
+        max-width: 100%;
     }
 
     .train-delay {
@@ -1018,16 +969,6 @@ footer span {
 /* ===== Responsive: Small Phone ===== */
 
 @media (max-width: 480px) {
-    .mode-button {
-        font-size: 0.8rem;
-        padding: 6px 12px;
-        gap: 4px;
-    }
-
-    .mode-button .material-symbols-outlined {
-        font-size: 16px;
-    }
-
     .train-route {
         font-size: 1.2rem;
     }
