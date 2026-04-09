@@ -8,9 +8,11 @@ let currentTrainData = null;
 let currentTriple = null;
 let searchMode = 'train';
 let disambiguationData = null;
+let currentSmartCaringData = null;
 
 
 const API_BASE = window.API_BASE;
+const NOTIFY_BASE = window.NOTIFY_BASE;
 
 async function fetchStatistiche() {
     try {
@@ -60,6 +62,9 @@ function switchSearchMode(mode) {
     const disambiguation = document.getElementById('disambiguation');
     if (results) results.style.display = 'none';
     if (disambiguation) disambiguation.style.display = 'none';
+    currentSmartCaringData = null;
+    const scCard = document.getElementById('smartCaringCard');
+    if (scCard) scCard.style.display = 'none';
 }
 
 
@@ -76,6 +81,9 @@ window.onLanguageChanged = function () {
 
     if (currentTrainData) {
         render(currentTrainData);
+    }
+    if (currentSmartCaringData) {
+        renderSmartCaring(currentSmartCaringData);
     }
 };
 
@@ -445,6 +453,9 @@ function showStationDisambiguation(stations) {
 
 async function fetchDetails(triple) {
     currentTriple = triple;
+    currentSmartCaringData = null;
+    const scCard = document.getElementById('smartCaringCard');
+    if (scCard) scCard.style.display = 'none';
     const [tNum, originID, ts] = triple.split('-');
     try {
         const res = await fetch(`${API_BASE}/andamentoTreno/${originID}/${tNum}/${ts}`);
@@ -457,6 +468,7 @@ async function fetchDetails(triple) {
         const data = await res.json();
         currentTrainData = data;
         render(data);
+        fetchSmartCaring(data.numeroTreno);
 
 
         const trainNumber = `${data.compCategoria || ''} ${data.numeroTreno || tNum}`.trim();
@@ -683,6 +695,177 @@ function render(data) {
 }
 
 
+async function fetchSmartCaring(trainNumber) {
+    const card = document.getElementById('smartCaringCard');
+    if (!card || !NOTIFY_BASE) return;
+
+    card.style.display = 'block';
+    const t = translations[currentLang];
+    card.innerHTML = `<div class="sc-loading"><span class="loading loading-spinner loading-sm text-primary"></span><span>${t.sc_loading}</span></div>`;
+
+    try {
+        const res = await fetch(`${NOTIFY_BASE}?train=${trainNumber}`);
+        if (!res.ok) throw new Error('API error');
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        currentSmartCaringData = data;
+        renderSmartCaring(data);
+    } catch (e) {
+        console.error('SmartCaring fetch failed:', e);
+        card.style.display = 'none';
+        currentSmartCaringData = null;
+    }
+}
+
+function getShortMonth(date, lang) {
+    const m = date.getMonth();
+    const zh = ['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
+    const en = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const it = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+    if (lang === 'zh') return zh[m];
+    return lang === 'it' ? it[m] : en[m];
+}
+
+function renderSmartCaring(data) {
+    const card = document.getElementById('smartCaringCard');
+    if (!card || !data) return;
+
+    const t = translations[currentLang];
+
+    const hasToday = data.today && data.today.length > 0;
+    const hasRecent = data.recent && data.recent.length > 0;
+    let notifTitle = hasToday ? t.sc_today : t.sc_recent;
+    let notifHTML = '';
+
+    if (hasToday) {
+        const notes = data.today.map(n => {
+            const time = new Date(n.insertTimestamp).toLocaleTimeString('it-IT', {
+                hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome'
+            });
+            return `<div class="sc-note"><span class="sc-note-time">${time}</span><span class="sc-note-text">${n.infoNote}</span></div>`;
+        }).join('');
+        notifHTML = `<div class="sc-notes-list">${notes}</div>`;
+    } else if (hasRecent) {
+        const notes = data.recent.map(n => {
+            const d = new Date(n.insertTimestamp);
+            const dateStr = d.toLocaleDateString(currentLang === 'zh' ? 'zh-CN' : currentLang === 'it' ? 'it-IT' : 'en-GB', {
+                month: '2-digit', day: '2-digit', timeZone: 'Europe/Rome'
+            });
+            const time = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' });
+            return `<div class="sc-note"><span class="sc-note-time">${dateStr} ${time}</span><span class="sc-note-text">${n.infoNote}</span></div>`;
+        }).join('');
+        notifHTML = `<div class="sc-notes-list">${notes}</div>`;
+    } else {
+        notifHTML = `<div class="sc-empty"><span class="material-symbols-outlined" style="font-size:1.1rem;vertical-align:middle;margin-right:4px">check_circle</span>${t.sc_no_today}</div>`;
+    }
+
+    const now = new Date();
+    const days = [];
+    for (let i = 13; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - i);
+        const dateKey = d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
+        const histDay = data.history ? data.history.find(h => h.date === dateKey) : null;
+        days.push({
+            date: d,
+            dateKey,
+            delay: histDay ? histDay.maxDelay : 0,
+            notifications: histDay ? histDay.notifications : 0,
+            reasons: histDay ? histDay.reasons : []
+        });
+    }
+
+    const maxDelay = Math.max(...days.map(d => d.delay), 1);
+
+    const chartHTML = days.map(d => {
+        const barHeight = d.delay > 0 ? Math.max(18, Math.round((d.delay / maxDelay) * 48) + 8) : 6;
+        let colorClass = 'sc-level-0';
+        if (d.delay > 30) colorClass = 'sc-level-3';
+        else if (d.delay > 15) colorClass = 'sc-level-2';
+        else if (d.delay > 0) colorClass = 'sc-level-1';
+
+        const dayNum = d.date.getDate();
+        const monthAbbr = getShortMonth(d.date, currentLang);
+        const tipDelay = d.delay > 0 ? `+${d.delay}min` : 'OK';
+        const tipReason = (d.delay > 0 && d.reasons.length) ? d.reasons[0] : '';
+
+        return `<div class="sc-bar-col" data-delay="${tipDelay}" data-reason="${tipReason}" onclick="toggleScTooltip(event,this)"><div class="sc-bar ${colorClass}" style="height:${barHeight}px"></div><span class="sc-bar-label">${dayNum}<br><span class="sc-bar-month">${monthAbbr}</span></span></div>`;
+    }).join('');
+
+    const stats = data.stats;
+    let statsHTML = '';
+    if (stats.disruptedDays === 0) {
+        statsHTML = `<div class="sc-all-clear"><span class="material-symbols-outlined">verified</span><span>${t.sc_all_clear}</span></div>`;
+    } else {
+        const rateColor = stats.onTimeRate >= 70 ? 'var(--color-info)' : stats.onTimeRate >= 40 ? 'var(--color-warning)' : 'var(--color-error)';
+        statsHTML = `
+            <div class="sc-stats-row">
+                <div class="sc-stat"><span class="sc-stat-value" style="color:${rateColor}">${stats.onTimeRate}%</span><span class="sc-stat-label">${t.sc_ontime_rate}</span></div>
+                <div class="sc-stat"><span class="sc-stat-value">${stats.disruptedDays}/${stats.totalDays}</span><span class="sc-stat-label">${t.sc_disrupted}</span></div>
+                <div class="sc-stat"><span class="sc-stat-value">${stats.avgDelay}<small>min</small></span><span class="sc-stat-label">${t.sc_avg_delay}</span></div>
+                <div class="sc-stat"><span class="sc-stat-value">${stats.maxDelay}<small>min</small></span><span class="sc-stat-label">${t.sc_max_delay}</span></div>
+            </div>`;
+    }
+
+    const wasCollapsed = card.querySelector('.sc-body-wrap.sc-collapsed') !== null;
+
+    card.innerHTML = `
+        <div class="sc-header" onclick="this.nextElementSibling.classList.toggle('sc-collapsed');this.querySelector('.sc-toggle').classList.toggle('sc-rotated');hideScTooltip()">
+            <span class="material-symbols-outlined">monitoring</span>
+            <span>${t.sc_title}</span>
+            <span class="material-symbols-outlined sc-toggle${wasCollapsed ? '' : ' sc-rotated'}">expand_more</span>
+        </div>
+        <div class="sc-body-wrap${wasCollapsed ? ' sc-collapsed' : ''}">
+            <div class="sc-body">
+                <div class="sc-today-section"><div class="sc-section-title">${notifTitle}</div>${notifHTML}</div>
+                <div class="sc-history-section"><div class="sc-section-title">${t.sc_history}</div><div class="sc-chart">${chartHTML}</div></div>
+                ${statsHTML}
+            </div>
+        </div>`;
+    card.style.display = 'block';
+}
+
+function toggleScTooltip(e, col) {
+    e.stopPropagation();
+    const tooltip = document.getElementById('scTooltip');
+    if (!tooltip) return;
+
+    const wasActive = col.classList.contains('sc-active');
+    col.closest('.sc-chart').querySelectorAll('.sc-bar-col').forEach(c => c.classList.remove('sc-active'));
+    if (wasActive) { hideScTooltip(); return; }
+
+    col.classList.add('sc-active');
+
+    const delay = col.dataset.delay || 'OK';
+    const reason = col.dataset.reason || '';
+    tooltip.innerHTML = `<span>${delay}</span>` + (reason ? `<span class="sc-tooltip-reason">${reason}</span>` : '');
+
+    const bar = col.querySelector('.sc-bar');
+    const rect = bar.getBoundingClientRect();
+
+    tooltip.classList.add('sc-tooltip-show');
+
+    requestAnimationFrame(() => {
+        const tw = tooltip.offsetWidth;
+        const th = tooltip.offsetHeight;
+        let left = rect.left + rect.width / 2 - tw / 2;
+        left = Math.max(8, Math.min(left, window.innerWidth - tw - 8));
+        tooltip.style.left = left + 'px';
+        tooltip.style.top = (rect.top - th - 8) + 'px';
+    });
+}
+
+function hideScTooltip() {
+    const tooltip = document.getElementById('scTooltip');
+    if (tooltip) tooltip.classList.remove('sc-tooltip-show');
+    document.querySelectorAll('.sc-bar-col.sc-active').forEach(c => c.classList.remove('sc-active'));
+}
+
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.sc-bar-col')) hideScTooltip();
+});
+window.addEventListener('scroll', hideScTooltip, { passive: true });
+window.addEventListener('resize', hideScTooltip);
 
 
 function initApp() {

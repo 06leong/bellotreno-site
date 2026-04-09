@@ -3,6 +3,7 @@
  */
 
 window.API_BASE = "https://ah.bellotreno.workers.dev/?url=https://www.viaggiatreno.it/infomobilita/resteasy/viaggiatreno";
+window.NOTIFY_BASE = "https://notify.bellotreno.workers.dev";
 
 const CLIENT_MAP = {
     1: "Trenitalia",
