@@ -873,11 +873,21 @@ footer span {
     line-height: 1.5;
 }
 
-.sc-note-time {
+.sc-note-time,
+.sc-note-date {
     font-weight: 700;
     color: var(--color-primary);
     flex-shrink: 0;
     white-space: nowrap;
+}
+
+.sc-note-clock {
+    font-weight: 600;
+    color: var(--color-base-content);
+    opacity: 0.5;
+    flex-shrink: 0;
+    white-space: nowrap;
+    margin-left: -5px;
 }
 
 .sc-note-text {

@@ -9,6 +9,7 @@ let currentTriple = null;
 let searchMode = 'train';
 let disambiguationData = null;
 let currentSmartCaringData = null;
+let currentTrainCategory = '';
 
 
 const API_BASE = window.API_BASE;
@@ -468,6 +469,7 @@ async function fetchDetails(triple) {
         const data = await res.json();
         currentTrainData = data;
         render(data);
+        currentTrainCategory = resolveTrainCategory(data);
         fetchSmartCaring(data.numeroTreno);
 
 
@@ -695,9 +697,41 @@ function render(data) {
 }
 
 
+const SC_SKIP_CATS = ['IC', 'ICN', 'EC', 'EN'];
+const SC_FULL_CATS = ['FR', 'FA', 'FB'];
+const DESC_TO_CAT = {
+    'FRECCIAROSSA': 'FR', 'FRECCIARGENTO': 'FA', 'FRECCIABIANCA': 'FB',
+    'INTERCITY': 'IC', 'INTERCITY NOTTE': 'ICN',
+    'REGIONALE': 'REG', 'REGIONALE VELOCE': 'RV', 'METROPOLITANO': 'MET',
+    'EUROCITY': 'EC', 'EURONIGHT': 'EN'
+};
+
+function resolveTrainCategory(data) {
+    let cat = (data.categoria || '').trim().toUpperCase();
+    if (cat) return cat;
+
+    const comp = (data.compNumeroTreno || '').trim().toUpperCase();
+    const match = comp.match(/^([A-Z]+(?:\s+[A-Z]+)?)\s/);
+    if (match) {
+        cat = match[1].trim();
+        if (cat) return cat;
+    }
+
+    const desc = (data.categoriaDescrizione || '').trim().toUpperCase();
+    if (desc && DESC_TO_CAT[desc]) return DESC_TO_CAT[desc];
+
+    return '';
+}
+
 async function fetchSmartCaring(trainNumber) {
     const card = document.getElementById('smartCaringCard');
     if (!card || !NOTIFY_BASE) return;
+
+    if (SC_SKIP_CATS.includes(currentTrainCategory)) {
+        card.style.display = 'none';
+        currentSmartCaringData = null;
+        return;
+    }
 
     card.style.display = 'block';
     const t = translations[currentLang];
@@ -708,6 +742,11 @@ async function fetchSmartCaring(trainNumber) {
         if (!res.ok) throw new Error('API error');
         const data = await res.json();
         if (data.error) throw new Error(data.error);
+        if (data.noData || (!data.today?.length && !data.recent?.length && !data.history?.length)) {
+            card.style.display = 'none';
+            currentSmartCaringData = null;
+            return;
+        }
         currentSmartCaringData = data;
         renderSmartCaring(data);
     } catch (e) {
@@ -731,6 +770,7 @@ function renderSmartCaring(data) {
     if (!card || !data) return;
 
     const t = translations[currentLang];
+    const isFullMode = SC_FULL_CATS.includes(currentTrainCategory);
 
     const hasToday = data.today && data.today.length > 0;
     const hasRecent = data.recent && data.recent.length > 0;
@@ -748,63 +788,69 @@ function renderSmartCaring(data) {
     } else if (hasRecent) {
         const notes = data.recent.map(n => {
             const d = new Date(n.insertTimestamp);
-            const dateStr = d.toLocaleDateString(currentLang === 'zh' ? 'zh-CN' : currentLang === 'it' ? 'it-IT' : 'en-GB', {
-                month: '2-digit', day: '2-digit', timeZone: 'Europe/Rome'
-            });
+            const monthStr = getShortMonth(d, currentLang);
+            const dayNum = d.getDate();
+            const dateStr = currentLang === 'zh' ? `${monthStr}${dayNum}日` : `${monthStr} ${dayNum}`;
             const time = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' });
-            return `<div class="sc-note"><span class="sc-note-time">${dateStr} ${time}</span><span class="sc-note-text">${n.infoNote}</span></div>`;
+            return `<div class="sc-note"><span class="sc-note-date">${dateStr}</span><span class="sc-note-clock">${time}</span><span class="sc-note-text">${n.infoNote}</span></div>`;
         }).join('');
         notifHTML = `<div class="sc-notes-list">${notes}</div>`;
     } else {
         notifHTML = `<div class="sc-empty"><span class="material-symbols-outlined" style="font-size:1.1rem;vertical-align:middle;margin-right:4px">check_circle</span>${t.sc_no_today}</div>`;
     }
 
-    const now = new Date();
-    const days = [];
-    for (let i = 13; i >= 0; i--) {
-        const d = new Date(now);
-        d.setDate(d.getDate() - i);
-        const dateKey = d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
-        const histDay = data.history ? data.history.find(h => h.date === dateKey) : null;
-        days.push({
-            date: d,
-            dateKey,
-            delay: histDay ? histDay.maxDelay : 0,
-            notifications: histDay ? histDay.notifications : 0,
-            reasons: histDay ? histDay.reasons : []
-        });
-    }
-
-    const maxDelay = Math.max(...days.map(d => d.delay), 1);
-
-    const chartHTML = days.map(d => {
-        const barHeight = d.delay > 0 ? Math.max(18, Math.round((d.delay / maxDelay) * 48) + 8) : 6;
-        let colorClass = 'sc-level-0';
-        if (d.delay > 30) colorClass = 'sc-level-3';
-        else if (d.delay > 15) colorClass = 'sc-level-2';
-        else if (d.delay > 0) colorClass = 'sc-level-1';
-
-        const dayNum = d.date.getDate();
-        const monthAbbr = getShortMonth(d.date, currentLang);
-        const tipDelay = d.delay > 0 ? `+${d.delay}min` : 'OK';
-        const tipReason = (d.delay > 0 && d.reasons.length) ? d.reasons[0] : '';
-
-        return `<div class="sc-bar-col" data-delay="${tipDelay}" data-reason="${tipReason}" onclick="toggleScTooltip(event,this)"><div class="sc-bar ${colorClass}" style="height:${barHeight}px"></div><span class="sc-bar-label">${dayNum}<br><span class="sc-bar-month">${monthAbbr}</span></span></div>`;
-    }).join('');
-
-    const stats = data.stats;
+    let chartSection = '';
     let statsHTML = '';
-    if (stats.disruptedDays === 0) {
-        statsHTML = `<div class="sc-all-clear"><span class="material-symbols-outlined">verified</span><span>${t.sc_all_clear}</span></div>`;
-    } else {
-        const rateColor = stats.onTimeRate >= 70 ? 'var(--color-info)' : stats.onTimeRate >= 40 ? 'var(--color-warning)' : 'var(--color-error)';
-        statsHTML = `
-            <div class="sc-stats-row">
-                <div class="sc-stat"><span class="sc-stat-value" style="color:${rateColor}">${stats.onTimeRate}%</span><span class="sc-stat-label">${t.sc_ontime_rate}</span></div>
-                <div class="sc-stat"><span class="sc-stat-value">${stats.disruptedDays}/${stats.totalDays}</span><span class="sc-stat-label">${t.sc_disrupted}</span></div>
-                <div class="sc-stat"><span class="sc-stat-value">${stats.avgDelay}<small>min</small></span><span class="sc-stat-label">${t.sc_avg_delay}</span></div>
-                <div class="sc-stat"><span class="sc-stat-value">${stats.maxDelay}<small>min</small></span><span class="sc-stat-label">${t.sc_max_delay}</span></div>
-            </div>`;
+
+    if (isFullMode) {
+        const now = new Date();
+        const days = [];
+        for (let i = 13; i >= 0; i--) {
+            const d = new Date(now);
+            d.setDate(d.getDate() - i);
+            const dateKey = d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
+            const histDay = data.history ? data.history.find(h => h.date === dateKey) : null;
+            days.push({
+                date: d,
+                dateKey,
+                delay: histDay ? histDay.maxDelay : 0,
+                notifications: histDay ? histDay.notifications : 0,
+                reasons: histDay ? histDay.reasons : []
+            });
+        }
+
+        const maxDelay = Math.max(...days.map(d => d.delay), 1);
+
+        const chartHTML = days.map(d => {
+            const barHeight = d.delay > 0 ? Math.max(18, Math.round((d.delay / maxDelay) * 48) + 8) : 6;
+            let colorClass = 'sc-level-0';
+            if (d.delay > 30) colorClass = 'sc-level-3';
+            else if (d.delay > 15) colorClass = 'sc-level-2';
+            else if (d.delay > 0) colorClass = 'sc-level-1';
+
+            const dayNum = d.date.getDate();
+            const monthAbbr = getShortMonth(d.date, currentLang);
+            const tipDelay = d.delay > 0 ? `+${d.delay}min` : 'OK';
+            const tipReason = (d.delay > 0 && d.reasons.length) ? d.reasons[0] : '';
+
+            return `<div class="sc-bar-col" data-delay="${tipDelay}" data-reason="${tipReason}" onclick="toggleScTooltip(event,this)"><div class="sc-bar ${colorClass}" style="height:${barHeight}px"></div><span class="sc-bar-label">${dayNum}<br><span class="sc-bar-month">${monthAbbr}</span></span></div>`;
+        }).join('');
+
+        chartSection = `<div class="sc-history-section"><div class="sc-section-title">${t.sc_history}</div><div class="sc-chart">${chartHTML}</div></div>`;
+
+        const stats = data.stats;
+        if (stats.disruptedDays === 0) {
+            statsHTML = `<div class="sc-all-clear"><span class="material-symbols-outlined">verified</span><span>${t.sc_all_clear}</span></div>`;
+        } else {
+            const rateColor = stats.onTimeRate >= 70 ? 'var(--color-info)' : stats.onTimeRate >= 40 ? 'var(--color-warning)' : 'var(--color-error)';
+            statsHTML = `
+                <div class="sc-stats-row">
+                    <div class="sc-stat"><span class="sc-stat-value" style="color:${rateColor}">${stats.onTimeRate}%</span><span class="sc-stat-label">${t.sc_ontime_rate}</span></div>
+                    <div class="sc-stat"><span class="sc-stat-value">${stats.disruptedDays}/${stats.totalDays}</span><span class="sc-stat-label">${t.sc_disrupted}</span></div>
+                    <div class="sc-stat"><span class="sc-stat-value">${stats.avgDelay}<small>min</small></span><span class="sc-stat-label">${t.sc_avg_delay}</span></div>
+                    <div class="sc-stat"><span class="sc-stat-value">${stats.maxDelay}<small>min</small></span><span class="sc-stat-label">${t.sc_max_delay}</span></div>
+                </div>`;
+        }
     }
 
     const wasCollapsed = card.querySelector('.sc-body-wrap.sc-collapsed') !== null;
@@ -818,7 +864,7 @@ function renderSmartCaring(data) {
         <div class="sc-body-wrap${wasCollapsed ? ' sc-collapsed' : ''}">
             <div class="sc-body">
                 <div class="sc-today-section"><div class="sc-section-title">${notifTitle}</div>${notifHTML}</div>
-                <div class="sc-history-section"><div class="sc-section-title">${t.sc_history}</div><div class="sc-chart">${chartHTML}</div></div>
+                ${chartSection}
                 ${statsHTML}
             </div>
         </div>`;
