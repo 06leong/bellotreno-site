@@ -20,7 +20,7 @@
 @plugin "daisyui/theme" {
     name: "dark";
     color-scheme: "dark";
-    --color-primary: #4db6ac;
+    --color-primary: #66ffcc;
     --color-primary-content: #0d131e;
     --color-base-100: #0d131e;
     --color-base-200: #1a2332;
@@ -619,6 +619,8 @@ body::after {
     height: 50px;
     background: var(--color-primary);
     color: var(--color-primary-content);
+    border: none;
+    padding: 0;
     border-radius: 50%;
     display: none;
     justify-content: center;

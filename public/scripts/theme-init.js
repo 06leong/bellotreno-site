@@ -18,5 +18,7 @@
         root.setAttribute('data-lang-loading', '');
     }
     root.setAttribute('data-lang', lang);
+    var langMap = { zh: 'zh-CN', en: 'en', it: 'it' };
+    root.lang = langMap[lang] || lang;
     window.currentLang = lang;
 })();

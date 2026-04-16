@@ -88,8 +88,10 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                 const data = await fetchStationBoard(currentStationId, currentBoardType);
 
                 if (!data || data.length === 0) {
+                    const t = (typeof translations !== 'undefined' && translations[window.currentLang]) || {};
+                    errorEl.querySelector('span').textContent = 'info';
+                    errorEl.querySelector('p').textContent = t.no_trains || 'No trains at this time';
                     errorEl.style.display = 'block';
-                    errorEl.querySelector('p').textContent = (typeof translations !== 'undefined' && translations[window.currentLang]) ? translations[window.currentLang].load_error : 'No data';
                     loadingEl.style.display = 'none';
                     return;
                 }

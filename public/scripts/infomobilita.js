@@ -35,22 +35,16 @@ const REGIONS = {
 
 let currentMode = 'updates';
 let currentRegion = 'all';
-let isFetching = false;
+let currentFetchController = null;
 
 
 document.addEventListener('DOMContentLoaded', () => {
-    initRegionSelect();
     fetchRSS();
 });
-
 
 window.onLanguageChanged = () => {
     fetchRSS();
 };
-
-function initRegionSelect() {
-    // Legacy select initialization removed
-}
 
 window.changeDropdownRegion = function (val, text, i18nKey) {
     const btnText = document.getElementById('regionBtnText');
@@ -97,8 +91,11 @@ function toggleLoading(show) {
 }
 
 async function fetchRSS() {
-    if (isFetching) return;
-    isFetching = true;
+    if (currentFetchController) {
+        currentFetchController.abort();
+    }
+    currentFetchController = new AbortController();
+    const signal = currentFetchController.signal;
 
     toggleLoading(true);
     const contentContainer = document.getElementById('rssContent');
@@ -106,18 +103,13 @@ async function fetchRSS() {
     const regionSuffix = REGIONS[currentRegion] || '';
     const targetUrl = `${RSS_BASE_URLS[currentMode]}${regionSuffix}.xml`;
 
-
-    const requestKey = `${currentMode}_${currentRegion}`;
-
-    const proxyUrl = `https://ah.bellotreno.workers.dev/?url=${encodeURIComponent(targetUrl)}&ts=${Date.now()}`;
+    const proxyBase = window.PROXY_BASE || 'https://ah.bellotreno.workers.dev';
+    const proxyUrl = `${proxyBase}/?url=${encodeURIComponent(targetUrl)}&ts=${Date.now()}`;
 
     try {
-        const response = await fetch(proxyUrl);
+        const response = await fetch(proxyUrl, { signal });
         if (!response.ok) throw new Error('Network response was not ok');
         const xmlText = await response.text();
-
-
-        if (requestKey !== `${currentMode}_${currentRegion}`) return;
 
         const parser = new DOMParser();
         const xmlDoc = parser.parseFromString(xmlText, "text/xml");
@@ -137,10 +129,15 @@ async function fetchRSS() {
 
         renderRSS(itemsArray);
     } catch (error) {
+        if (error.name === 'AbortError') return;
         console.error('Error fetching RSS:', error);
-        contentContainer.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--train-red);">Error: ${error.message}</div>`;
+        const errDiv = document.createElement('div');
+        errDiv.style.cssText = 'text-align:center;padding:40px;color:var(--train-red)';
+        errDiv.textContent = `Error: ${error.message}`;
+        contentContainer.innerHTML = '';
+        contentContainer.appendChild(errDiv);
     } finally {
-        isFetching = false;
+        currentFetchController = null;
         toggleLoading(false);
     }
 }
@@ -173,18 +170,20 @@ function renderRSS(items) {
             formattedDate = new Intl.DateTimeFormat(locale, options).format(date);
         }
 
+        const safeLink = /^https?:\/\//.test(link) ? link : '#';
+
         const rssCard = document.createElement('div');
         rssCard.className = 'card bg-base-100 shadow-sm border border-base-200 hover:shadow-md transition-shadow mb-4';
         rssCard.innerHTML = `
             <div class="card-body p-6">
-                <h3 class="card-title text-lg text-base-content leading-snug">${title}</h3>
+                <h3 class="card-title text-lg text-base-content leading-snug"></h3>
                 <div class="flex items-center justify-between gap-3 mt-4 flex-wrap">
                     <div class="flex items-center gap-2 text-sm text-base-content/60">
                         <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">schedule</span> ${formattedDate}</span>
-                        ${region ? `<span class="badge badge-sm badge-ghost text-[#006a6a] dark:text-[#4db6ac] bg-[#006a6a]/10 dark:bg-[#4db6ac]/10 border-transparent">${region}</span>` : ''}
+                        ${region ? `<span class="badge badge-sm badge-ghost text-[#006a6a] dark:text-[#4db6ac] bg-[#006a6a]/10 dark:bg-[#4db6ac]/10 border-transparent"></span>` : ''}
                     </div>
                     <div class="card-actions">
-                        <a href="${link}" target="_blank" class="btn btn-sm bg-[#006a6a] hover:bg-[#005050] text-white dark:bg-[#4db6ac] dark:text-gray-900 dark:hover:bg-[#3ca096] border-none rounded-full px-4 gap-1">
+                        <a target="_blank" rel="noopener noreferrer" class="btn btn-sm bg-[#006a6a] hover:bg-[#005050] text-white dark:bg-[#4db6ac] dark:text-gray-900 dark:hover:bg-[#3ca096] border-none rounded-full px-4 gap-1">
                             <span data-i18n="read_more">${getI18n('read_more')}</span>
                             <span class="material-symbols-outlined text-[16px]">open_in_new</span>
                         </a>
@@ -192,6 +191,12 @@ function renderRSS(items) {
                 </div>
             </div>
         `;
+        rssCard.querySelector('h3').textContent = title;
+        if (region) {
+            rssCard.querySelector('.badge').textContent = region;
+        }
+        const anchor = rssCard.querySelector('a');
+        anchor.href = safeLink;
         contentContainer.appendChild(rssCard);
     });
 }

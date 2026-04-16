@@ -5,32 +5,23 @@
 function getItalianTimeString() {
     const now = new Date();
 
-    
     const italianTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Rome' }));
 
-    
-    const year = italianTime.getFullYear();
-    const month = italianTime.getMonth(); // 0-11
-
-    
-    let isDST = false;
-    if (month > 2 && month < 9) {
-        isDST = true; 
-    } else if (month === 2) {
-        
-        const lastSunday = new Date(year, 2, 31);
-        lastSunday.setDate(31 - lastSunday.getDay());
-        isDST = italianTime.getDate() >= lastSunday.getDate();
-    } else if (month === 9) {
-        
-        const lastSunday = new Date(year, 9, 31);
-        lastSunday.setDate(31 - lastSunday.getDay());
-        isDST = italianTime.getDate() < lastSunday.getDate();
+    const offsetParts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Europe/Rome', timeZoneName: 'shortOffset'
+    }).formatToParts(now);
+    const tzPart = offsetParts.find(p => p.type === 'timeZoneName');
+    let timezone = 'GMT+0100';
+    if (tzPart) {
+        const m = tzPart.value.match(/GMT([+-])(\d{1,2})(?::?(\d{2}))?/);
+        if (m) {
+            const sign = m[1];
+            const hrs = m[2].padStart(2, '0');
+            const mins = m[3] || '00';
+            timezone = `GMT${sign}${hrs}${mins}`;
+        }
     }
 
-    const timezone = isDST ? 'GMT+0200' : 'GMT+0100';
-
-    
     const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -42,7 +33,6 @@ function getItalianTimeString() {
     const minute = String(italianTime.getMinutes()).padStart(2, '0');
     const second = String(italianTime.getSeconds()).padStart(2, '0');
 
-    
     return `${weekday} ${monthName} ${day} ${yearStr} ${hour}:${minute}:${second} ${timezone}`;
 }
 
@@ -62,7 +52,7 @@ async function fetchStationBoard(stationId, type = 'partenze') {
     const timeString = getItalianTimeString();
     const encodedTime = encodeURIComponent(timeString);
     
-    const apiBase = window.API_BASE || "https://ah.bellotreno.workers.dev/?url=https://www.viaggiatreno.it/infomobilita/resteasy/viaggiatreno";
+    const apiBase = window.API_BASE;
     const url = `${apiBase}/${type}/${stationId}/${encodedTime}`;
 
     try {
@@ -78,12 +68,7 @@ async function fetchStationBoard(stationId, type = 'partenze') {
     }
 }
 
-// Use CLIENT_MAP from config.js (exposed as window.CLIENT_MAP)
-const OPERATOR_MAP = window.CLIENT_MAP || {
-    1: "Trenitalia", 2: "Trenitalia", 4: "Trenitalia",
-    18: "Trenitalia TPER", 77: "FS Treni Turistici Italiani",
-    910: "Ferrovie del Sud Est", 63: "Trenord", 64: "ÖBB"
-};
+const OPERATOR_MAP = window.CLIENT_MAP || {};
 
 
 function formatTrainNumber(trainNumberStr) {
@@ -137,32 +122,14 @@ function formatTrainNumber(trainNumberStr) {
 }
 
 
-function formatDepartureData(train, currentLang = 'zh', currentStation = '') {
-    const translations = {
-        zh: {
-            cancelled: '已取消',
-            not_departed: '未出发',
-            delayed: '晚点',
-            on_time: '准点',
-            minutes: '分钟'
-        },
-        en: {
-            cancelled: 'CANCELLED',
-            not_departed: 'Not Departed',
-            delayed: 'Delayed',
-            on_time: 'On Time',
-            minutes: 'min'
-        },
-        it: {
-            cancelled: 'CANCELLATO',
-            not_departed: 'Non partito',
-            delayed: 'Ritardo',
-            on_time: 'In orario',
-            minutes: 'min'
-        }
-    };
+const STATION_TRANSLATIONS = {
+    zh: { cancelled: '已取消', not_departed: '未出发', delayed: '晚点', early: '提前', on_time: '准点', minutes: '分钟' },
+    en: { cancelled: 'CANCELLED', not_departed: 'Not Departed', delayed: 'Delayed', early: 'Early', on_time: 'On Time', minutes: 'min' },
+    it: { cancelled: 'CANCELLATO', not_departed: 'Non partito', delayed: 'Ritardo', early: 'In anticipo', on_time: 'In orario', minutes: 'min' }
+};
 
-    const t = translations[currentLang];
+function formatDepartureData(train, currentLang = 'zh', currentStation = '') {
+    const t = STATION_TRANSLATIONS[currentLang] || STATION_TRANSLATIONS.zh;
 
     
     const scheduledTime = train.compOrarioPartenza || '--:--';
@@ -228,31 +195,7 @@ function formatDepartureData(train, currentLang = 'zh', currentStation = '') {
 
 
 function formatArrivalData(train, currentLang = 'zh', currentStation = '') {
-    const translations = {
-        zh: {
-            cancelled: '已取消',
-            delayed: '晚点',
-            early: '提前',
-            on_time: '准点',
-            minutes: '分钟'
-        },
-        en: {
-            cancelled: 'CANCELLED',
-            delayed: 'Delayed',
-            early: 'Early',
-            on_time: 'On Time',
-            minutes: 'min'
-        },
-        it: {
-            cancelled: 'CANCELLATO',
-            delayed: 'Ritardo',
-            early: 'In anticipo',
-            on_time: 'In orario',
-            minutes: 'min'
-        }
-    };
-
-    const t = translations[currentLang];
+    const t = STATION_TRANSLATIONS[currentLang] || STATION_TRANSLATIONS.zh;
 
     
     const scheduledTime = train.compOrarioArrivo || '--:--';

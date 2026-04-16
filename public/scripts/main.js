@@ -102,13 +102,7 @@ function formatDuration(duration) {
     if (parts.length === 2) {
         const hours = parseInt(parts[0]);
         const mins = parseInt(parts[1]);
-        if (window.currentLang === 'zh') {
-            return `${hours}小时${mins}分钟`;
-        } else if (window.currentLang === 'it') {
-            return `${hours}h:${mins}min`;
-        } else {
-            return `${hours}h:${mins}min`;
-        }
+        return window.currentLang === 'zh' ? `${hours}小时${mins}分钟` : `${hours}h:${mins}min`;
     }
     return duration;
 }
@@ -261,12 +255,15 @@ function renderRecentSearches() {
 
             chip.innerHTML = `
                 <span class="material-symbols-outlined chip-icon">${icon}</span>
-                <span class="chip-label">${item.name}</span>
-                <span class="chip-remove" onclick="removeRecentSearch('${item.id}', '${item.type}', event)">
+                <span class="chip-label"></span>
+                <span class="chip-remove">
                     <span class="material-symbols-outlined">close</span>
                 </span>
             `;
-
+            chip.querySelector('.chip-label').textContent = item.name;
+            chip.querySelector('.chip-remove').addEventListener('click', (e) => {
+                removeRecentSearch(item.id, item.type, e);
+            });
 
             chip.querySelector('.chip-label').addEventListener('click', () => {
                 if (item.type === 'train') {
@@ -525,10 +522,6 @@ function render(data) {
         catCode = "TS";
     }
 
-    if (catCode === "TS") {
-        catCode = "TS"; // Ensure it's set
-    }
-
     let operator = CLIENT_MAP[data.codiceCliente] || "Other";
     let operatorLink = CLIENT_LINK_MAP[operator] || "#";
 
@@ -616,8 +609,6 @@ function render(data) {
     timeline.innerHTML = '';
 
     let lastReachedIdx = -1;
-    let isTrainAtStation = false;
-    let inTransitProgress = 0; // 0 to 100
 
     if (!data.nonPartito) {
         data.fermate.forEach((f, i) => {
@@ -626,6 +617,7 @@ function render(data) {
     }
 
     const totalStations = data.fermate.length;
+    const timelineFragments = [];
 
     data.fermate.forEach((f, i) => {
         const isLast = i === totalStations - 1;
@@ -668,7 +660,7 @@ function render(data) {
             directionBadge = `<span class="direction-badge">${directionText}</span>`;
         }
 
-        const stationHTML = `
+        timelineFragments.push(`
             <div class="${stationItemClasses.join(' ')}">
                 <div class="station-dot-wrapper">
                     <div class="station-dot"></div>
@@ -689,9 +681,9 @@ function render(data) {
                     </div>
                 </div>
             </div>
-        `;
-        timeline.innerHTML += stationHTML;
+        `);
     });
+    timeline.innerHTML = timelineFragments.join('');
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -742,11 +734,11 @@ async function fetchSmartCaring(trainNumber) {
         if (!res.ok) throw new Error('API error');
         const data = await res.json();
         if (data.error) throw new Error(data.error);
-        if (data.noData || (!data.today?.length && !data.recent?.length && !data.history?.length)) {
-            card.style.display = 'none';
-            currentSmartCaringData = null;
-            return;
-        }
+        const isFullMode = SC_FULL_CATS.includes(currentTrainCategory);
+        const hasNotifications = data.today?.length || data.recent?.length;
+        if (data.noData) { card.style.display = 'none'; currentSmartCaringData = null; return; }
+        if (isFullMode && !hasNotifications && !data.history?.length) { card.style.display = 'none'; currentSmartCaringData = null; return; }
+        if (!isFullMode && !hasNotifications) { card.style.display = 'none'; currentSmartCaringData = null; return; }
         currentSmartCaringData = data;
         renderSmartCaring(data);
     } catch (e) {
@@ -758,10 +750,9 @@ async function fetchSmartCaring(trainNumber) {
 
 function getShortMonth(date, lang) {
     const m = date.getMonth();
-    const zh = ['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
+    if (lang === 'zh') return `${m + 1}月`;
     const en = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     const it = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
-    if (lang === 'zh') return zh[m];
     return lang === 'it' ? it[m] : en[m];
 }
 
@@ -790,7 +781,7 @@ function renderSmartCaring(data) {
             const d = new Date(n.insertTimestamp);
             const monthStr = getShortMonth(d, currentLang);
             const dayNum = d.getDate();
-            const dateStr = currentLang === 'zh' ? `${monthStr}${dayNum}日` : `${monthStr} ${dayNum}`;
+            const dateStr = currentLang === 'zh' ? `${monthStr}${dayNum}号` : `${monthStr} ${dayNum}`;
             const time = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' });
             return `<div class="sc-note"><span class="sc-note-date">${dateStr}</span><span class="sc-note-clock">${time}</span><span class="sc-note-text">${n.infoNote}</span></div>`;
         }).join('');
@@ -838,8 +829,8 @@ function renderSmartCaring(data) {
 
         chartSection = `<div class="sc-history-section"><div class="sc-section-title">${t.sc_history}</div><div class="sc-chart">${chartHTML}</div></div>`;
 
-        const stats = data.stats;
-        if (stats.disruptedDays === 0) {
+        const stats = data.stats || {};
+        if ((stats.disruptedDays || 0) === 0) {
             statsHTML = `<div class="sc-all-clear"><span class="material-symbols-outlined">verified</span><span>${t.sc_all_clear}</span></div>`;
         } else {
             const rateColor = stats.onTimeRate >= 70 ? 'var(--color-info)' : stats.onTimeRate >= 40 ? 'var(--color-warning)' : 'var(--color-error)';
@@ -877,7 +868,9 @@ function toggleScTooltip(e, col) {
     if (!tooltip) return;
 
     const wasActive = col.classList.contains('sc-active');
-    col.closest('.sc-chart').querySelectorAll('.sc-bar-col').forEach(c => c.classList.remove('sc-active'));
+    const chart = col.closest('.sc-chart');
+    if (!chart) return;
+    chart.querySelectorAll('.sc-bar-col').forEach(c => c.classList.remove('sc-active'));
     if (wasActive) { hideScTooltip(); return; }
 
     col.classList.add('sc-active');
@@ -950,16 +943,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
 
-    window.addEventListener('scroll', () => {
-        const backToTop = document.querySelector('.back-to-top');
-        if (window.scrollY > 300) {
-            backToTop.classList.add('show');
-        } else {
-            backToTop.classList.remove('show');
-        }
-    });
-
-
     document.addEventListener('click', function (e) {
         const stationLink = e.target.closest('.station-link');
         if (stationLink) {
@@ -1009,4 +992,4 @@ function checkAndSearchFromURL() {
     }
 }
 
-window.addEventListener('load', checkAndSearchFromURL);
+document.addEventListener('DOMContentLoaded', checkAndSearchFromURL);

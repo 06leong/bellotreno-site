@@ -2,8 +2,10 @@
  * BelloTreno Configuration
  */
 
-window.API_BASE = "https://ah.bellotreno.workers.dev/?url=https://www.viaggiatreno.it/infomobilita/resteasy/viaggiatreno";
+window.PROXY_BASE = "https://ah.bellotreno.workers.dev";
+window.API_BASE = window.PROXY_BASE + "/?url=https://www.viaggiatreno.it/infomobilita/resteasy/viaggiatreno";
 window.NOTIFY_BASE = "https://notify.bellotreno.workers.dev";
+window.COUNTER_URL = "https://site-counter.bellotreno.workers.dev/";
 
 const CLIENT_MAP = {
     1: "Trenitalia",
@@ -19,7 +21,7 @@ window.CLIENT_MAP = CLIENT_MAP;
 
 const CLIENT_LINK_MAP = {
     "Trenitalia": "https://www.trenitalia.com",
-    "Trenitalia TPER": "https://www.trenitaliatper.it",
+    "Trenitalia TPER": "https://www.trenitalia.com",
     "Ferrovie del Sud Est": "https://www.trenitalia.com",
     "Trenord": "https://www.trenord.it",
     "ÖBB": "https://www.oebb.at",
@@ -82,9 +84,9 @@ const CAT_IMAGE_MAP = {
     "1-EXP": "pic/Espresso.png",
     "2-EXP": "pic/Espresso.png",
     "4-EXP": "pic/Espresso.png",
-    "18-REG": "pic/regn.png",
-    "18-RV": "pic/regn.png",
-    "18-RE": "pic/regn.png",
+    "18-REG": "pic/Trenitalia_Tper.png",
+    "18-RV": "pic/Trenitalia_Tper.png",
+    "18-RE": "pic/Trenitalia_Tper.png",
     "910-REG": "pic/regn.png",
     "910-RV": "pic/regn.png",
     "910-RE": "pic/regn.png",

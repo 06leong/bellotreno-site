@@ -30,27 +30,27 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                         <span class="material-symbols-outlined absolute right-5 text-base-content/50">expand_more</span>
                     </div>
                     <ul tabindex="0" class="dropdown-content z-[2] menu p-2 shadow-lg bg-base-100 border border-base-200 rounded-box w-full max-h-64 flex-nowrap overflow-y-auto mt-2">
-                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('all', '所有大区', 'region_all')">所有大区</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('abruzzo', 'Abruzzo')">Abruzzo</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('basilicata', 'Basilicata')">Basilicata</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('calabria', 'Calabria')">Calabria</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('campania', 'Campania')">Campania</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('emilia_romagna', 'Emilia Romagna')">Emilia Romagna</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('friuli_venezia_giulia', 'Friuli Venezia Giulia')">Friuli Venezia Giulia</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('lazio', 'Lazio')">Lazio</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('liguria', 'Liguria')">Liguria</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('lombardia', 'Lombardia')">Lombardia</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('marche', 'Marche')">Marche</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('molise', 'Molise')">Molise</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('piemonte', 'Piemonte')">Piemonte</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('puglia', 'Puglia')">Puglia</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('sardegna', 'Sardegna')">Sardegna</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('sicilia', 'Sicilia')">Sicilia</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('toscana', 'Toscana')">Toscana</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('trentino_alto_adige', 'Trentino Alto Adige')">Trentino Alto Adige</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('umbria', 'Umbria')">Umbria</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('valle_d_aosta', 'Valle d\'Aosta')">Valle d'Aosta</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" onclick="changeDropdownRegion('veneto', 'Veneto')">Veneto</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" data-i18n="region_all" onclick="changeDropdownRegion('all', this.textContent, 'region_all')">所有大区</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" data-i18n="region_abruzzo" onclick="changeDropdownRegion('abruzzo', this.textContent, 'region_abruzzo')">Abruzzo</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" data-i18n="region_basilicata" onclick="changeDropdownRegion('basilicata', this.textContent, 'region_basilicata')">Basilicata</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" data-i18n="region_calabria" onclick="changeDropdownRegion('calabria', this.textContent, 'region_calabria')">Calabria</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" data-i18n="region_campania" onclick="changeDropdownRegion('campania', this.textContent, 'region_campania')">Campania</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" data-i18n="region_emilia_romagna" onclick="changeDropdownRegion('emilia_romagna', this.textContent, 'region_emilia_romagna')">Emilia Romagna</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" data-i18n="region_friuli_venezia_giulia" onclick="changeDropdownRegion('friuli_venezia_giulia', this.textContent, 'region_friuli_venezia_giulia')">Friuli Venezia Giulia</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" data-i18n="region_lazio" onclick="changeDropdownRegion('lazio', this.textContent, 'region_lazio')">Lazio</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" data-i18n="region_liguria" onclick="changeDropdownRegion('liguria', this.textContent, 'region_liguria')">Liguria</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" data-i18n="region_lombardia" onclick="changeDropdownRegion('lombardia', this.textContent, 'region_lombardia')">Lombardia</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" data-i18n="region_marche" onclick="changeDropdownRegion('marche', this.textContent, 'region_marche')">Marche</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" data-i18n="region_molise" onclick="changeDropdownRegion('molise', this.textContent, 'region_molise')">Molise</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" data-i18n="region_piemonte" onclick="changeDropdownRegion('piemonte', this.textContent, 'region_piemonte')">Piemonte</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" data-i18n="region_puglia" onclick="changeDropdownRegion('puglia', this.textContent, 'region_puglia')">Puglia</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" data-i18n="region_sardegna" onclick="changeDropdownRegion('sardegna', this.textContent, 'region_sardegna')">Sardegna</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" data-i18n="region_sicilia" onclick="changeDropdownRegion('sicilia', this.textContent, 'region_sicilia')">Sicilia</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" data-i18n="region_toscana" onclick="changeDropdownRegion('toscana', this.textContent, 'region_toscana')">Toscana</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" data-i18n="region_trentino_alto_adige" onclick="changeDropdownRegion('trentino_alto_adige', this.textContent, 'region_trentino_alto_adige')">Trentino Alto Adige</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" data-i18n="region_umbria" onclick="changeDropdownRegion('umbria', this.textContent, 'region_umbria')">Umbria</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" data-i18n="region_valle_d_aosta" onclick="changeDropdownRegion('valle_d_aosta', this.textContent, 'region_valle_d_aosta')">Valle d'Aosta</a></li>
+                        <li><a class="justify-center text-center py-3 text-base" data-i18n="region_veneto" onclick="changeDropdownRegion('veneto', this.textContent, 'region_veneto')">Veneto</a></li>
                     </ul>
                 </div>
             </div>

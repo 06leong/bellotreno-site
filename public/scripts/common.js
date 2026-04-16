@@ -19,7 +19,8 @@ function updateLanguage() {
     const langNames = { zh: 'CN', en: 'EN', it: 'IT' };
     const currentLangEl = document.getElementById('currentLang');
     if (currentLangEl) currentLangEl.textContent = langNames[window.currentLang];
-    document.documentElement.lang = window.currentLang;
+    const langMap = { zh: 'zh-CN', en: 'en', it: 'it' };
+    document.documentElement.lang = langMap[window.currentLang] || window.currentLang;
 
     document.querySelectorAll('[data-i18n]').forEach(el => {
         const key = el.getAttribute('data-i18n');
@@ -95,7 +96,7 @@ function scrollToTop() {
 }
 
 async function initVisitorCounter() {
-    const workerUrl = 'https://site-counter.bellotreno.workers.dev/';
+    const workerUrl = window.COUNTER_URL || 'https://site-counter.bellotreno.workers.dev/';
     try {
         const response = await fetch(workerUrl);
         const data = await response.json();
