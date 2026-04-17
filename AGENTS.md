@@ -8,7 +8,7 @@ Personal learning project: real-time Italian railway timetable viewer, built wit
 
 ```bash
 npm run dev        # start Astro dev server
-npm run build      # production build → dist/
+npm run build      # production build → dist/  (also generates sitemap-index.xml)
 npm run preview    # serve built output
 ```
 
@@ -19,19 +19,22 @@ No lint, typecheck, or test scripts exist. TypeScript is checked implicitly by A
 ## Architecture
 
 - **Static site** (`output: 'static'` in `astro.config.mjs`). No SSR.
+- **`site`** is set to `'https://real.bellotreno.org'` in `astro.config.mjs` — required for sitemap generation and canonical URLs.
 - **Astro pages** live in `src/pages/`: `index.astro`, `station.astro`, `infomobilita.astro`, `about.astro`.
-- **Layouts**: single `src/layouts/BaseLayout.astro` wraps all pages. It accepts `title` and `pageScripts: string[]` props and injects scripts via `is:inline`.
+- **Layouts**: single `src/layouts/BaseLayout.astro` wraps all pages. Accepts `title`, `description`, and `pageScripts: string[]` props.
 - **Components**: `src/components/` — `Navbar.astro`, `Footer.astro`, `BackToTop.astro`.
 - **All application logic is vanilla JS** in `public/scripts/` (not bundled by Astro, served as static files):
-  - `config.js` — global constants loaded first (`window.API_BASE`, `window.PROXY_BASE`, etc.)
+  - `config.js` — global constants loaded first (`window.API_BASE`, `window.PROXY_BASE`, etc.) **plus shared helpers** (`window.getBadgeClass`, `window.CAT_MAP`, etc.)
   - `i18n.js` — translation strings (`zh`, `en`, `it`)
-  - `common.js` — language & theme management, loaded on every page
-  - `main.js` — train search, results rendering (index page)
-  - `station.js` — station departure/arrival board
+  - `common.js` — language & theme management, visitor counter (session-deduped), **`window.escapeHtml`** XSS utility; loaded on every page
+  - `main.js` — train search, results rendering, SmartCaring card (index page)
+  - `station.js` — station departure/arrival board utilities **+ full station page logic** (`_stLoadBoard`, `_stRenderBoard`, `_stFetchWeather`, `window.switchBoardType`)
   - `infomobilita.js` — RSS/news page
   - `theme-init.js` — inlined in `<head>` to prevent flash
 
 **Script load order in BaseLayout matters**: `config.js → i18n.js → common.js → [page-specific scripts]`. Page scripts passed via `pageScripts` prop are appended last.
+
+> **station.astro** is now a pure HTML template (no inline `<script>` or `<style is:global>` blocks). All page logic lives in `station.js` and is initialised inside an `astro:page-load` listener. `window.switchBoardType` is exposed globally for the `onclick` attributes in the HTML.
 
 ---
 
@@ -41,6 +44,7 @@ No lint, typecheck, or test scripts exist. TypeScript is checked implicitly by A
 - DaisyUI v5 loaded as a `@plugin`. Two custom themes defined inline: `light` and `dark`.
 - Custom CSS variables: `--train-green`, `--train-grey`, `--train-red` for delay/status color coding.
 - Train category badge colors are hardcoded in CSS (`.badge-regional`, `.badge-arrow`, etc.), not DaisyUI utilities.
+- `.ripple` and `.platform-pulse` / `@keyframes platformPulse` are defined in `global.css` (not in component `<style>` blocks).
 
 **Do not add a `tailwind.config.js`** — v4 has no separate config file; all configuration is in CSS.
 
@@ -63,10 +67,45 @@ These Workers are **not in this repo**. Direct calls to `viaggiatreno.it` fail i
 
 ## i18n
 
-- Three languages: `zh` (default), `en`, `it`.
+- Three languages: `zh` (default static HTML lang), `en`, `it`.
+- `BaseLayout.astro` sets `lang="it"` as the static default (primary audience); `theme-init.js` overwrites the attribute at runtime based on `localStorage('language')`.
 - Elements use `data-i18n="key"` attributes; `common.js` applies translations on page load and language change.
-- `html[data-lang-loading]` hides `[data-i18n]` elements until translations are applied (prevents Chinese text flash on non-zh load).
+- `html[data-lang-loading]` hides `[data-i18n]` and `[data-i18n-section]` elements until translations are applied (prevents Chinese text flash on non-zh load).
 - Language persisted to `localStorage('language')`.
+
+---
+
+## SEO
+
+`BaseLayout.astro` automatically generates all SEO tags from its props:
+
+| Prop | Default |
+|------|---------|
+| `title` | _(required)_ |
+| `description` | Italian fallback description |
+
+Tags injected per page: `<title>`, `<meta name="description">`, `<link rel="canonical">`, four `hreflang` alternates (`it`, `en`, `zh-Hans`, `x-default`), full Open Graph set (9 tags), Twitter Card (4 tags), JSON-LD `WebApplication` structured data.
+
+Each page passes its own `description` in Italian (primary language). Sitemap is generated at build time by `@astrojs/sitemap`.
+
+### PWA
+
+`public/site.webmanifest` enables "Add to Home Screen" on iOS 16.4+ and Android Chrome. Required assets:
+
+| File | Size | Purpose |
+|------|------|---------|
+| `public/apple-touch-icon.png` | 180×180 px | iOS home screen icon |
+| `public/og-image.png` | 1200×630 px | OG/Twitter preview + manifest icon |
+| `public/site.webmanifest` | — | PWA manifest (`display: standalone`) |
+
+---
+
+## Shared helpers (window globals from config.js / common.js)
+
+| Function | Source | Purpose |
+|----------|--------|---------|
+| `window.getBadgeClass(catCode)` | `config.js` | Maps a train category code to its CSS badge class (`badge-regional`, `badge-arrow`, etc.). Used by both `main.js` and `station.js` — **do not duplicate this logic**. |
+| `window.escapeHtml(str)` | `common.js` | Escapes `&`, `<`, `>`, `"`, `'` for safe innerHTML injection. Apply to all API-sourced strings inserted into HTML. |
 
 ---
 
@@ -140,6 +179,7 @@ If no entries fall within the 14-day window the Worker still returns the same sh
 - **Stats row**: on-time rate coloured green/amber/red by threshold (≥70 % / ≥40 % / <40 %).
 - Card re-uses collapse state across re-renders (detects `.sc-collapsed` class before overwriting innerHTML).
 - Language changes trigger `renderSmartCaring(currentSmartCaringData)` via `window.onLanguageChanged`.
+- All API-sourced strings (`n.infoNote`, `tipReason`) are passed through `escapeHtml()` before innerHTML injection.
 
 ---
 
@@ -147,9 +187,15 @@ If no entries fall within the 14-day window the Worker still returns the same sh
 
 - `public/pic/` — operator/category logo PNGs. Mapping from `{codiceCliente}-{categoria}` key to image path is in `window.CAT_IMAGE_MAP` (`config.js`). Key format: `"63-REG"` → `"pic/regn.png"`.
 - `public/_redirects` — Netlify/Cloudflare Pages redirect rules mapping legacy `.html` URLs to clean paths.
+- `public/robots.txt` — allows all crawlers, points to sitemap.
+- `public/site.webmanifest` — PWA manifest (`display: standalone`, `theme_color: #6a8a9f`).
+- `public/apple-touch-icon.png` — 180×180 px, for iOS home screen.
+- `public/og-image.png` — 1200×630 px, for OG/Twitter card previews.
 
 ---
 
 ## Deployment
 
 Static site, deployable to Netlify or Cloudflare Pages. `public/_redirects` handles legacy URL redirects. No environment variables required in the repo (all API endpoints are hardcoded in `config.js`).
+
+`npm run build` also generates `dist/sitemap-index.xml` and `dist/sitemap-0.xml` via `@astrojs/sitemap`.
