@@ -1446,7 +1446,7 @@ GET /infomobilitaRSSBox/{isInfoLavori}
 
 这两个端点属于 `NewsService` 命名空间（`/resteasy/news/`），不在 `ViaggiaTrenoService` 下。
 
-#### SmartCaring 推送通知
+#### SmartCaring 推送通知（不是每趟车都有）
 
 ```
 GET /resteasy/news/smartcaring
@@ -1900,5 +1900,4 @@ stateDiagram-v2
 | 27 | `/datimeteo/{codiceRegione}` | GET | JSON | 
 | 28 | `[News] /smartcaring` | GET | JSON | 官方JS |
 | 29 | `[News] /infomobility` | GET | JSON | 官方JS |
-
 
