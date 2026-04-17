@@ -97,3 +97,21 @@ const CAT_IMAGE_MAP = {
     "64-EN": "pic/NJ.png",
     "77-EXP": "pic/TTI.png"
 };
+
+window.CLIENT_LINK_MAP = CLIENT_LINK_MAP;
+window.CAT_IMAGE_MAP = CAT_IMAGE_MAP;
+window.CAT_MAP = CAT_MAP;
+
+/**
+ * 根据列车类别代码返回对应的 badge CSS 类名。
+ * 集中管理，供 main.js 和 station.js 共同使用。
+ */
+window.getBadgeClass = function (catCode) {
+    if (['REG', 'RE', 'RV', 'MET'].includes(catCode)) return 'badge-regional';
+    if (['FR', 'FB', 'FA'].includes(catCode)) return 'badge-arrow';
+    if (['IC', 'ICN'].includes(catCode)) return 'badge-intercity';
+    if (['EC', 'EN'].includes(catCode)) return 'badge-international';
+    if (catCode === 'TS') return 'badge-storico';
+    if (catCode === 'EXP') return 'badge-espresso';
+    return '';
+};

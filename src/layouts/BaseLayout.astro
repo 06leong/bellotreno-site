@@ -2,37 +2,116 @@
 import Navbar from '../components/Navbar.astro';
 import Footer from '../components/Footer.astro';
 import BackToTop from '../components/BackToTop.astro';
+import { ClientRouter } from 'astro:transitions';
 import '../styles/global.css';
 
 interface Props {
     title: string;
+    description?: string;
     pageScripts?: string[];
 }
 
-const { title, pageScripts = [] } = Astro.props;
+const SITE_URL = 'https://real.bellotreno.org';
+const OG_IMAGE  = `${SITE_URL}/og-image.png`;
+
+const {
+    title,
+    pageScripts = [],
+    description = 'BelloTreno — Orari e stato in tempo reale dei treni italiani. Frecciarossa, Intercity, Regionali e molto altro.',
+} = Astro.props;
+
+// Canonical URL: origine + percorso corrente (senza query string / hash)
+const canonicalURL = new URL(Astro.url.pathname, SITE_URL).href;
 ---
 
 <!DOCTYPE html>
-<html lang="zh-CN">
+<!--
+  lang="it" è il valore statico (lingua principale per i crawler).
+  theme-init.js sovrascrive l'attributo lang in base alla preferenza
+  salvata dell'utente (localStorage) prima che la pagina venga visualizzata.
+-->
+<html lang="it">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="BelloTreno - Real-time Italian railway train information">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#6a8a9f" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#082a1a" media="(prefers-color-scheme: dark)">
+    <link rel="manifest" href="/site.webmanifest">
+
+    <!-- ===== SEO Core ===== -->
     <title>{title}</title>
+    <meta name="description" content={description}>
+    <link rel="canonical" href={canonicalURL}>
+
+    <!-- ===== hreflang: stesso URL serve tutte le lingue ===== -->
+    <link rel="alternate" hreflang="it"      href={canonicalURL}>
+    <link rel="alternate" hreflang="en"      href={canonicalURL}>
+    <link rel="alternate" hreflang="zh-Hans" href={canonicalURL}>
+    <link rel="alternate" hreflang="x-default" href={canonicalURL}>
+
+    <!-- ===== Open Graph ===== -->
+    <meta property="og:type"        content="website">
+    <meta property="og:site_name"   content="BelloTreno">
+    <meta property="og:url"         content={canonicalURL}>
+    <meta property="og:title"       content={title}>
+    <meta property="og:description" content={description}>
+    <meta property="og:image"       content={OG_IMAGE}>
+    <meta property="og:locale"      content="it_IT">
+    <meta property="og:locale:alternate" content="en_GB">
+    <meta property="og:locale:alternate" content="zh_CN">
+
+    <!-- ===== Twitter Card ===== -->
+    <meta name="twitter:card"        content="summary_large_image">
+    <meta name="twitter:title"       content={title}>
+    <meta name="twitter:description" content={description}>
+    <meta name="twitter:image"       content={OG_IMAGE}>
+
+    <!-- ===== Structured Data (JSON-LD) ===== -->
+    <script type="application/ld+json" is:inline>
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "BelloTreno",
+      "url": "https://real.bellotreno.org",
+      "description": "Orari e stato in tempo reale dei treni italiani: Frecciarossa, Intercity, Regionali. Dati tramite ViaggiaTreno.",
+      "applicationCategory": "TravelApplication",
+      "operatingSystem": "Web",
+      "inLanguage": ["it", "en", "zh-Hans"],
+      "isAccessibleForFree": true,
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+      "author": { "@type": "Person", "email": "ferrovie@bellotreno.org" }
+    }
+    </script>
+
+    <!-- ===== Assets ===== -->
+    <!-- preconnect: stabilisce la connessione TCP/TLS in anticipo, riducendo la latenza dei font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
-        href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@500;700&family=Roboto:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&family=Noto+Sans+SC:wght@400;500;700&display=swap"
         rel="stylesheet">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
     <link href="https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined" rel="stylesheet">
+
     <script is:inline src="/scripts/theme-init.js"></script>
+    <ClientRouter />
     <slot name="head" />
 </head>
 <body>
-    <Navbar />
-    <BackToTop />
-
-    <slot />
-
-    <Footer />
+    <div class="aurora-bg" transition:persist="aurora-bg">
+        <div class="aurora-blob aurora-1"></div>
+        <div class="aurora-blob aurora-2"></div>
+        <div class="aurora-blob aurora-3"></div>
+        <div class="aurora-blob aurora-4"></div>
+    </div>
+    <div style="position: relative; z-index: 1; flex: 1; display: flex; flex-direction: column;">
+        <Navbar />
+        <BackToTop />
+        <slot />
+        <Footer />
+    </div>
 
     <script is:inline src="/scripts/config.js"></script>
     <script is:inline src="/scripts/i18n.js"></script>
@@ -41,3 +120,4 @@ const { title, pageScripts = [] } = Astro.props;
     <slot name="scripts" />
 </body>
 </html>
+

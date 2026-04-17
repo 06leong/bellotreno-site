@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Premium Morandi Slate Blue Background -->
+  <rect width="512" height="512" rx="140" fill="#6a8a9f" />
+  
+  <g>
+    <!-- Aerodynamic Speed Lines -->
+    <path d="M 80 210 H 120  M 50 260 H 130  M 70 310 H 120" stroke="#ffffff" stroke-width="20" stroke-linecap="round" />
+    
+    <!-- High-Speed Train Body (ETR styling) -->
+    <path d="M 160 350 V 170 H 260 C 370 170, 420 250, 440 330 A 20 20 0 0 1 420 350 Z" fill="#ffffff" />
+    
+    <!-- Sweeping Cockpit Window Cutout -->
+    <path d="M 210 205 H 280 C 330 205, 355 220, 385 270 L 370 280 C 345 240, 325 225, 280 225 H 210 Z" fill="#6a8a9f" />
+    
+    <!-- Passenger Door Cutout -->
+    <rect x="180" y="200" width="14" height="110" rx="7" fill="#6a8a9f" />
+    
+    <!-- Front Headlight Detail -->
+    <circle cx="410" cy="315" r="10" fill="#6a8a9f" />
+  </g>
+</svg>

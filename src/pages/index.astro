@@ -2,12 +2,15 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 ---
 
-<BaseLayout title="BelloTreno" pageScripts={["/scripts/station.js", "/scripts/main.js"]}>
+<BaseLayout
+    title="BelloTreno — Treni in Tempo Reale"
+    description="Cerca treni italiani in tempo reale. Stato, ritardi e percorso completo di Frecciarossa, Intercity, Regionali e altri treni Trenitalia su ViaggiaTreno."
+    pageScripts={["/scripts/station.js", "/scripts/main.js"]}>
     <Fragment slot="head"></Fragment>
     <div class="container">
-        <div class="text-center mt-10 mb-6">
+        <div class="text-center mt-12 mb-8 relative z-10">
             <a href="#" class="inline-block hover:opacity-80 transition-opacity" onclick="goHome(); return false;">
-                <h1 class="text-[2.5rem] font-bold mb-2 text-primary">BelloTreno</h1>
+                <h1 class="text-[3.5rem] font-extrabold mb-2 text-primary brand-heading tracking-tight drop-shadow-sm">BelloTreno</h1>
             </a>
 
             <div id="statsBar" class="grid grid-cols-[1fr_auto_1fr] items-center gap-3 sm:gap-4 mb-4 text-xs sm:text-sm text-base-content/60 transition-opacity duration-500 opacity-0">
@@ -28,12 +31,25 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                 </div>
             </div>
 
-            <div class="relative w-full max-w-2xl mx-auto group">
-                <button id="searchModeToggle" onclick="switchSearchMode(searchMode === 'train' ? 'station' : 'train')" class="absolute left-2 top-1/2 -translate-y-1/2 btn btn-ghost btn-sm rounded-full z-10 gap-0.5 px-2.5 text-base-content/50 hover:text-primary transition-colors">
-                    <span class="material-symbols-outlined text-[1.3rem]" id="searchIcon">train</span>
-                    <span class="material-symbols-outlined text-[0.9rem]">expand_more</span>
-                </button>
-                <input type="text" id="trainSearch" class="input shadow-sm w-full pl-20 py-6 text-lg bg-base-100 border-base-300 focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/20 transition-all text-base-content placeholder-base-content/40 rounded-full" placeholder="" autocomplete="off" />
+            <div class="relative w-full max-w-2xl mx-auto group mt-6 z-10">
+                <!-- Glowing effect behind the search bar when focused -->
+                <div class="absolute -inset-0.5 bg-gradient-to-r from-primary/30 to-info/30 rounded-full blur opacity-0 group-focus-within:opacity-100 transition duration-500"></div>
+                
+                <div class="relative flex items-center bg-base-100/65 backdrop-blur-3xl glass-border shadow-glass rounded-full overflow-hidden transition-all duration-300">
+                    <button id="searchModeToggle" onclick="switchSearchMode(searchMode === 'train' ? 'station' : 'train')" 
+                            class="flex items-center justify-center h-14 w-16 sm:w-20 pl-1 sm:pl-2 flex-shrink-0 gap-0 bg-transparent text-base-content/60 hover:text-primary transition-colors border-r border-base-content/10 outline-none cursor-pointer">
+                        <span class="material-symbols-outlined text-[1.4rem]" id="searchIcon">train</span>
+                        <span class="material-symbols-outlined text-[1.2rem] -ml-1">arrow_drop_down</span>
+                    </button>
+                    
+                    <input type="text" id="trainSearch" 
+                           class="flex-1 h-14 px-4 sm:px-6 text-lg bg-transparent border-none focus:outline-none focus:ring-0 text-base-content placeholder-base-content/40 tabular-nums w-full" 
+                           placeholder="" autocomplete="off" />
+                           
+                    <div class="pr-4 hidden sm:flex items-center">
+                        <kbd class="kbd kbd-sm opacity-40 border-none bg-base-content/10 font-sans tracking-wide">↵ Return</kbd>
+                    </div>
+                </div>
             </div>
 
             <div id="recentSearchesContainer" class="recent-searches-container" style="display: none;">

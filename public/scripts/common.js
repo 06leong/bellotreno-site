@@ -96,11 +96,18 @@ function scrollToTop() {
 }
 
 async function initVisitorCounter() {
+    // 每个会话只计数一次，防止 Astro ClientRouter 页面跳转重复触发
+    if (sessionStorage.getItem('_btCounted')) {
+        // 已计过数：只更新显示，不再发网络请求
+        if (window.visitorCountData !== undefined) updateLanguage();
+        return;
+    }
     const workerUrl = window.COUNTER_URL || 'https://site-counter.bellotreno.workers.dev/';
     try {
         const response = await fetch(workerUrl);
         const data = await response.json();
         window.visitorCountData = data.count;
+        sessionStorage.setItem('_btCounted', '1');
         updateLanguage();
     } catch (error) {
         console.error('Failed to fetch visitor count:', error);
@@ -118,21 +125,37 @@ window.changeTheme = changeTheme;
 window.scrollToTop = scrollToTop;
 window.initVisitorCounter = initVisitorCounter;
 
-document.addEventListener('DOMContentLoaded', () => {
+// ========== XSS: HTML 转义工具 ==========
+// 用于将 API 返回的字符串安全地插入 innerHTML
+function escapeHtml(str) {
+    if (str == null) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+window.escapeHtml = escapeHtml;
+
+document.addEventListener('astro:page-load', () => {
     initLanguage();
     initTheme();
     initVisitorCounter();
 
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-        if (window.currentTheme === 'auto') {
-            applyTheme();
-        }
-    });
+    if (!window._commonInitialized) {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+            if (window.currentTheme === 'auto') {
+                applyTheme();
+            }
+        });
 
-    window.addEventListener('scroll', () => {
-        const backToTop = document.querySelector('.back-to-top');
-        if (backToTop) {
-            backToTop.classList.toggle('show', window.scrollY > 300);
-        }
-    });
+        window.addEventListener('scroll', () => {
+            const backToTop = document.querySelector('.back-to-top');
+            if (backToTop) {
+                backToTop.classList.toggle('show', window.scrollY > 300);
+            }
+        });
+        window._commonInitialized = true;
+    }
 });

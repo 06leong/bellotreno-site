@@ -38,7 +38,7 @@ let currentRegion = 'all';
 let currentFetchController = null;
 
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('astro:page-load', () => {
     fetchRSS();
 });
 
@@ -173,17 +173,17 @@ function renderRSS(items) {
         const safeLink = /^https?:\/\//.test(link) ? link : '#';
 
         const rssCard = document.createElement('div');
-        rssCard.className = 'card bg-base-100 shadow-sm border border-base-200 hover:shadow-md transition-shadow mb-4';
+        rssCard.className = 'card bg-base-100/65 backdrop-blur-3xl shadow-glass border border-base-content/10 hover:bg-base-100/75 hover:shadow-lg transition-all mb-4';
         rssCard.innerHTML = `
             <div class="card-body p-6">
                 <h3 class="card-title text-lg text-base-content leading-snug"></h3>
                 <div class="flex items-center justify-between gap-3 mt-4 flex-wrap">
                     <div class="flex items-center gap-2 text-sm text-base-content/60">
                         <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">schedule</span> ${formattedDate}</span>
-                        ${region ? `<span class="badge badge-sm badge-ghost text-[#006a6a] dark:text-[#4db6ac] bg-[#006a6a]/10 dark:bg-[#4db6ac]/10 border-transparent"></span>` : ''}
+                        ${region ? `<span class="badge badge-sm badge-ghost custom-info-badge"></span>` : ''}
                     </div>
                     <div class="card-actions">
-                        <a target="_blank" rel="noopener noreferrer" class="btn btn-sm bg-[#006a6a] hover:bg-[#005050] text-white dark:bg-[#4db6ac] dark:text-gray-900 dark:hover:bg-[#3ca096] border-none rounded-full px-4 gap-1">
+                        <a target="_blank" rel="noopener noreferrer" class="btn btn-sm custom-readmore-btn rounded-full px-4 gap-1">
                             <span data-i18n="read_more">${getI18n('read_more')}</span>
                             <span class="material-symbols-outlined text-[16px]">open_in_new</span>
                         </a>

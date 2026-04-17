@@ -2,11 +2,13 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 ---
 
-<BaseLayout title="BelloTreno - Station" pageScripts={["/scripts/station.js"]}>
+<BaseLayout
+    title="Partenze & Arrivi — BelloTreno"
+    description="Tabellone partenze e arrivi in tempo reale delle stazioni ferroviarie italiane. Cerca la tua stazione e consulta i treni in orario e in ritardo."
+    pageScripts={["/scripts/station.js"]}>
     <div class="w-full max-w-[850px] mx-auto px-4 flex flex-col items-center overflow-x-hidden">
         <div class="w-full text-center mt-20 md:mt-24 mb-6">
             <h1 class="text-3xl md:text-4xl font-bold text-primary mb-2 leading-normal px-2" id="stationName">--</h1>
-
             <div id="weatherBar" class="flex items-center justify-center gap-2 sm:gap-3 mb-4 text-xs sm:text-sm text-base-content/60 transition-opacity duration-500 opacity-0">
                 <span class="material-symbols-outlined text-[1.3rem]">device_thermostat</span>
                 <span><span data-i18n="weather_current">当前</span> <span id="weatherTemp" class="font-medium">--</span></span>
@@ -17,7 +19,6 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                     <span><span data-i18n="weather_eve">晚间</span> <span id="weatherEve">--</span></span>
                 </div>
             </div>
-
             <div class="flex justify-center mx-auto mb-4 w-[280px] bg-base-200/50 p-1 rounded-full border border-base-200 shadow-sm backdrop-blur">
                 <button class="board-tab active flex-1 flex items-center justify-center gap-1.5 py-2 px-4 text-sm font-medium rounded-full cursor-pointer transition-all" id="btnPartenze"
                     onclick="switchBoardType('partenze')">
@@ -36,213 +37,15 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                 <span class="material-symbols-outlined align-middle text-[16px]">swipe</span>
                 <span data-i18n="scroll_hint">左右滑动查看完整信息</span>
             </div>
-
             <div id="loadingIndicator" class="text-center py-16 text-base-content/60">
                 <span class="loading loading-spinner loading-lg text-primary"></span>
                 <p data-i18n="loading" class="mt-4">加载中...</p>
             </div>
-
             <div id="errorMessage" class="text-center py-10 text-error" style="display: none;">
                 <span class="material-symbols-outlined text-[48px]">error</span>
                 <p data-i18n="load_error" class="mt-4">加载失败，请稍后重试</p>
             </div>
-
             <div id="boardContent" style="display: none;"></div>
         </div>
     </div>
-
-    <script is:inline slot="scripts">
-        let currentStationId = '';
-        let currentStationName = '';
-        let currentBoardType = 'partenze';
-
-        window.onLanguageChanged = function () {
-            if (currentStationId) {
-                loadStationBoard();
-            }
-        };
-
-        function goToTrainDetails(trainNumber) {
-            if (!trainNumber) return;
-            const cleanTrainNumber = trainNumber.trim();
-            window.location.href = `/?train=${encodeURIComponent(cleanTrainNumber)}`;
-        }
-
-        function switchBoardType(type) {
-            currentBoardType = type;
-            document.getElementById('btnPartenze').classList.toggle('active', type === 'partenze');
-            document.getElementById('btnArrivi').classList.toggle('active', type === 'arrivi');
-            loadStationBoard();
-        }
-
-        async function loadStationBoard() {
-            const loadingEl = document.getElementById('loadingIndicator');
-            const errorEl = document.getElementById('errorMessage');
-            const contentEl = document.getElementById('boardContent');
-
-            loadingEl.style.display = 'block';
-            errorEl.style.display = 'none';
-            contentEl.style.display = 'none';
-
-            try {
-                const data = await fetchStationBoard(currentStationId, currentBoardType);
-
-                if (!data || data.length === 0) {
-                    const t = (typeof translations !== 'undefined' && translations[window.currentLang]) || {};
-                    errorEl.querySelector('span').textContent = 'info';
-                    errorEl.querySelector('p').textContent = t.no_trains || 'No trains at this time';
-                    errorEl.style.display = 'block';
-                    loadingEl.style.display = 'none';
-                    return;
-                }
-
-                renderStationBoard(data);
-                loadingEl.style.display = 'none';
-                contentEl.style.display = 'block';
-            } catch (error) {
-                console.error('Failed to load station board:', error);
-                errorEl.style.display = 'block';
-                loadingEl.style.display = 'none';
-            }
-        }
-
-        function renderStationBoard(trains) {
-            const contentEl = document.getElementById('boardContent');
-            const t = translations[window.currentLang];
-
-            let tableHtml = '<div class="overflow-x-auto bg-base-100 rounded-2xl shadow-md border border-base-200"><table class="table table-zebra table-sm sm:table-md w-full">';
-
-            if (currentBoardType === 'partenze') {
-                tableHtml += `
-                <thead class="bg-primary text-primary-content border-none">
-                    <tr>
-                        <th style="width:16%" class="text-center py-2 sm:py-3 font-semibold text-[0.65rem] sm:text-sm border-r border-primary-content/20">${t.scheduled_time}</th>
-                        <th style="width:14%" class="text-center py-2 sm:py-3 font-semibold text-[0.65rem] sm:text-sm border-r border-primary-content/20">${t.train}</th>
-                        <th style="width:32%" class="py-2 sm:py-3 font-semibold text-[0.65rem] sm:text-sm border-r border-primary-content/20">${t.destination}</th>
-                        <th style="width:22%" class="text-center py-2 sm:py-3 font-semibold text-[0.65rem] sm:text-sm border-r border-primary-content/20">${t.status}</th>
-                        <th style="width:16%" class="text-center py-2 sm:py-3 font-semibold text-[0.65rem] sm:text-sm">${t.platform}</th>
-                    </tr>
-                </thead>
-                <tbody>`;
-
-                trains.forEach(train => {
-                    const formatted = formatDepartureData(train, window.currentLang, currentStationName);
-                    const trainNumber = train.numeroTreno || '';
-                    tableHtml += `
-                    <tr class="train-row hover cursor-pointer transition-colors border-b border-base-200 last:border-0" data-train-number="${trainNumber}">
-                        <td class="text-center font-mono font-bold text-sm sm:text-xl align-middle whitespace-nowrap px-1 sm:px-4">${formatted.scheduledTime}</td>
-                        <td class="text-center font-medium text-[0.65rem] sm:text-sm align-middle whitespace-normal px-1 sm:px-4">${formatted.trainNumber}</td>
-                        <td class="text-[0.65rem] sm:text-sm align-middle whitespace-normal leading-tight px-1 sm:px-4">${formatted.destination}</td>
-                        <td class="text-center font-medium text-[0.65rem] sm:text-sm align-middle px-1 sm:px-4 leading-tight" style="color:${formatted.statusColor}">${formatted.status}</td>
-                        <td class="text-center font-mono font-bold text-sm sm:text-lg align-middle px-1 sm:px-4">${formatted.platformHtml}</td>
-                    </tr>`;
-                });
-            } else {
-                tableHtml += `
-                <thead class="bg-primary text-primary-content border-none">
-                    <tr>
-                        <th style="width:13%" class="text-center py-2 sm:py-3 font-semibold text-[0.65rem] sm:text-sm border-r border-primary-content/20">${t.scheduled_time}</th>
-                        <th style="width:12%" class="text-center py-2 sm:py-3 font-semibold text-[0.65rem] sm:text-sm border-r border-primary-content/20">${t.train}</th>
-                        <th style="width:22%" class="py-2 sm:py-3 font-semibold text-[0.65rem] sm:text-sm border-r border-primary-content/20">${t.origin}</th>
-                        <th style="width:15%" class="text-center py-2 sm:py-3 font-semibold text-[0.65rem] sm:text-sm border-r border-primary-content/20">${t.actual_time}</th>
-                        <th style="width:22%" class="text-center py-2 sm:py-3 font-semibold text-[0.65rem] sm:text-sm border-r border-primary-content/20">${t.status}</th>
-                        <th style="width:16%" class="text-center py-2 sm:py-3 font-semibold text-[0.65rem] sm:text-sm">${t.platform}</th>
-                    </tr>
-                </thead>
-                <tbody>`;
-
-                trains.forEach(train => {
-                    const formatted = formatArrivalData(train, window.currentLang, currentStationName);
-                    const trainNumber = train.numeroTreno || '';
-                    tableHtml += `
-                    <tr class="train-row hover cursor-pointer transition-colors border-b border-base-200 last:border-0" data-train-number="${trainNumber}">
-                        <td class="text-center font-mono font-bold text-sm sm:text-xl align-middle whitespace-nowrap px-1 sm:px-4">${formatted.scheduledTime}</td>
-                        <td class="text-center font-medium text-[0.65rem] sm:text-sm align-middle whitespace-normal px-1 sm:px-4">${formatted.trainNumber}</td>
-                        <td class="text-[0.65rem] sm:text-sm align-middle whitespace-normal leading-tight px-1 sm:px-4">${formatted.origin}</td>
-                        <td class="text-center font-mono font-bold text-sm sm:text-xl align-middle whitespace-nowrap px-1 sm:px-4">${formatted.actualTime}</td>
-                        <td class="text-center font-medium text-[0.65rem] sm:text-sm align-middle px-1 sm:px-4 leading-tight" style="color:${formatted.statusColor}">${formatted.status}</td>
-                        <td class="text-center font-mono font-bold text-sm sm:text-lg align-middle px-1 sm:px-4">${formatted.platformHtml}</td>
-                    </tr>`;
-                });
-            }
-
-            tableHtml += '</tbody></table></div>';
-            contentEl.innerHTML = tableHtml;
-
-            const trainRows = contentEl.querySelectorAll('.train-row');
-            trainRows.forEach(row => {
-                row.addEventListener('click', function () {
-                    const trainNumber = this.getAttribute('data-train-number');
-                    if (trainNumber) {
-                        goToTrainDetails(trainNumber);
-                    }
-                });
-            });
-        }
-
-        async function fetchStationWeather(stationId) {
-            const apiBase = window.API_BASE;
-            try {
-                const regRes = await fetch(apiBase + '/regione/' + stationId);
-                if (!regRes.ok) return;
-                const codReg = parseInt(await regRes.text());
-                if (isNaN(codReg)) return;
-
-                const meteoRes = await fetch(apiBase + '/datimeteo/' + codReg);
-                if (!meteoRes.ok) return;
-                const meteoData = await meteoRes.json();
-
-                const stationWeather = meteoData[stationId];
-                if (!stationWeather) return;
-
-                document.getElementById('weatherTemp').textContent = stationWeather.oggiTemperatura + '°C';
-                document.getElementById('weatherAM').textContent = stationWeather.oggiTemperaturaMattino + '°';
-                document.getElementById('weatherPM').textContent = stationWeather.oggiTemperaturaPomeriggio + '°';
-                document.getElementById('weatherEve').textContent = stationWeather.oggiTemperaturaSera + '°';
-                document.getElementById('weatherBar').classList.remove('opacity-0');
-            } catch (e) {
-                console.error('Weather fetch failed:', e);
-            }
-        }
-
-        function initPage() {
-            const params = new URLSearchParams(window.location.search);
-            currentStationId = params.get('id') || '';
-            currentStationName = decodeURIComponent(params.get('name') || '');
-            currentBoardType = params.get('type') || 'partenze';
-
-            if (!currentStationId) {
-                document.getElementById('errorMessage').style.display = 'block';
-                document.getElementById('loadingIndicator').style.display = 'none';
-                return;
-            }
-
-            document.getElementById('stationName').textContent = currentStationName;
-            document.getElementById('btnPartenze').classList.toggle('active', currentBoardType === 'partenze');
-            document.getElementById('btnArrivi').classList.toggle('active', currentBoardType === 'arrivi');
-
-            loadStationBoard();
-            fetchStationWeather(currentStationId);
-        }
-
-        initPage();
-    </script>
 </BaseLayout>
-
-<style is:global>
-    .platform-pulse {
-        display: inline-block;
-        animation: platformPulse 2s ease-in-out infinite;
-        font-weight: 700;
-        background: linear-gradient(135deg, var(--color-primary) 0%, color-mix(in oklch, var(--color-base-content) 40%, transparent) 100%);
-        padding: 2px 8px;
-        border-radius: 6px;
-        color: var(--color-primary-content) !important;
-        box-shadow: 0 0 10px color-mix(in oklch, var(--color-primary) 50%, transparent);
-    }
-
-    @keyframes platformPulse {
-        0%, 100% { opacity: 1; transform: scale(1); }
-        50% { opacity: 0.85; transform: scale(1.08); }
-    }
-</style>

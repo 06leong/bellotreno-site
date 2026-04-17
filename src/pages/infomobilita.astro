@@ -2,7 +2,10 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 ---
 
-<BaseLayout title="BelloTreno - Infomobilità" pageScripts={["/scripts/infomobilita.js"]}>
+<BaseLayout
+    title="Infomobilità — BelloTreno"
+    description="Avvisi e aggiornamenti in tempo reale dell’infomobilità ferroviaria RFI. Notizie su scioperi, lavori e perturbazioni su tutta la rete ferroviaria italiana."
+    pageScripts={["/scripts/infomobilita.js"]}>
     <Fragment slot="head"></Fragment>
 
     <div class="container">
@@ -25,11 +28,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                 </div>
 
                 <div class="dropdown w-[480px] max-w-full mx-auto" id="regionDropdown">
-                    <div tabindex="0" role="button" class="btn btn-lg w-full bg-base-100 border border-base-300 focus:outline-none focus:border-primary transition-all text-base-content shadow-sm rounded-full flex justify-center hover:bg-base-200/50 font-normal h-14 min-h-[3.5rem]">
+                    <div tabindex="0" role="button" class="btn btn-lg w-full bg-base-100/65 backdrop-blur-3xl shadow-glass custom-region-dropdown focus:outline-none focus:border-primary transition-all font-medium rounded-full flex justify-center hover:bg-base-100/75 h-14 min-h-[3.5rem]">
                         <span id="regionBtnText" data-i18n="region_all" class="text-[1.125rem]">所有大区</span>
-                        <span class="material-symbols-outlined absolute right-5 text-base-content/50">expand_more</span>
+                        <span class="material-symbols-outlined absolute right-5 opacity-70">expand_more</span>
                     </div>
-                    <ul tabindex="0" class="dropdown-content z-[2] menu p-2 shadow-lg bg-base-100 border border-base-200 rounded-box w-full max-h-64 flex-nowrap overflow-y-auto mt-2">
+                    <ul tabindex="0" class="dropdown-content z-[2] menu p-2 shadow-glass bg-base-100/80 backdrop-blur-3xl border border-base-content/10 rounded-box w-full max-h-64 flex-nowrap overflow-y-auto mt-2">
                         <li><a class="justify-center text-center py-3 text-base" data-i18n="region_all" onclick="changeDropdownRegion('all', this.textContent, 'region_all')">所有大区</a></li>
                         <li><a class="justify-center text-center py-3 text-base" data-i18n="region_abruzzo" onclick="changeDropdownRegion('abruzzo', this.textContent, 'region_abruzzo')">Abruzzo</a></li>
                         <li><a class="justify-center text-center py-3 text-base" data-i18n="region_basilicata" onclick="changeDropdownRegion('basilicata', this.textContent, 'region_basilicata')">Basilicata</a></li>

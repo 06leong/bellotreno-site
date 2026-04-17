@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://real.bellotreno.org/sitemap-index.xml

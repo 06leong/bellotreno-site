@@ -107,7 +107,7 @@ const translations = {
     },
     en: {
         nav_home: "Home",
-        nav_infomobilita: "Infomobilità",
+        nav_infomobilita: "Infomobility",
         nav_about: "About",
         theme_auto: "Follow System",
         theme_light: "Light Mode",

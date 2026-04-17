@@ -1,0 +1,25 @@
+{
+  "name": "BelloTreno",
+  "short_name": "BelloTreno",
+  "description": "Orari e stato in tempo reale dei treni italiani",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#080c14",
+  "theme_color": "#6a8a9f",
+  "lang": "it",
+  "categories": ["travel", "navigation"],
+  "icons": [
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/og-image.png",
+      "sizes": "1200x630",
+      "type": "image/png"
+    }
+  ]
+}

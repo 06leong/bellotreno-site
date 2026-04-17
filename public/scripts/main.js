@@ -102,7 +102,11 @@ function formatDuration(duration) {
     if (parts.length === 2) {
         const hours = parseInt(parts[0]);
         const mins = parseInt(parts[1]);
-        return window.currentLang === 'zh' ? `${hours}小时${mins}分钟` : `${hours}h:${mins}min`;
+        const t = translations[window.currentLang] || translations.en;
+        // zh: 无分隔空格（「1小时30分钟」），其他语言：加空格（「1h 30min」）
+        return window.currentLang === 'zh'
+            ? `${hours}${t.hours}${mins}${t.minutes}`
+            : `${hours}${t.hours} ${mins}${t.minutes}`;
     }
     return duration;
 }
@@ -111,22 +115,27 @@ function formatDuration(duration) {
 function translateStatus(text) {
     if (!text) return "";
 
+    // Global cleanup: remove trailing dot from "min."
+    text = text.replace(/min\./gi, "min");
+
     if (window.currentLang === 'zh') {
         return text
             .replace(/non partito/gi, "未出发")
-            .replace(/con un anticipo di/g, "提前")
-            .replace(/con un ritardo di/g, "晚点")
-            .replace(/in orario/g, "准点")
-            .replace(/(\d+)\s*min\./g, "$1分钟");
+            .replace(/con un anticipo di/gi, "提前")
+            .replace(/con un ritardo di/gi, "晚点")
+            .replace(/in orario/gi, "准点")
+            .replace(/(\d+)\s*min/g, "$1分钟");
     } else if (window.currentLang === 'en') {
         return text
             .replace(/non partito/gi, "Not Departed")
-            .replace(/con un anticipo di/g, "Early by")
-            .replace(/con un ritardo di/g, "Delayed by")
-            .replace(/in orario/g, "On Time")
-            .replace(/(\d+)\s*min\./g, "$1 min");
+            .replace(/con un anticipo di/gi, "Early:")
+            .replace(/con un ritardo di/gi, "Delay:")
+            .replace(/in orario/gi, "On Time");
+    } else if (window.currentLang === 'it') {
+        return text
+            .replace(/con un anticipo di/gi, "Anticipo:")
+            .replace(/con un ritardo di/gi, "Ritardo:");
     }
-
 
     return text;
 }
@@ -139,16 +148,10 @@ function formatT(ms) {
 function renderTimeHtml(label, schedMs, realMs, delayMin) {
     const sched = formatT(schedMs);
     const real = formatT(realMs);
-    if (!real) return `<div class="time-item"><span class="time-label">${label} | ${translations[currentLang].expected}:</span> <b>${sched || '--:--'}</b></div>`;
-    const isDiff = sched !== real;
-    const colorClass = (delayMin > 0) ? "late" : "early";
-    return `
-        <div class="time-item">
-            <span class="time-label">${label} |</span> 
-            ${isDiff ? `<span class="time-val-sched">${sched}</span>` : ''}
-            <span class="time-val-real ${colorClass}">${real}</span>
-        </div>
-    `;
+    const timeToShow = real || sched || '--:--';
+    // Only colorize if we have a real time.
+    const colorClass = real ? ((delayMin > 0) ? 'late' : 'early') : '';
+    return `<div class="time-item"><span class="time-label">${label}</span><span class="time-val-real tabular-nums ${colorClass}">${timeToShow}</span></div>`;
 }
 
 
@@ -393,8 +396,8 @@ function renderDisambiguation() {
         const div = document.createElement('div');
         div.className = 'choice-item ripple';
         div.innerHTML = `
-            <div style="font-size:1.1rem; font-weight:bold; color:var(--md-sys-color-primary)">${label}</div>
-            <div style="font-size:0.9rem; color:var(--text-grey); margin-top:4px">
+            <div style="font-size:1.1rem; font-weight:bold; color:var(--color-primary)">${label}</div>
+            <div style="font-size:0.9rem; color:var(--color-base-content); opacity:0.6; margin-top:4px">
                 <span class="material-symbols-outlined" style="font-size:14px; vertical-align:middle">calendar_month</span> ${translations[currentLang].depart_date}: ${dateStr} 
                 | <span class="material-symbols-outlined" style="font-size:14px; vertical-align:middle">location_on</span> ${translations[currentLang].origin_station}: ${sID}
             </div>
@@ -428,10 +431,10 @@ function showStationDisambiguation(stations) {
         div.className = 'choice-item ripple';
         div.innerHTML = `
             <div style="display:flex; align-items:center; gap:8px">
-                <span class="material-symbols-outlined" style="font-size:24px; color:var(--md-sys-color-primary)">location_on</span>
+                <span class="material-symbols-outlined" style="font-size:24px; color:var(--color-primary)">location_on</span>
                 <div>
-                    <div style="font-size:1.1rem; font-weight:bold; color:var(--md-sys-color-primary)">${station.nomeLungo}</div>
-                    <div style="font-size:0.9rem; color:var(--text-grey); margin-top:2px">ID: ${station.id}</div>
+                    <div style="font-size:1.1rem; font-weight:bold; color:var(--color-primary)">${station.nomeLungo}</div>
+                    <div style="font-size:0.9rem; color:var(--color-base-content); opacity:0.6; margin-top:2px">ID: ${station.id}</div>
                 </div>
             </div>
         `;
@@ -547,7 +550,7 @@ function render(data) {
 
     const displayOrigin = (data.origineEstera && data.origineEstera !== data.destinazione) ? data.origineEstera : data.origine;
     const displayDest = (data.destinazioneEstera && data.destinazioneEstera !== data.origine) ? data.destinazioneEstera : data.destinazione;
-    const delayMsg = translateStatus(data.compRitardoAndamento[0]);
+    const delayMsg = translateStatus((data.compRitardoAndamento ?? [])[0] ?? '');
     const isEarly = delayMsg.includes(translations[currentLang].early_by) ||
         delayMsg.includes(translations[currentLang].on_time) ||
         delayMsg.toLowerCase().includes("anticipo") ||
@@ -557,50 +560,43 @@ function render(data) {
     const formattedDuration = formatDuration(data.compDurata);
 
 
-    let badgeClass = '';
-    if (['REG', 'RE', 'RV', 'MET'].includes(catCode)) {
-        badgeClass = 'badge-regional';
-    } else if (['FR', 'FB', 'FA'].includes(catCode)) {
-        badgeClass = 'badge-arrow';
-    } else if (['IC', 'ICN'].includes(catCode)) {
-        badgeClass = 'badge-intercity';
-    } else if (['EC', 'EN'].includes(catCode)) {
-        badgeClass = 'badge-international';
-    } else if (catCode === 'TS') {
-        badgeClass = 'badge-storico';
-    } else if (catCode === 'EXP') {
-        badgeClass = 'badge-espresso';
-    }
+    const badgeClass = window.getBadgeClass ? window.getBadgeClass(catCode) : '';
 
     const trainNumBadge = badgeClass
         ? `<span class="train-badge ${badgeClass}">${data.compNumeroTreno}</span>`
         : `<b>${data.compNumeroTreno}</b>`;
 
     card.innerHTML = `
-        <div class="refresh-btn ripple" onclick="refreshTrainData()" title="${currentLang === 'zh' ? '刷新' : currentLang === 'it' ? 'Aggiorna' : 'Refresh'}">
+        <div class="refresh-btn" onclick="refreshTrainData()" title="${currentLang === 'zh' ? '刷新' : currentLang === 'it' ? 'Aggiorna' : 'Refresh'}">
             <span class="material-symbols-outlined">refresh</span>
         </div>
-        <div class="op-cat-row" style="display: flex; align-items: center;">${operatorHTML} · ${categoryHTML}</div>
-        <div class="train-info-wrapper">
-            <div>
-                <div class="train-route">${displayOrigin} ➜ ${displayDest}</div>
-                <div class="train-meta">
-                    ${translations[currentLang].train_num}: ${trainNumBadge} | ${translations[currentLang].duration}: <b>${formattedDuration}</b>
+        <div class="op-cat-row" style="display: flex; align-items: center; gap: 8px;">${operatorHTML} <span class="opacity-50">·</span> ${categoryHTML}</div>
+        <div class="train-info-wrapper flex flex-col sm:flex-row items-start gap-3 mt-2">
+            <div class="flex-1 min-w-0">
+                <div class="train-route mb-2">${displayOrigin} <span class="opacity-40 font-normal material-symbols-outlined align-middle mx-1">arrow_forward</span> ${displayDest}</div>
+                <div class="train-meta flex items-center gap-3 flex-wrap">
+                    <span class="flex items-center gap-2 text-sm uppercase tracking-wider font-semibold opacity-80">${translations[currentLang].train_num}: ${trainNumBadge}</span>
+                    <span class="opacity-30">|</span>
+                    <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[16px] opacity-60">schedule</span> <b>${formattedDuration}</b></span>
                 </div>
             </div>
             <div class="train-status-section">
-                <div class="train-delay ${isEarly ? '' : 'late'}">${delayMsg}</div>
-                <div class="train-last-position">${translations[currentLang].last_position}: ${data.stazioneUltimoRilevamento} (${data.compOraUltimoRilevamento || '--:--'})</div>
+                <div class="train-delay tabular-nums ${isEarly ? '' : 'late'}">${delayMsg}</div>
+                <div class="train-last-position flex items-start sm:items-center gap-1 justify-start sm:justify-end">
+                    <span class="material-symbols-outlined mt-[2px] sm:mt-0" style="font-size:12px">location_on</span>
+                    ${data.stazioneUltimoRilevamento} (${data.compOraUltimoRilevamento || '--:--'})
+                </div>
             </div>
         </div>
     `;
 
 
     if (data.subTitle && data.subTitle.trim()) {
+        const esc = window.escapeHtml || (s => s);
         card.innerHTML += `
             <div class="alert-box">
                 <span class="material-symbols-outlined" style="font-size:20px">campaign</span>
-                <span>${data.subTitle}</span>
+                <span>${esc(data.subTitle)}</span>
             </div>
         `;
     }
@@ -640,9 +636,7 @@ function render(data) {
 
         const pPlat = f.binarioProgrammatoPartenzaDescrizione || f.binarioProgrammatoArrivoDescrizione;
         const ePlat = f.binarioEffettivoPartenzaDescrizione || f.binarioEffettivoArrivoDescrizione;
-        let platHTML = (ePlat && pPlat && ePlat !== pPlat)
-            ? `<span class="plat-old">${pPlat}</span><span class="plat-new">${ePlat}</span>`
-            : `<span class="plat-normal">${pPlat || "--"}</span>`;
+        let platHTML = `<span class="plat-normal">${ePlat || pPlat || "--"}</span>`;
 
         const stayMinutes = (f.partenza_teorica && f.arrivo_teorico) ? Math.round((f.partenza_teorica - f.arrivo_teorico) / 60000) : null;
         const stayTime = stayMinutes ? `${stayMinutes} ${translations[currentLang].minutes}` : "N/A";
@@ -660,24 +654,33 @@ function render(data) {
             directionBadge = `<span class="direction-badge">${directionText}</span>`;
         }
 
+        const timeHtmlArr = !isFirst ? renderTimeHtml(translations[currentLang].arrival, (f.arrivo_teorico || f.programmata), f.arrivoReale, f.ritardoArrivo) : '';
+        const timeHtmlDep = !isLast ? renderTimeHtml(translations[currentLang].departure, (f.partenza_teorica || f.programmata), f.partenzaReale, f.ritardoPartenza) : '';
+
         timelineFragments.push(`
-            <div class="${stationItemClasses.join(' ')}">
+            <div class="${stationItemClasses.join(' ')} stagger-item animate-fade-in" style="--stagger-idx: ${i}">
                 <div class="station-dot-wrapper">
                     <div class="station-dot"></div>
                 </div>
-                <div class="station-card">
-                    <div class="station-name">
-                        <span class="station-link" data-station-id="${f.id}" data-station-name="${f.stazione.replace(/"/g, '&quot;')}">${f.stazione}</span>
-                        ${directionBadge}
+                <div class="station-card glass-border shadow-glass hover:bg-base-content/5 transition-colors group">
+                    <div class="station-name-col">
+                        <div class="station-name group-hover:text-primary transition-colors flex items-center flex-wrap">
+                            <span class="station-link" data-station-id="${f.id}" data-station-name="${escapeHtml(f.stazione)}">${escapeHtml(f.stazione)}</span>
+                            ${(!isFirst && !isLast && stayTime !== "N/A") ? `<span class="hidden sm:flex opacity-50 text-[0.85rem] font-medium items-center gap-0.5 ml-2 tracking-normal" style="font-family: var(--font-sans)"><span class="material-symbols-outlined icon-hourglass-desktop">hourglass_empty</span> ${stayTime}</span>` : ''}
+                        </div>
+                        ${directionBadge ? `<div class="flex items-center gap-2 mt-1 flex-wrap">${directionBadge}</div>` : ''}
                     </div>
-                    <div class="info-row">
-                        ${!isFirst ? renderTimeHtml(translations[currentLang].arrival, (f.arrivo_teorico || f.programmata), f.arrivoReale, f.ritardoArrivo) : ''}
-                        ${!isLast ? renderTimeHtml(translations[currentLang].departure, (f.partenza_teorica || f.programmata), f.partenzaReale, f.ritardoPartenza) : ''}
-                        ${(!isFirst && !isLast) ? `<div class="time-item"><span class="time-label">${translations[currentLang].stop_duration}:</span> <b>${stayTime}</b></div>` : ''}
+                    
+                    <div class="station-time-col tabular-nums">
+                        ${timeHtmlArr}
+                        ${timeHtmlDep}
                     </div>
-                    <div class="info-row secondary">
-                        <div class="time-item"><span class="time-label">${translations[currentLang].platform}:</span> ${platHTML}</div>
-                        <div class="time-item" style="opacity:0.5"><span class="time-label">Progressivo:</span> <b>${f.progressivo}</b></div>
+
+                    <div class="station-plat-col flex flex-col items-center justify-center">
+                        ${(!isFirst && !isLast && stayTime !== "N/A") ? `<div class="flex sm:hidden items-center justify-center gap-0.5 opacity-60 text-[0.8rem] font-medium tracking-normal mb-3" style="font-family: var(--font-sans)"><span class="material-symbols-outlined icon-hourglass-mobile">hourglass_empty</span> ${stayTime}</div>` : ''}
+                        <div class="text-[0.8rem] uppercase tracking-wider font-semibold opacity-60 mb-1.5">${translations[currentLang].platform}</div>
+                        <div class="text-2xl">${platHTML}</div>
+                        <div class="text-[0.65rem] font-mono opacity-30 mt-2" title="Progressivo">P:${f.progressivo}</div>
                     </div>
                 </div>
             </div>
@@ -773,7 +776,7 @@ function renderSmartCaring(data) {
             const time = new Date(n.insertTimestamp).toLocaleTimeString('it-IT', {
                 hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome'
             });
-            return `<div class="sc-note"><span class="sc-note-time">${time}</span><span class="sc-note-text">${n.infoNote}</span></div>`;
+            return `<div class="sc-note"><span class="sc-note-time">${time}</span><span class="sc-note-text">${escapeHtml(n.infoNote)}</span></div>`;
         }).join('');
         notifHTML = `<div class="sc-notes-list">${notes}</div>`;
     } else if (hasRecent) {
@@ -783,7 +786,7 @@ function renderSmartCaring(data) {
             const dayNum = d.getDate();
             const dateStr = currentLang === 'zh' ? `${monthStr}${dayNum}号` : `${monthStr} ${dayNum}`;
             const time = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' });
-            return `<div class="sc-note"><span class="sc-note-date">${dateStr}</span><span class="sc-note-clock">${time}</span><span class="sc-note-text">${n.infoNote}</span></div>`;
+            return `<div class="sc-note"><span class="sc-note-date">${dateStr}</span><span class="sc-note-clock">${time}</span><span class="sc-note-text">${escapeHtml(n.infoNote)}</span></div>`;
         }).join('');
         notifHTML = `<div class="sc-notes-list">${notes}</div>`;
     } else {
@@ -824,7 +827,7 @@ function renderSmartCaring(data) {
             const tipDelay = d.delay > 0 ? `+${d.delay}min` : 'OK';
             const tipReason = (d.delay > 0 && d.reasons.length) ? d.reasons[0] : '';
 
-            return `<div class="sc-bar-col" data-delay="${tipDelay}" data-reason="${tipReason}" onclick="toggleScTooltip(event,this)"><div class="sc-bar ${colorClass}" style="height:${barHeight}px"></div><span class="sc-bar-label">${dayNum}<br><span class="sc-bar-month">${monthAbbr}</span></span></div>`;
+            return `<div class="sc-bar-col" data-delay="${tipDelay}" data-reason="${escapeHtml(tipReason)}" onclick="toggleScTooltip(event,this)"><div class="sc-bar ${colorClass}" style="height:${barHeight}px"></div><span class="sc-bar-label">${dayNum}<br><span class="sc-bar-month">${monthAbbr}</span></span></div>`;
         }).join('');
 
         chartSection = `<div class="sc-history-section"><div class="sc-section-title">${t.sc_history}</div><div class="sc-chart">${chartHTML}</div></div>`;
@@ -844,7 +847,9 @@ function renderSmartCaring(data) {
         }
     }
 
-    const wasCollapsed = card.querySelector('.sc-body-wrap.sc-collapsed') !== null;
+    const wasCollapsed = card.querySelector('.sc-body-wrap') === null
+        ? true  // first render: default collapsed
+        : card.querySelector('.sc-body-wrap.sc-collapsed') !== null;
 
     card.innerHTML = `
         <div class="sc-header" onclick="this.nextElementSibling.classList.toggle('sc-collapsed');this.querySelector('.sc-toggle').classList.toggle('sc-rotated');hideScTooltip()">
@@ -915,81 +920,67 @@ function initApp() {
 }
 
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('astro:page-load', () => {
     initApp();
     fetchStatistiche();
 
-
-    document.getElementById('trainSearch').addEventListener('keydown', async (e) => {
-        if (e.key === 'Enter') {
-            const input = e.target.value.trim();
-            if (input) startSearch(input);
-        }
-    });
-
-
-    document.addEventListener('click', (e) => {
-        if (!e.target.closest('.lang-switch') && !e.target.closest('.theme-switch')) {
-            document.getElementById('langMenu').classList.remove('show');
-            document.getElementById('themeMenu').classList.remove('show');
-        }
-    });
-
-
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-        if (currentTheme === 'auto') {
-            applyTheme();
-        }
-    });
-
-
-    document.addEventListener('click', function (e) {
-        const stationLink = e.target.closest('.station-link');
-        if (stationLink) {
-            const stationId = stationLink.getAttribute('data-station-id');
-            const stationName = stationLink.getAttribute('data-station-name');
-            if (stationId && stationName) {
-                goToStationBoard(stationId, stationName);
+    const trainInput = document.getElementById('trainSearch');
+    if (trainInput) {
+        trainInput.addEventListener('keydown', async (e) => {
+            if (e.key === 'Enter') {
+                const input = e.target.value.trim();
+                if (input) startSearch(input);
             }
-        }
-    });
+        });
+    }
+
+    if (!window._mainInitialized) {
+        window._mainInitialized = true;
+
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.lang-switch') && !e.target.closest('.theme-switch')) {
+                const langMenu = document.getElementById('langMenu');
+                const themeMenu = document.getElementById('themeMenu');
+                if (langMenu) langMenu.classList.remove('show');
+                if (themeMenu) themeMenu.classList.remove('show');
+            }
+        });
+
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+            if (currentTheme === 'auto') {
+                applyTheme();
+            }
+        });
+
+        document.addEventListener('click', function (e) {
+            const stationLink = e.target.closest('.station-link');
+            if (stationLink) {
+                const stationId = stationLink.getAttribute('data-station-id');
+                const stationName = stationLink.getAttribute('data-station-name');
+                if (stationId && stationName) {
+                    goToStationBoard(stationId, stationName);
+                }
+            }
+        });
+    }
 });
 
 
-let urlSearchRetryCount = 0;
-const maxRetries = 10;
-
-function checkAndSearchFromURL() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const trainParam = urlParams.get('train');
-
-    if (trainParam) {
-        const trainNumber = trainParam.trim();
-
-        const trainInput = document.getElementById('trainSearch');
-        if (!trainInput) {
-            urlSearchRetryCount++;
-            if (urlSearchRetryCount < maxRetries) {
-                console.warn(`trainSearch 元素未找到，延迟重试... (${urlSearchRetryCount}/${maxRetries})`);
-                setTimeout(checkAndSearchFromURL, 100);
-            } else {
-                console.error('trainSearch 元素未找到，已达到最大重试次数');
+// astro:page-load 触发时 DOM 已完整就绪，无需轮询重试
+document.addEventListener('astro:page-load', () => {
+    const trainParam = new URLSearchParams(window.location.search).get('train');
+    if (!trainParam) return;
+    const trainNumber = trainParam.trim();
+    const trainInput = document.getElementById('trainSearch');
+    if (!trainInput) return;
+    trainInput.value = trainNumber;
+    // 短暂延迟确保 common.js 的 astro:page-load 回调（语言初始化）已先执行
+    setTimeout(() => {
+        startSearch(trainNumber);
+        setTimeout(() => {
+            if (window.history && window.history.replaceState) {
+                window.history.replaceState({}, document.title, window.location.pathname);
             }
-            return;
-        }
-
-        trainInput.value = trainNumber;
-
-        setTimeout(function () {
-            startSearch(trainNumber);
-
-            setTimeout(function () {
-                if (window.history && window.history.replaceState) {
-                    window.history.replaceState({}, document.title, window.location.pathname);
-                }
-            }, 300);
-        }, 200);
-    }
-}
-
-document.addEventListener('DOMContentLoaded', checkAndSearchFromURL);
+        }, 300);
+    }, 200);
+});

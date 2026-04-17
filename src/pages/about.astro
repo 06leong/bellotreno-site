@@ -2,9 +2,11 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 ---
 
-<BaseLayout title="About - BelloTreno">
+<BaseLayout
+    title="About — BelloTreno"
+    description="BelloTreno è un progetto amatoriale per il monitoraggio in tempo reale dei treni italiani. Dati forniti da ViaggiaTreno (Trenitalia / RFI).">
     <div class="w-full max-w-4xl mx-auto px-4 py-8 md:py-12 mt-16 md:mt-24">
-        <div class="prose max-w-none bg-base-100 p-8 md:p-12 rounded-[2rem] shadow-sm border border-base-200 mx-auto">
+        <div class="prose max-w-none bg-base-100/65 backdrop-blur-3xl p-8 md:p-12 rounded-[2rem] shadow-glass border border-base-content/10 mx-auto transition-all duration-300 hover:bg-base-100/75 shadow-sm">
             <h1 data-i18n="about_title" class="text-primary mb-8 font-bold">关于 BelloTreno</h1>
 
             <div data-i18n-section="intro" class="text-base-content/80 leading-relaxed">
@@ -55,7 +57,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         </div>
     </div>
 
-    <script is:inline slot="scripts">
+    <script is:inline data-astro-rerun slot="scripts">
         const aboutContent = {
             zh: {
                 intro: `<p>BelloTreno 是一个由铁路爱好者所制作的个人业余项目。旨在为用户提供及时的意大利铁路列车运行信息。在意大利，获取实时、透明的铁路运行数据并非易事。相比于德国铁路 (DB)（<a href="https://developers.deutschebahn.com/db-api-marketplace/apis/" target="_blank" class="text-primary no-underline hover:underline font-medium">https://developers.deutschebahn.com/...</a>）、法国铁路 (SNCF)（<a href="https://data.sncf.com/" target="_blank" class="text-primary no-underline hover:underline font-medium">https://data.sncf.com/</a>）和瑞士（<a href="https://opentransportdata.swiss/en/" target="_blank" class="text-primary no-underline hover:underline font-medium">https://opentransportdata.swiss/en/</a>）提供的完善开发者门户与 API 和数据，意大利铁路数据的开放程度仍显滞后。我们呼吁 FS 集团能向欧洲同行看齐，真正实现交通数据的透明与共享。</p>`,
