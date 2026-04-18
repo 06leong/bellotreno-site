@@ -2,9 +2,12 @@
 ---
 <!-- Dev server HMR trigger -->
 
-<nav class="navbar fixed top-0 w-full z-50 bg-transparent flex items-center justify-between px-4 sm:px-6 min-h-0 h-16">
+<nav class="navbar fixed top-0 w-full z-50 bg-transparent flex items-center justify-between px-4 sm:px-6 min-h-0 h-16"
+    transition:persist="main-nav">
+    {/* transition:persist keeps this nav DOM node alive across ClientRouter page transitions,
+        preventing a brief "unstyled" window where a:visited purple can flash. */}
     <!-- Premium Typographic Logo -->
-    <a href="/" class="hover:opacity-75 transition-opacity outline-none flex items-center" style="text-decoration: none;">
+    <a href="/" class="text-base-content hover:opacity-75 transition-opacity outline-none flex items-center" style="text-decoration: none;">
         <span class="text-[1.4rem] sm:text-[1.6rem] tracking-tight text-base-content" style="font-family: 'Outfit', sans-serif; font-weight: 800; letter-spacing: -1px;">
             Bello<span class="text-primary font-medium">Treno</span>
         </span>

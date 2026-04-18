@@ -127,6 +127,17 @@ h1, h2, h3, h4, h5, h6, .brand-heading {
     box-sizing: border-box;
 }
 
+/* ===== Link visited color reset =====
+   浏览器默认 a:visited { color: purple }。
+   Astro ClientRouter 客户端路由后，导航链接会变为 visited 状态，
+   如果不重置则会在页面切换后显示紫色。
+   将 :visited 和 :link 都设为 inherit，使颜色完全由组件 CSS 类控制。
+*/
+a:link,
+a:visited {
+    color: inherit;
+}
+
 /* ===== High Performance Background Enhancements ===== */
 
 /* ===== Advanced Fluid Aurora Background ===== */
@@ -186,6 +197,27 @@ h1, h2, h3, h4, h5, h6, .brand-heading {
     0% { transform: translate(0, 0) scale(1) rotate(0deg); }
     100% { transform: translate(-25%, 35%) scale(1.25) rotate(-35deg); }
 }
+/* ===== iOS / Mobile Aurora Optimization =====
+   iOS Safari 瀵?GPU 鍚堟垚灞傛暟閲忓拰 blur 寮哄害鏋佹晱鎰熴€?   4 涓?blur(140px) 鍏ㄥ睆 blob 浼氳€楀敖 WebKit GPU 鍐呭瓨锛屽鑷撮粦灞?鐧藉睆銆?   绉诲姩绔細鍑忓崐 blur 寮哄害锛岄殣钘忎袱涓?blob锛屽欢闀垮姩鐢诲懆鏈熼檷浣庨噸缁橀鐜囥€?   妗岄潰绔紙>768px锛夊畬鍏ㄤ笉鍙楀奖鍝嶃€?*/
+@media (max-width: 768px) {
+    .aurora-blob {
+        filter: blur(60px);
+        animation-duration: 24s;
+    }
+    /* 浠呬繚鐣?aurora-1 鍜?aurora-2锛屽噺灏戝悎鎴愬眰鏁伴噺 */
+    .aurora-3,
+    .aurora-4 {
+        display: none;
+    }
+}
+
+/* prefers-reduced-motion锛氬畬鍏ㄥ仠姝㈠姩鐢伙紙杈呭姪鍔熻兘/鑺傝兘妯″紡锛?/
+@media (prefers-reduced-motion: reduce) {
+    .aurora-blob {
+        animation: none;
+    }
+}
+
 
 /* Tabular Numbers Utility */
 .tabular-nums {
@@ -201,7 +233,7 @@ h1, h2, h3, h4, h5, h6, .brand-heading {
         0 16px 32px -4px color-mix(in oklch, var(--color-base-content) 10%, transparent);
 }
 
-/* Card glass border — visible separation from background */
+/* Card glass border 閳?visible separation from background */
 .glass-border {
     border: 1px solid color-mix(in oklch, var(--color-base-content) 10%, transparent);
     box-shadow: inset 0 1px 0 color-mix(in oklch, #ffffff 12%, transparent);
@@ -397,7 +429,7 @@ h1, h2, h3, h4, h5, h6, .brand-heading {
     overflow: hidden;
 }
 
-/* Ripple 点击涟漪效果 — choice-item 和 back-to-top 按钮共用 */
+/* Ripple 閻愮懓鍤☉鐔稿悏閺佸牊鐏?閳?choice-item 閸?back-to-top 閹稿鎸抽崗杈╂暏 */
 .ripple {
     position: relative;
     overflow: hidden;
@@ -490,7 +522,7 @@ h1, h2, h3, h4, h5, h6, .brand-heading {
     top: 16px;
     right: 16px;
     cursor: pointer;
-    /* Perfect circle: fixed 36px × 36px */
+    /* Perfect circle: fixed 36px 鑴?36px */
     width: 36px;
     height: 36px;
     border-radius: 50%;
@@ -553,7 +585,7 @@ h1, h2, h3, h4, h5, h6, .brand-heading {
 .train-status-section {
     text-align: right;
     flex-shrink: 0;
-    /* No outer box — just flowing text aligned right */
+    /* No outer box 閳?just flowing text aligned right */
     max-width: 240px;
     min-width: 110px;
     margin-left: auto;
@@ -561,7 +593,7 @@ h1, h2, h3, h4, h5, h6, .brand-heading {
 }
 
 .train-delay {
-    /* Default = on time/early → green */
+    /* Default = on time/early 閳?green */
     color: var(--train-green);
     font-size: 1.35rem;
     font-weight: 800;
@@ -571,7 +603,7 @@ h1, h2, h3, h4, h5, h6, .brand-heading {
 }
 
 .train-delay.late {
-    /* Late → red. !important ensures CSS wins over Tailwind utility classes */
+    /* Late 閳?red. !important ensures CSS wins over Tailwind utility classes */
     color: var(--train-red) !important;
 }
 
@@ -580,7 +612,7 @@ h1, h2, h3, h4, h5, h6, .brand-heading {
     color: var(--color-base-content);
     opacity: 0.55;
     margin-top: 3px;
-    /* Allow wrapping — no outer box to constrain */
+    /* Allow wrapping 閳?no outer box to constrain */
     white-space: normal;
     word-break: break-all;
 }
@@ -777,7 +809,7 @@ h1, h2, h3, h4, h5, h6, .brand-heading {
 }
 
 .station-name {
-    /* Use Outfit (heading font) for station names — matches infomobilità style */
+    /* Use Outfit (heading font) for station names 閳?matches infomobilit鑴?style */
     font-family: 'Outfit', 'Noto Sans SC', sans-serif;
     font-weight: 700;
     font-size: 1.25rem;   /* user requested larger */
@@ -969,7 +1001,7 @@ footer span {
     display: none;
 }
 
-/* ===== Infomobilità ===== */
+/* ===== Infomobilit鑴?===== */
 
 .infomobilita-controls {
     display: flex;
@@ -1343,7 +1375,7 @@ footer span {
     color: #ffffff !important;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    /* Removed white inset shadow — it was desaturating badge colors */
+    /* Removed white inset shadow 閳?it was desaturating badge colors */
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
     vertical-align: middle;
     line-height: 1.2;
@@ -1385,7 +1417,7 @@ footer span {
     line-height: 1.2;
 }
 
-/* Individual badge colors — ORIGINAL HEX — DO NOT CHANGE */
+/* Individual badge colors 閳?ORIGINAL HEX 閳?DO NOT CHANGE */
 .badge-regional     { background-color: #70a84a; }
 .badge-arrow        { background-color: #bc3433; }
 .badge-intercity    { background-color: #008ad8; }

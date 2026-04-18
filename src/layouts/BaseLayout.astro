@@ -39,6 +39,13 @@ const canonicalURL = new URL(Astro.url.pathname, SITE_URL).href;
     <meta name="theme-color" content="#082a1a" media="(prefers-color-scheme: dark)">
     <link rel="manifest" href="/site.webmanifest">
 
+    <!-- ===== iOS PWA ===== -->
+    <!-- apple-mobile-web-app-capable: 告知 Safari 以全屏 standalone 模式运行 -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <!-- black-translucent: 状态栏透明叠加在页面上，避免顶部黑条/白条 -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="BelloTreno">
+
     <!-- ===== SEO Core ===== -->
     <title>{title}</title>
     <meta name="description" content={description}>
@@ -90,10 +97,13 @@ const canonicalURL = new URL(Astro.url.pathname, SITE_URL).href;
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&family=Noto+Sans+SC:wght@400;500;700&display=swap"
-        rel="stylesheet">
+        rel="stylesheet"
+        media="print" onload="this.media='all'">
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet"></noscript>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-    <link href="https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+    <noscript><link href="https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined&display=swap" rel="stylesheet"></noscript>
 
     <script is:inline src="/scripts/theme-init.js"></script>
     <ClientRouter />
