@@ -10,6 +10,8 @@ let searchMode = 'train';
 let disambiguationData = null;
 let currentSmartCaringData = null;
 let currentTrainCategory = '';
+let currentSwissFormationData = null;
+let swissRequestSeq = 0;
 
 
 const API_BASE = window.API_BASE;
@@ -64,8 +66,11 @@ function switchSearchMode(mode) {
     if (results) results.style.display = 'none';
     if (disambiguation) disambiguation.style.display = 'none';
     currentSmartCaringData = null;
+    currentSwissFormationData = null;
+    swissRequestSeq++;
     const scCard = document.getElementById('smartCaringCard');
     if (scCard) scCard.style.display = 'none';
+    if (window.BelloSwiss) window.BelloSwiss.hideFormationCard();
 }
 
 
@@ -455,8 +460,11 @@ function showStationDisambiguation(stations) {
 async function fetchDetails(triple) {
     currentTriple = triple;
     currentSmartCaringData = null;
+    currentSwissFormationData = null;
+    const requestSeq = ++swissRequestSeq;
     const scCard = document.getElementById('smartCaringCard');
     if (scCard) scCard.style.display = 'none';
+    if (window.BelloSwiss) window.BelloSwiss.hideFormationCard();
     const [tNum, originID, ts] = triple.split('-');
     try {
         const res = await fetch(`${API_BASE}/andamentoTreno/${originID}/${tNum}/${ts}`);
@@ -468,9 +476,10 @@ async function fetchDetails(triple) {
         }
         const data = await res.json();
         currentTrainData = data;
-        render(data);
         currentTrainCategory = resolveTrainCategory(data);
+        render(data);
         fetchSmartCaring(data.numeroTreno);
+        loadSwissFormation(data, triple, requestSeq);
 
 
         const trainNumber = `${data.compCategoria || ''} ${data.numeroTreno || tNum}`.trim();
@@ -480,6 +489,36 @@ async function fetchDetails(triple) {
             currentLang === 'it' ? "Impossibile caricare i dettagli" :
                 "Failed to load details";
         alert(msg);
+    }
+}
+
+async function loadSwissFormation(data, triple, requestSeq) {
+    if (!window.BelloSwiss || !window.BelloSwiss.shouldQuery(data, currentTrainCategory)) {
+        if (window.BelloSwiss) window.BelloSwiss.hideFormationCard();
+        return;
+    }
+
+    window.BelloSwiss.renderLoadingCard();
+
+    try {
+        const swissData = await window.BelloSwiss.fetchSwissEc(data, currentTrainCategory);
+        if (requestSeq !== swissRequestSeq || triple !== currentTriple) return;
+
+        if (!swissData?.available) {
+            currentSwissFormationData = null;
+            window.BelloSwiss.hideFormationCard();
+            render(currentTrainData);
+            return;
+        }
+
+        currentSwissFormationData = swissData;
+        render(currentTrainData);
+    } catch (err) {
+        if (requestSeq !== swissRequestSeq || triple !== currentTriple) return;
+        console.error('Swiss formation fetch failed:', err);
+        currentSwissFormationData = null;
+        if (window.BelloSwiss) window.BelloSwiss.hideFormationCard();
+        render(currentTrainData);
     }
 }
 
@@ -506,6 +545,17 @@ function render(data) {
     document.getElementById('results').style.display = 'block';
     const card = document.getElementById('trainCard');
     const timeline = document.getElementById('timelineBody');
+    const timelineStops = window.BelloSwiss
+        ? window.BelloSwiss.mergeTimelineStops(data.fermate || [], currentSwissFormationData)
+        : (data.fermate || []);
+
+    if (window.BelloSwiss) {
+        if (currentSwissFormationData?.available) {
+            window.BelloSwiss.renderFormationCard(currentSwissFormationData);
+        } else {
+            window.BelloSwiss.hideFormationCard();
+        }
+    }
 
 
     let catCode = (data.categoria || "").trim();
@@ -607,17 +657,18 @@ function render(data) {
     let lastReachedIdx = -1;
 
     if (!data.nonPartito) {
-        data.fermate.forEach((f, i) => {
+        timelineStops.forEach((f, i) => {
             if (f.arrivoReale !== null || f.partenzaReale !== null) lastReachedIdx = i;
         });
     }
 
-    const totalStations = data.fermate.length;
+    const totalStations = timelineStops.length;
     const timelineFragments = [];
 
-    data.fermate.forEach((f, i) => {
+    timelineStops.forEach((f, i) => {
         const isLast = i === totalStations - 1;
         const isFirst = i === 0;
+        const isSwissStop = f.source === 'swiss';
 
         let dotClass = 'dot-future';
         let lineClass = 'line-future';
@@ -633,6 +684,7 @@ function render(data) {
         }
 
         const stationItemClasses = ['station-item', dotClass, lineClass];
+        if (isSwissStop) stationItemClasses.push('station-source-swiss');
 
         const pPlat = f.binarioProgrammatoPartenzaDescrizione || f.binarioProgrammatoArrivoDescrizione;
         const ePlat = f.binarioEffettivoPartenzaDescrizione || f.binarioEffettivoArrivoDescrizione;
@@ -656,6 +708,15 @@ function render(data) {
 
         const timeHtmlArr = !isFirst ? renderTimeHtml(translations[currentLang].arrival, (f.arrivo_teorico || f.programmata), f.arrivoReale, f.ritardoArrivo) : '';
         const timeHtmlDep = !isLast ? renderTimeHtml(translations[currentLang].departure, (f.partenza_teorica || f.programmata), f.partenzaReale, f.ritardoPartenza) : '';
+        const sourceBadge = isSwissStop
+            ? `<span class="source-badge source-badge-swiss"><span class="material-symbols-outlined">hub</span>${escapeHtml(translations[currentLang].swiss_source || 'Swiss Open Data / SBB')}</span>`
+            : '';
+        const stationNameHTML = isSwissStop
+            ? `<span class="station-name-static">${escapeHtml(f.stazione)}</span>`
+            : `<span class="station-link" data-station-id="${f.id}" data-station-name="${escapeHtml(f.stazione)}">${escapeHtml(f.stazione)}</span>`;
+        const progressivoHTML = isSwissStop
+            ? `<div class="text-[0.65rem] font-mono opacity-40 mt-2" title="Swiss Open Data">SBB</div>`
+            : `<div class="text-[0.65rem] font-mono opacity-30 mt-2" title="Progressivo">P:${f.progressivo || '--'}</div>`;
 
         timelineFragments.push(`
             <div class="${stationItemClasses.join(' ')} stagger-item animate-fade-in" style="--stagger-idx: ${i}">
@@ -665,7 +726,8 @@ function render(data) {
                 <div class="station-card glass-border shadow-glass hover:bg-base-content/5 transition-colors group">
                     <div class="station-name-col">
                         <div class="station-name group-hover:text-primary transition-colors flex items-center flex-wrap">
-                            <span class="station-link" data-station-id="${f.id}" data-station-name="${escapeHtml(f.stazione)}">${escapeHtml(f.stazione)}</span>
+                            ${stationNameHTML}
+                            ${sourceBadge}
                             ${(!isFirst && !isLast && stayTime !== "N/A") ? `<span class="hidden sm:flex opacity-50 text-[0.85rem] font-medium items-center gap-0.5 ml-2 tracking-normal" style="font-family: var(--font-sans)"><span class="material-symbols-outlined icon-hourglass-desktop">hourglass_empty</span> ${stayTime}</span>` : ''}
                         </div>
                         ${directionBadge ? `<div class="flex items-center gap-2 mt-1 flex-wrap">${directionBadge}</div>` : ''}
@@ -680,7 +742,7 @@ function render(data) {
                         ${(!isFirst && !isLast && stayTime !== "N/A") ? `<div class="flex sm:hidden items-center justify-center gap-0.5 opacity-60 text-[0.8rem] font-medium tracking-normal mb-3" style="font-family: var(--font-sans)"><span class="material-symbols-outlined icon-hourglass-mobile">hourglass_empty</span> ${stayTime}</div>` : ''}
                         <div class="text-[0.8rem] uppercase tracking-wider font-semibold opacity-60 mb-1.5">${translations[currentLang].platform}</div>
                         <div class="text-2xl">${platHTML}</div>
-                        <div class="text-[0.65rem] font-mono opacity-30 mt-2" title="Progressivo">P:${f.progressivo}</div>
+                        ${progressivoHTML}
                     </div>
                 </div>
             </div>
@@ -702,10 +764,13 @@ const DESC_TO_CAT = {
 };
 
 function resolveTrainCategory(data) {
+    const comp = (data.compNumeroTreno || '').trim().toUpperCase();
+    if (comp.includes('EC FR')) return 'FR';
+    if (comp.includes('TS')) return 'TS';
+
     let cat = (data.categoria || '').trim().toUpperCase();
     if (cat) return cat;
 
-    const comp = (data.compNumeroTreno || '').trim().toUpperCase();
     const match = comp.match(/^([A-Z]+(?:\s+[A-Z]+)?)\s/);
     if (match) {
         cat = match[1].trim();
