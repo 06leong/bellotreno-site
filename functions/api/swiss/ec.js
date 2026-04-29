@@ -208,6 +208,16 @@ function normalizeFormation(raw, requestedTrainNumber, requestedDate, evu) {
     };
 }
 
+function buildFormationUrl(baseUrl, fullPath, evu, operationDate, trainNumber) {
+    const normalizedBase = String(baseUrl || DEFAULT_BASE_URL).replace(/\/+$/, "");
+    const normalizedPath = String(fullPath || DEFAULT_FULL_PATH).replace(/^\/+/, "");
+    const upstreamUrl = new URL(`${normalizedBase}/${normalizedPath}`);
+    upstreamUrl.searchParams.set("evu", evu);
+    upstreamUrl.searchParams.set("operationDate", operationDate);
+    upstreamUrl.searchParams.set("trainNumber", trainNumber);
+    return upstreamUrl;
+}
+
 export async function onRequestOptions(context) {
     return new Response(null, {
         status: 204,
@@ -251,10 +261,7 @@ export async function onRequestGet(context) {
     const baseUrl = context.env.SWISS_TRAIN_FORMATION_API_BASE_URL || DEFAULT_BASE_URL;
     const fullPath = context.env.SWISS_TRAIN_FORMATION_FULL_PATH || DEFAULT_FULL_PATH;
     const evu = context.env.SWISS_TRAIN_FORMATION_EVU || DEFAULT_EVU;
-    const upstreamUrl = new URL(fullPath, baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`);
-    upstreamUrl.searchParams.set("evu", evu);
-    upstreamUrl.searchParams.set("operationDate", operationDate);
-    upstreamUrl.searchParams.set("trainNumber", trainNumber);
+    const upstreamUrl = buildFormationUrl(baseUrl, fullPath, evu, operationDate, trainNumber);
 
     try {
         const upstream = await fetch(upstreamUrl.toString(), {
