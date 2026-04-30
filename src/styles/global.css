@@ -1418,14 +1418,25 @@ footer span {
 }
 
 .swiss-provider {
-    font-size: 0.72rem;
+    font-size: 0.68rem;
     font-weight: 700;
     color: var(--color-info);
     background: color-mix(in oklch, var(--color-info) 12%, transparent);
     border: 1px solid color-mix(in oklch, var(--color-info) 20%, transparent);
     border-radius: 999px;
-    padding: 4px 9px;
+    padding: 3px 7px;
     white-space: nowrap;
+}
+
+.swiss-collapse-source {
+    color: var(--color-base-content);
+    opacity: 0.58;
+    font-size: 0.78rem;
+    margin-top: 6px;
+}
+
+.swiss-collapse-source.hidden {
+    display: none;
 }
 
 .swiss-toggle {
@@ -1574,32 +1585,42 @@ footer span {
 }
 
 .swiss-coach-strip {
-    display: flex;
-    gap: 12px;
     overflow-x: auto;
-    padding: 2px 0 10px;
+    padding: 2px 0 12px;
+    scrollbar-width: thin;
 }
 
-.swiss-sector-group {
-    flex: 0 0 auto;
-    min-width: 120px;
-}
-
-.swiss-sector-label {
-    font-size: 0.68rem;
-    font-weight: 800;
-    color: var(--color-primary);
-    margin-bottom: 6px;
-}
-
-.swiss-coaches {
-    display: flex;
-    gap: 6px;
+.swiss-formation-track {
+    --coach-width: 132px;
+    --coach-gap: 8px;
+    display: grid;
+    grid-template-columns: repeat(var(--vehicle-count), var(--coach-width));
+    gap: 8px var(--coach-gap);
+    width: max-content;
+    min-width: 100%;
     align-items: stretch;
 }
 
+.swiss-sector-segment {
+    min-height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    border: 1px solid color-mix(in oklch, var(--color-primary) 22%, transparent);
+    background: color-mix(in oklch, var(--color-primary) 10%, transparent);
+    color: var(--color-primary);
+    font-size: 0.68rem;
+    font-weight: 800;
+    line-height: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 4px 8px;
+}
+
 .swiss-coach {
-    width: 132px;
+    width: var(--coach-width);
     min-height: 122px;
     border-radius: 10px;
     border: 1px solid color-mix(in oklch, var(--color-primary) 25%, transparent);
@@ -1608,7 +1629,6 @@ footer span {
     display: flex;
     flex-direction: column;
     padding: 12px;
-    flex-shrink: 0;
     box-shadow: inset 0 1px 0 color-mix(in oklch, #ffffff 8%, transparent);
 }
 
@@ -1617,11 +1637,17 @@ footer span {
     border-style: dashed;
 }
 
+.swiss-coach-loco {
+    border-color: color-mix(in oklch, var(--color-base-content) 20%, transparent);
+    background: color-mix(in oklch, var(--color-base-content) 6%, transparent);
+}
+
 .swiss-coach-class {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     min-width: 34px;
+    max-width: 58px;
     height: 34px;
     border-radius: 8px;
     border: 1px solid color-mix(in oklch, var(--color-base-content) 10%, transparent);
@@ -1653,8 +1679,7 @@ footer span {
     margin-top: 2px;
 }
 
-.swiss-coach-type,
-.swiss-coach-sector {
+.swiss-coach-type {
     font-size: 0.75rem;
     opacity: 0.72;
     overflow: hidden;
@@ -1705,6 +1730,10 @@ footer span {
     border: 1px solid color-mix(in oklch, var(--color-base-content) 7%, transparent);
 }
 
+.swiss-vehicle-row > * {
+    min-width: 0;
+}
+
 .swiss-vehicle-closed {
     opacity: 0.62;
 }
@@ -1751,17 +1780,13 @@ footer span {
     padding: 3px 7px;
 }
 
-.swiss-vehicle-diag {
+.swiss-vehicle-diagnostics {
     grid-column: 1 / -1;
     font-size: 0.72rem;
     color: var(--color-base-content);
     opacity: 0.58;
-}
-
-.swiss-vehicle-diag summary {
-    cursor: pointer;
-    width: max-content;
-    font-weight: 700;
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace);
+    overflow-wrap: anywhere;
 }
 
 .station-name-static {
@@ -1771,13 +1796,13 @@ footer span {
 .source-badge {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
+    gap: 0;
     font-family: var(--font-sans);
-    font-size: 0.66rem;
+    font-size: 0.58rem;
     font-weight: 800;
     line-height: 1;
     border-radius: 999px;
-    padding: 4px 7px;
+    padding: 3px 5px;
     letter-spacing: 0;
 }
 
@@ -1805,8 +1830,8 @@ footer span {
 }
 
 .station-source-badge {
-    font-size: 0.58rem;
-    padding: 3px 6px;
+    font-size: 0.56rem;
+    padding: 2px 5px;
     vertical-align: middle;
 }
 
@@ -1840,8 +1865,11 @@ footer span {
         min-width: 126px;
     }
 
+    .swiss-formation-track {
+        --coach-width: 118px;
+    }
+
     .swiss-coach {
-        width: 118px;
         min-height: 116px;
     }
 

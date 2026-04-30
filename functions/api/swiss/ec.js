@@ -88,6 +88,11 @@ function asInt(value) {
     return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function asFloat(value) {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
 function asBool(value) {
     return value === true || value === "true" || value === 1 || value === "1";
 }
@@ -158,6 +163,7 @@ function normalizeVehicle(rawVehicle) {
     const identifier = rawVehicle?.vehicleIdentifier || {};
     const props = rawVehicle?.vehicleProperties || {};
     const accessibility = props.accessibilityProperties || {};
+    const wheelchairSymbol = accessibility.wheelchairSymbolProperties || {};
     const picto = props.pictoProperties || {};
 
     return {
@@ -165,15 +171,38 @@ function normalizeVehicle(rawVehicle) {
         number: asInt(rawVehicle?.number),
         typeCode: asString(identifier.typeCode),
         typeCodeName: asString(identifier.typeCodeName),
+        buildTypeCode: asString(identifier.buildTypeCode),
+        countryCode: asString(identifier.countryCode),
+        vehicleNumber: asString(identifier.vehicleNumber),
+        checkNumber: asString(identifier.checkNumber),
         evn: asString(identifier.evn),
         parentEvn: asString(identifier.parentEvn),
+        length: asFloat(props.length),
+        numberRestaurantSpace: asInt(props.numberRestaurantSpace),
+        numberBeds: asInt(props.numberBeds),
         firstClassSeats: asInt(props.number1class),
         secondClassSeats: asInt(props.number2class),
         bikeHooks: asInt(props.numberBikeHooks),
+        bikePlatform: asBool(props.bikePlatform),
+        emergencyCallSystem: asBool(props.emergencyCallSystem),
         lowFloor: asBool(props.lowFloorTrolley) || asBool(picto.lowFloorPicto),
+        climated: asBool(props.climated),
         wheelchairSpaces: asInt(accessibility.numberWheelchairSpaces),
+        wheelchairSpacesFirstClass: asInt(accessibility.numberWheelchairSpaces1class),
+        wheelchairSpacesSecondClass: asInt(accessibility.numberWheelchairSpaces2class),
         wheelchairToilet: asBool(accessibility.wheelchairToilet),
+        wheelchairAccessibleRestaurant: asBool(accessibility.wheelchairAccessibleRestaurant),
+        disabledCompartment: asBool(accessibility.disabledCompartment),
+        wheelchairFoldingRamp: asBool(wheelchairSymbol.foldingRamp),
+        wheelchairGapBridging: asBool(wheelchairSymbol.gapBridging),
+        wheelchairBoardingPlatformHeight: asFloat(wheelchairSymbol.heightBoardingPlatform),
+        wheelchairPicto: asBool(picto.wheelchairPicto),
+        bikePicto: asBool(picto.bikePicto),
+        strollerPicto: asBool(picto.strollerPicto),
+        familyZonePicto: asBool(picto.familyZonePicto),
+        businessZonePicto: asBool(picto.businessZonePicto),
         closed: asBool(props.closed),
+        vehicleWillBePutAway: asBool(props.vehicleWillBePutAway),
         trolleyStatus: asString(props.trolleyStatus),
         fromStop: asString(props.fromStop?.name),
         toStop: asString(props.toStop?.name),

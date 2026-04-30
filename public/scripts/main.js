@@ -107,13 +107,20 @@ function formatDuration(duration) {
     if (parts.length === 2) {
         const hours = parseInt(parts[0]);
         const mins = parseInt(parts[1]);
-        const t = translations[window.currentLang] || translations.en;
         // zh: 无分隔空格（「1小时30分钟」），其他语言：加空格（「1h 30min」）
-        return window.currentLang === 'zh'
-            ? `${hours}${t.hours}${mins}${t.minutes}`
-            : `${hours}${t.hours} ${mins}${t.minutes}`;
+        return formatDurationMinutes((hours * 60) + mins);
     }
     return duration;
+}
+
+function formatDurationMinutes(totalMinutes) {
+    if (!Number.isFinite(totalMinutes) || totalMinutes < 0) return 'N/A';
+    const hours = Math.floor(totalMinutes / 60);
+    const mins = totalMinutes % 60;
+    const t = translations[window.currentLang] || translations.en;
+    return window.currentLang === 'zh'
+        ? `${hours}${t.hours}${mins}${t.minutes}`
+        : `${hours}${t.hours} ${mins}${t.minutes}`;
 }
 
 
@@ -566,6 +573,30 @@ function resolveRouteDisplay(data, timelineStops) {
     };
 }
 
+function resolveDurationDisplay(data, timelineStops) {
+    const fallback = formatDuration(data.compDurata);
+    const stops = Array.isArray(timelineStops) ? timelineStops : [];
+    const hasSwissData = currentSwissFormationData?.available && stops.some((stop) => stop.source === 'swiss' || stop.swissStop);
+    if (!hasSwissData || stops.length < 2) return fallback;
+
+    const displayableStops = stops.filter((stop) => {
+        if (!stop?.stazione) return false;
+        return !(window.BelloSwiss?.isTechnicalSwissStop && window.BelloSwiss.isTechnicalSwissStop(stop.swissStop || stop));
+    });
+
+    const first = displayableStops[0];
+    const last = displayableStops[displayableStops.length - 1];
+    const startMs = Number(first?.partenza_teorica || first?.arrivo_teorico || first?.programmata || 0);
+    const endMs = Number(last?.arrivo_teorico || last?.partenza_teorica || last?.programmata || 0);
+    const diffMinutes = Math.round((endMs - startMs) / 60000);
+
+    if (!Number.isFinite(diffMinutes) || diffMinutes <= 0 || diffMinutes > 48 * 60) {
+        return fallback;
+    }
+
+    return formatDurationMinutes(diffMinutes);
+}
+
 
 
 function render(data) {
@@ -639,7 +670,7 @@ function render(data) {
         delayMsg.toLowerCase().includes("orario") ||
         delayMsg.toLowerCase().includes("early");
 
-    const formattedDuration = formatDuration(data.compDurata);
+    const formattedDuration = resolveDurationDisplay(data, timelineStops);
 
 
     const badgeClass = window.getBadgeClass ? window.getBadgeClass(catCode) : '';
@@ -741,13 +772,13 @@ function render(data) {
         const timeHtmlArr = !isFirst ? renderTimeHtml(translations[currentLang].arrival, (f.arrivo_teorico || f.programmata), f.arrivoReale, f.ritardoArrivo) : '';
         const timeHtmlDep = !isLast ? renderTimeHtml(translations[currentLang].departure, (f.partenza_teorica || f.programmata), f.partenzaReale, f.ritardoPartenza) : '';
         const sourceBadge = isSwissStop
-            ? `<span class="source-badge source-badge-swiss"><span class="material-symbols-outlined">hub</span>${escapeHtml(translations[currentLang].swiss_source || 'Open Data')}</span>`
+            ? `<span class="source-badge source-badge-swiss">${escapeHtml(translations[currentLang].swiss_source || 'CH')}</span>`
             : '';
         const stationNameHTML = isSwissStop
             ? `<span class="station-name-static">${escapeHtml(f.stazione)}</span>`
             : `<span class="station-link" data-station-id="${f.id}" data-station-name="${escapeHtml(f.stazione)}">${escapeHtml(f.stazione)}</span>`;
         const progressivoHTML = isSwissStop
-            ? `<div class="text-[0.65rem] font-mono opacity-40 mt-2" title="Open Data">Open Data</div>`
+            ? `<div class="text-[0.65rem] font-mono opacity-40 mt-2" title="opentransportdata.swiss">CH</div>`
             : `<div class="text-[0.65rem] font-mono opacity-30 mt-2" title="Progressivo">P:${f.progressivo || '--'}</div>`;
 
         timelineFragments.push(`
