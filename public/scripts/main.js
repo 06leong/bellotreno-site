@@ -539,6 +539,33 @@ async function refreshTrainData() {
     }
 }
 
+function getDefaultRouteDisplay(data) {
+    return {
+        origin: (data.origineEstera && data.origineEstera !== data.destinazione) ? data.origineEstera : data.origine,
+        destination: (data.destinazioneEstera && data.destinazioneEstera !== data.origine) ? data.destinazioneEstera : data.destinazione
+    };
+}
+
+function resolveRouteDisplay(data, timelineStops) {
+    const fallback = getDefaultRouteDisplay(data);
+    const stops = Array.isArray(timelineStops) ? timelineStops : [];
+    const hasSwissData = currentSwissFormationData?.available && stops.some((stop) => stop.source === 'swiss' || stop.swissStop);
+    if (!hasSwissData || stops.length < 2) return fallback;
+
+    const displayableStops = stops.filter((stop) => {
+        if (!stop?.stazione) return false;
+        return !(window.BelloSwiss?.isTechnicalSwissStop && window.BelloSwiss.isTechnicalSwissStop(stop.swissStop || stop));
+    });
+
+    const first = displayableStops[0] || stops[0];
+    const last = displayableStops[displayableStops.length - 1] || stops[stops.length - 1];
+
+    return {
+        origin: first?.stazione || fallback.origin,
+        destination: last?.stazione || fallback.destination
+    };
+}
+
 
 
 function render(data) {
@@ -596,10 +623,15 @@ function render(data) {
         categoryImage = "pic/TTI.png";
     }
 
+    if (operator === "Trenord" && currentSwissFormationData?.available && ['REG', 'RE', 'RV', 'S'].includes(catCode)) {
+        categoryImage = "pic/Tilo.png";
+    }
+
     const categoryHTML = categoryImage ? `<img src="${categoryImage}" alt="${category}" style="height: 1.3rem; vertical-align: middle; margin-left: 8px;">` : category;
 
-    const displayOrigin = (data.origineEstera && data.origineEstera !== data.destinazione) ? data.origineEstera : data.origine;
-    const displayDest = (data.destinazioneEstera && data.destinazioneEstera !== data.origine) ? data.destinazioneEstera : data.destinazione;
+    const routeDisplay = resolveRouteDisplay(data, timelineStops);
+    const displayOrigin = routeDisplay.origin;
+    const displayDest = routeDisplay.destination;
     const delayMsg = translateStatus((data.compRitardoAndamento ?? [])[0] ?? '');
     const isEarly = delayMsg.includes(translations[currentLang].early_by) ||
         delayMsg.includes(translations[currentLang].on_time) ||
@@ -623,7 +655,7 @@ function render(data) {
         <div class="op-cat-row" style="display: flex; align-items: center; gap: 8px;">${operatorHTML} <span class="opacity-50">·</span> ${categoryHTML}</div>
         <div class="train-info-wrapper flex flex-col sm:flex-row items-start gap-3 mt-2">
             <div class="flex-1 min-w-0">
-                <div class="train-route mb-2">${displayOrigin} <span class="opacity-40 font-normal material-symbols-outlined align-middle mx-1">arrow_forward</span> ${displayDest}</div>
+                <div class="train-route mb-2">${escapeHtml(displayOrigin)} <span class="opacity-40 font-normal material-symbols-outlined align-middle mx-1">arrow_forward</span> ${escapeHtml(displayDest)}</div>
                 <div class="train-meta flex items-center gap-3 flex-wrap">
                     <span class="flex items-center gap-2 text-sm uppercase tracking-wider font-semibold opacity-80">${translations[currentLang].train_num}: ${trainNumBadge}</span>
                     <span class="opacity-30">|</span>
@@ -709,13 +741,13 @@ function render(data) {
         const timeHtmlArr = !isFirst ? renderTimeHtml(translations[currentLang].arrival, (f.arrivo_teorico || f.programmata), f.arrivoReale, f.ritardoArrivo) : '';
         const timeHtmlDep = !isLast ? renderTimeHtml(translations[currentLang].departure, (f.partenza_teorica || f.programmata), f.partenzaReale, f.ritardoPartenza) : '';
         const sourceBadge = isSwissStop
-            ? `<span class="source-badge source-badge-swiss"><span class="material-symbols-outlined">hub</span>${escapeHtml(translations[currentLang].swiss_source || 'Swiss Open Data / SBB')}</span>`
+            ? `<span class="source-badge source-badge-swiss"><span class="material-symbols-outlined">hub</span>${escapeHtml(translations[currentLang].swiss_source || 'Open Data')}</span>`
             : '';
         const stationNameHTML = isSwissStop
             ? `<span class="station-name-static">${escapeHtml(f.stazione)}</span>`
             : `<span class="station-link" data-station-id="${f.id}" data-station-name="${escapeHtml(f.stazione)}">${escapeHtml(f.stazione)}</span>`;
         const progressivoHTML = isSwissStop
-            ? `<div class="text-[0.65rem] font-mono opacity-40 mt-2" title="Swiss Open Data">SBB</div>`
+            ? `<div class="text-[0.65rem] font-mono opacity-40 mt-2" title="Open Data">Open Data</div>`
             : `<div class="text-[0.65rem] font-mono opacity-30 mt-2" title="Progressivo">P:${f.progressivo || '--'}</div>`;
 
         timelineFragments.push(`

@@ -1410,6 +1410,13 @@ footer span {
     font-size: 1.3rem;
 }
 
+.swiss-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+}
+
 .swiss-provider {
     font-size: 0.72rem;
     font-weight: 700;
@@ -1419,6 +1426,50 @@ footer span {
     border-radius: 999px;
     padding: 4px 9px;
     white-space: nowrap;
+}
+
+.swiss-toggle {
+    appearance: none;
+    border: 1px solid color-mix(in oklch, var(--color-base-content) 10%, transparent);
+    background: color-mix(in oklch, var(--color-base-content) 6%, transparent);
+    color: var(--color-base-content);
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.2s;
+}
+
+.swiss-toggle:hover {
+    background: color-mix(in oklch, var(--color-primary) 14%, transparent);
+}
+
+.swiss-toggle .material-symbols-outlined {
+    font-size: 1.2rem;
+    transition: transform 0.25s ease;
+}
+
+.swiss-toggle .swiss-rotated {
+    transform: rotate(180deg);
+}
+
+.swiss-body-wrap {
+    display: grid;
+    grid-template-rows: 1fr;
+    transition: grid-template-rows 0.3s ease, opacity 0.25s ease, margin 0.25s ease;
+    opacity: 1;
+}
+
+.swiss-body-wrap.swiss-collapsed {
+    grid-template-rows: 0fr;
+    opacity: 0;
+}
+
+.swiss-body {
+    overflow: hidden;
 }
 
 .swiss-meta {
@@ -1439,6 +1490,11 @@ footer span {
 
 .swiss-meta .material-symbols-outlined {
     font-size: 1rem;
+}
+
+.swiss-direction {
+    margin-left: auto;
+    font-weight: 700;
 }
 
 .swiss-stop-tabs {
@@ -1543,17 +1599,17 @@ footer span {
 }
 
 .swiss-coach {
-    width: 58px;
-    min-height: 72px;
+    width: 132px;
+    min-height: 122px;
     border-radius: 10px;
     border: 1px solid color-mix(in oklch, var(--color-primary) 25%, transparent);
-    background: color-mix(in oklch, var(--color-primary) 9%, transparent);
+    background: color-mix(in oklch, var(--color-base-100) 58%, transparent);
     color: var(--color-base-content);
-    display: grid;
-    grid-template-rows: auto auto 1fr;
-    place-items: center;
-    padding: 7px 5px;
+    display: flex;
+    flex-direction: column;
+    padding: 12px;
     flex-shrink: 0;
+    box-shadow: inset 0 1px 0 color-mix(in oklch, #ffffff 8%, transparent);
 }
 
 .swiss-coach-closed {
@@ -1562,28 +1618,63 @@ footer span {
 }
 
 .swiss-coach-class {
-    font-size: 0.68rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    border: 1px solid color-mix(in oklch, var(--color-base-content) 10%, transparent);
+    background: color-mix(in oklch, var(--color-base-content) 4%, transparent);
+    font-size: 1rem;
     font-weight: 800;
-    color: var(--color-primary);
     line-height: 1;
 }
 
+.swiss-coach-head {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+}
+
+.swiss-coach-caption {
+    font-size: 0.68rem;
+    font-weight: 700;
+    opacity: 0.72;
+    text-transform: uppercase;
+}
+
 .swiss-coach-number {
-    font-size: 1rem;
+    font-size: 1.55rem;
     font-weight: 900;
     line-height: 1.3;
+    margin-top: 2px;
+}
+
+.swiss-coach-type,
+.swiss-coach-sector {
+    font-size: 0.75rem;
+    opacity: 0.72;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
 }
 
 .swiss-coach-icons {
     display: flex;
-    gap: 2px;
-    align-items: end;
-    justify-content: center;
+    gap: 4px;
+    align-items: center;
+    justify-content: flex-start;
     flex-wrap: wrap;
+    min-height: 18px;
+    margin-top: auto;
 }
 
 .swiss-coach-icons .material-symbols-outlined {
-    font-size: 0.86rem;
+    font-size: 1rem;
     color: var(--color-base-content);
     opacity: 0.62;
 }
@@ -1735,12 +1826,23 @@ footer span {
         gap: 8px;
     }
 
+    .swiss-header-actions {
+        width: 100%;
+        justify-content: space-between;
+        margin-left: 0;
+    }
+
     .swiss-provider {
         white-space: normal;
     }
 
     .swiss-stop-tab {
         min-width: 126px;
+    }
+
+    .swiss-coach {
+        width: 118px;
+        min-height: 116px;
     }
 
     .swiss-vehicle-row {
