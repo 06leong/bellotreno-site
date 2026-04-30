@@ -276,6 +276,8 @@ if (typeof module !== 'undefined' && module.exports) {
 let _stId = '';
 let _stName = '';
 let _stBoardType = 'partenze';
+let _stBoardSeq = 0;
+const ST_SWISS_MAX_LOOKUPS = 6;
 
 /** Called from onclick attributes in station.astro HTML */
 window.switchBoardType = function (type) {
@@ -294,6 +296,7 @@ async function _stLoadBoard() {
     loadingEl.style.display = 'block';
     errorEl.style.display   = 'none';
     contentEl.style.display = 'none';
+    const boardSeq = ++_stBoardSeq;
 
     try {
         const data = await fetchStationBoard(_stId, _stBoardType);
@@ -310,10 +313,103 @@ async function _stLoadBoard() {
         _stRenderBoard(data);
         loadingEl.style.display = 'none';
         contentEl.style.display = 'block';
+        _stEnhanceBoardWithSwiss(data, boardSeq);
     } catch (error) {
         console.error('Failed to load station board:', error);
         errorEl.style.display   = 'block';
         loadingEl.style.display = 'none';
+    }
+}
+
+function _stEsc(value) {
+    return window.escapeHtml ? window.escapeHtml(value) : String(value ?? '');
+}
+
+function _stTrainNumber(train) {
+    if (window.BelloSwiss?.getTrainNumber) return window.BelloSwiss.getTrainNumber(train);
+    return String(train?.numeroTreno || train?.compNumeroTreno || '').replace(/\D+/g, '');
+}
+
+function _stOperationDate(train) {
+    return window.BelloSwiss?.getOperationDate?.(train)
+        || window.BelloSwiss?.getTodayInZurich?.()
+        || new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Zurich' });
+}
+
+function _stVisibleRouteName(train) {
+    if (_stBoardType === 'partenze') {
+        return (train.destinazioneEstera &&
+            train.destinazioneEstera !== train.origine &&
+            train.destinazioneEstera.toUpperCase() !== _stName.toUpperCase())
+            ? train.destinazioneEstera : (train.destinazione || '');
+    }
+
+    return (train.origineEstera &&
+        train.origineEstera !== train.destinazione &&
+        train.origineEstera.toUpperCase() !== _stName.toUpperCase())
+        ? train.origineEstera : (train.origine || '');
+}
+
+function _stShouldTrySwiss(train) {
+    if (!window.BelloSwiss) return false;
+    const visibleRoute = _stVisibleRouteName(train);
+    const category = window.BelloSwiss.getCategory ? window.BelloSwiss.getCategory(train) : '';
+
+    if (window.BelloSwiss.isSwissBoundaryName?.(visibleRoute)) return true;
+    if (['EC', 'EN'].includes(category)) return true;
+    if (['REG', 'RE', 'RV', 'S', 'IR'].includes(category) && window.BelloSwiss.hasSwissHint?.(train)) return true;
+    return false;
+}
+
+function _stSwissTerminalName(swissData) {
+    const stops = Array.isArray(swissData?.stops) ? swissData.stops : [];
+    if (!stops.length) return '';
+    const terminal = _stBoardType === 'partenze' ? stops[stops.length - 1] : stops[0];
+    return terminal?.name || '';
+}
+
+function _stShouldReplaceRouteName(currentName, swissName) {
+    if (!currentName || !swissName || !window.BelloSwiss) return false;
+    const currentKey = window.BelloSwiss.normalizeStationName(currentName);
+    const swissKey = window.BelloSwiss.normalizeStationName(swissName);
+    const stationKey = window.BelloSwiss.normalizeStationName(_stName);
+    return Boolean(swissKey && swissKey !== currentKey && swissKey !== stationKey);
+}
+
+async function _stEnhanceBoardWithSwiss(trains, boardSeq) {
+    if (!window.BelloSwiss || !Array.isArray(trains) || !trains.length) return;
+
+    const candidates = trains
+        .map((train, index) => ({ train, index }))
+        .filter(({ train }) => _stShouldTrySwiss(train))
+        .slice(0, ST_SWISS_MAX_LOOKUPS);
+
+    for (const { train, index } of candidates) {
+        if (boardSeq !== _stBoardSeq) return;
+
+        const trainNumber = _stTrainNumber(train);
+        const operationDate = _stOperationDate(train);
+        if (!trainNumber || !operationDate) continue;
+
+        const swissData = await window.BelloSwiss.fetchSwissByTrainNumber(trainNumber, operationDate);
+        if (boardSeq !== _stBoardSeq) return;
+        if (!swissData?.available) continue;
+
+        const currentName = _stVisibleRouteName(train);
+        const swissName = _stSwissTerminalName(swissData);
+        if (!_stShouldReplaceRouteName(currentName, swissName)) continue;
+
+        const cell = document.querySelector(`[data-route-cell="${index}"]`);
+        if (!cell) continue;
+
+        const sourceText = translations[window.currentLang]?.swiss_source || 'Swiss Open Data / SBB';
+        cell.classList.add('station-route-swiss');
+        cell.innerHTML = `
+            <span>${_stEsc(swissName)}</span>
+            <span class="source-badge source-badge-swiss station-source-badge">
+                <span class="material-symbols-outlined">hub</span>${_stEsc(sourceText)}
+            </span>
+        `;
     }
 }
 
@@ -336,14 +432,14 @@ function _stRenderBoard(trains) {
                 </thead>
                 <tbody>`;
 
-        trains.forEach(train => {
+        trains.forEach((train, index) => {
             const formatted = formatDepartureData(train, window.currentLang, _stName);
             const trainNumber = train.numeroTreno || '';
             tableHtml += `
                     <tr class="train-row hover cursor-pointer transition-colors border-b border-base-200 last:border-0" data-train-number="${trainNumber}">
                         <td class="text-center font-mono font-bold text-sm sm:text-xl align-middle whitespace-nowrap px-1 sm:px-4">${formatted.scheduledTime}</td>
                         <td class="text-center font-medium text-[0.65rem] sm:text-sm align-middle whitespace-normal px-1 sm:px-4">${formatted.trainNumber}</td>
-                        <td class="text-[0.65rem] sm:text-sm align-middle whitespace-normal leading-tight px-1 sm:px-4" style="font-family: 'Outfit', 'Noto Sans SC', sans-serif; font-weight: 700; letter-spacing: 0.01em;">${formatted.destination}</td>
+                        <td data-route-cell="${index}" class="text-[0.65rem] sm:text-sm align-middle whitespace-normal leading-tight px-1 sm:px-4" style="font-family: 'Outfit', 'Noto Sans SC', sans-serif; font-weight: 700; letter-spacing: 0.01em;">${formatted.destination}</td>
                         <td class="text-center font-medium text-[0.65rem] sm:text-sm align-middle px-1 sm:px-4 leading-tight" style="color:${formatted.statusColor}">${formatted.status}</td>
                         <td class="text-center font-mono font-bold text-sm sm:text-lg align-middle px-1 sm:px-4">${formatted.platformHtml}</td>
                     </tr>`;
@@ -362,14 +458,14 @@ function _stRenderBoard(trains) {
                 </thead>
                 <tbody>`;
 
-        trains.forEach(train => {
+        trains.forEach((train, index) => {
             const formatted = formatArrivalData(train, window.currentLang, _stName);
             const trainNumber = train.numeroTreno || '';
             tableHtml += `
                     <tr class="train-row hover cursor-pointer transition-colors border-b border-base-200 last:border-0" data-train-number="${trainNumber}">
                         <td class="text-center font-mono font-bold text-sm sm:text-xl align-middle whitespace-nowrap px-1 sm:px-4">${formatted.scheduledTime}</td>
                         <td class="text-center font-medium text-[0.65rem] sm:text-sm align-middle whitespace-normal px-1 sm:px-4">${formatted.trainNumber}</td>
-                        <td class="text-[0.65rem] sm:text-sm align-middle whitespace-normal leading-tight px-1 sm:px-4" style="font-family: 'Outfit', 'Noto Sans SC', sans-serif; font-weight: 700; letter-spacing: 0.01em;">${formatted.origin}</td>
+                        <td data-route-cell="${index}" class="text-[0.65rem] sm:text-sm align-middle whitespace-normal leading-tight px-1 sm:px-4" style="font-family: 'Outfit', 'Noto Sans SC', sans-serif; font-weight: 700; letter-spacing: 0.01em;">${formatted.origin}</td>
                         <td class="text-center font-mono font-bold text-sm sm:text-xl align-middle whitespace-nowrap px-1 sm:px-4">${formatted.actualTime}</td>
                         <td class="text-center font-medium text-[0.65rem] sm:text-sm align-middle px-1 sm:px-4 leading-tight" style="color:${formatted.statusColor}">${formatted.status}</td>
                         <td class="text-center font-mono font-bold text-sm sm:text-lg align-middle px-1 sm:px-4">${formatted.platformHtml}</td>
