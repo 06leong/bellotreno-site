@@ -1704,6 +1704,25 @@ footer span {
     background: var(--color-info);
 }
 
+.station-route-swiss {
+    color: var(--color-base-content);
+}
+
+.station-route-swiss > span:first-child {
+    display: inline-block;
+    margin-right: 6px;
+}
+
+.station-source-badge {
+    font-size: 0.58rem;
+    padding: 3px 6px;
+    vertical-align: middle;
+}
+
+.station-source-badge .material-symbols-outlined {
+    font-size: 0.72rem;
+}
+
 @media (max-width: 768px) {
     .swiss-card {
         padding: 16px;

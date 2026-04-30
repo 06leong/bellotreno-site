@@ -1,6 +1,17 @@
 (function () {
     const cache = new Map();
-    const SWISS_ENDPOINT = window.SWISS_EC_BASE || "/api/swiss/ec";
+    const SWISS_ENDPOINT = window.SWISS_FORMATION_BASE || window.SWISS_EC_BASE || "/api/swiss/formation";
+    const ALWAYS_TRY_CATEGORIES = new Set(["EC", "EN"]);
+    const HINTED_TRY_CATEGORIES = new Set(["REG", "RE", "RV", "S", "IR"]);
+    const SWISS_BORDER_HINTS = new Set([
+        "CHIASSO",
+        "DOMODOSSOLA",
+        "LUINO",
+        "TIRANO",
+        "GAGGIOLO",
+        "PORTO CERESIO",
+        "PONTE TRESA"
+    ]);
 
     function tr(key, fallback) {
         const dict = typeof translations !== "undefined" ? translations : window.translations;
@@ -37,7 +48,7 @@
         return null;
     }
 
-    function todayInZurich() {
+    function getTodayInZurich() {
         return new Intl.DateTimeFormat("sv-SE", {
             timeZone: "Europe/Zurich",
             year: "numeric",
@@ -46,32 +57,62 @@
         }).format(new Date());
     }
 
-    function shouldQuery(data, category) {
-        if (category !== "EC") return false;
-        const train = getTrainNumber(data);
-        const operationDate = getOperationDate(data);
-        return Boolean(train && operationDate && operationDate === todayInZurich());
+    function getCategory(data) {
+        const comp = String(data?.compNumeroTreno || data?.categoria || "").trim().toUpperCase();
+        if (comp.includes("EC FR")) return "FR";
+        const match = comp.match(/^([A-Z]+(?:\s+[A-Z]+)?)\s*\d*$/);
+        if (match) return match[1].trim();
+        return String(data?.categoria || "").trim().toUpperCase();
     }
 
-    async function fetchSwissEc(data, category) {
+    function isSwissBoundaryName(name) {
+        const key = normalizeStationName(name);
+        if (!key) return false;
+        return Array.from(SWISS_BORDER_HINTS).some((hint) => key === hint || key.includes(hint));
+    }
+
+    function hasSwissHint(data) {
+        const directFields = [
+            data?.origine,
+            data?.destinazione,
+            data?.origineEstera,
+            data?.destinazioneEstera,
+            data?.stazioneUltimoRilevamento
+        ];
+
+        if (directFields.some(isSwissBoundaryName)) return true;
+        if (data?.origineEstera && data.origineEstera !== data.origine) return true;
+        if (data?.destinazioneEstera && data.destinazioneEstera !== data.destinazione) return true;
+
+        return asArray(data?.fermate).some((stop) => isSwissBoundaryName(stop?.stazione));
+    }
+
+    function shouldQuery(data, category) {
         const train = getTrainNumber(data);
         const operationDate = getOperationDate(data);
+        if (!train || !operationDate || operationDate !== getTodayInZurich()) return false;
 
-        if (category !== "EC") {
-            return { available: false, reason: "not_ec" };
-        }
+        const cat = String(category || getCategory(data)).toUpperCase();
+        if (ALWAYS_TRY_CATEGORIES.has(cat)) return true;
+        if (HINTED_TRY_CATEGORIES.has(cat) && hasSwissHint(data)) return true;
+        return false;
+    }
 
-        if (!train || !operationDate) {
+    async function fetchSwissByTrainNumber(trainNumber, operationDate) {
+        const train = String(trainNumber || "").replace(/\D+/g, "");
+        const date = String(operationDate || "").trim();
+
+        if (!train || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
             return { available: false, reason: "bad_request" };
         }
 
-        if (operationDate !== todayInZurich()) {
+        if (date !== getTodayInZurich()) {
             return { available: false, reason: "not_same_day" };
         }
 
-        const key = `${train}-${operationDate}`;
+        const key = `${train}-${date}`;
         if (!cache.has(key)) {
-            const requestUrl = `${SWISS_ENDPOINT}?train=${encodeURIComponent(train)}&date=${encodeURIComponent(operationDate)}`;
+            const requestUrl = `${SWISS_ENDPOINT}?train=${encodeURIComponent(train)}&date=${encodeURIComponent(date)}`;
             cache.set(key, fetch(requestUrl).then(async (response) => {
                 let payload = null;
                 try {
@@ -89,16 +130,64 @@
         return cache.get(key);
     }
 
+    async function fetchSwissEc(data, category) {
+        const train = getTrainNumber(data);
+        const operationDate = getOperationDate(data);
+
+        if (!shouldQuery(data, category)) {
+            return { available: false, reason: "not_supported" };
+        }
+
+        if (!train || !operationDate) {
+            return { available: false, reason: "bad_request" };
+        }
+
+        return fetchSwissByTrainNumber(train, operationDate);
+    }
+
     function normalizeStationName(name) {
-        return String(name || "")
+        let text = String(name || "")
+            .replace(/\((?:I|IT|CH)\)/gi, " ")
+            .replace(/\b(?:I|IT|CH)\b$/gi, " ");
+
+        text = text
             .normalize("NFD")
             .replace(/[\u0300-\u036f]/g, "")
             .toUpperCase()
             .replace(/\bSTAZIONE\b/g, "")
-            .replace(/\bCENTRALE\b/g, "CENTRALE")
+            .replace(/\b(?:FFS|SBB|CFF)\b/g, "")
             .replace(/[^A-Z0-9]+/g, " ")
             .trim()
             .replace(/\s+/g, " ");
+
+        return text.replace(/\b(?:I|IT|CH)\b$/g, "").trim();
+    }
+
+    function stationKeys(name) {
+        const key = normalizeStationName(name);
+        if (!key) return [];
+        const keys = new Set([key]);
+        const withoutSuffix = key.replace(/\b(?:I|IT|CH)\b$/g, "").trim();
+        if (withoutSuffix) keys.add(withoutSuffix);
+        return Array.from(keys);
+    }
+
+    function findVtEntryForSwiss(swissEntry, vtByName) {
+        for (const key of stationKeys(swissEntry.stop?.name)) {
+            const exact = vtByName.get(key);
+            if (exact) return exact;
+        }
+
+        const swissKey = normalizeStationName(swissEntry.stop?.name);
+        if (!swissKey) return null;
+
+        for (const [key, entry] of vtByName.entries()) {
+            if (key.length >= 5 && swissKey.length >= 5 && (key.includes(swissKey) || swissKey.includes(key))) {
+                return entry;
+            }
+        }
+
+        return null;
     }
 
     function parseIsoMs(value) {
@@ -200,7 +289,9 @@
 
         const vtByName = new Map();
         for (const entry of vtEntries) {
-            if (!vtByName.has(entry.key)) vtByName.set(entry.key, entry);
+            for (const key of stationKeys(entry.stop?.stazione)) {
+                if (!vtByName.has(key)) vtByName.set(key, entry);
+            }
         }
 
         const swissEntries = asArray(swissData.stops).map((stop) => ({
@@ -208,14 +299,14 @@
             key: normalizeStationName(stop.name)
         })).filter((entry) => entry.key);
 
-        const hasMatch = swissEntries.some((entry) => vtByName.has(entry.key));
+        const hasMatch = swissEntries.some((entry) => findVtEntryForSwiss(entry, vtByName));
         if (!hasMatch) return sourceStops;
 
         const merged = [];
         const usedVtIndexes = new Set();
 
         for (const swissEntry of swissEntries) {
-            const vtEntry = vtByName.get(swissEntry.key);
+            const vtEntry = findVtEntryForSwiss(swissEntry, vtByName);
             if (vtEntry && !usedVtIndexes.has(vtEntry.index)) {
                 merged.push(decorateVtStop(vtEntry.stop, swissEntry.stop, vtEntry.index));
                 usedVtIndexes.add(vtEntry.index);
@@ -393,9 +484,16 @@
             return `<div class="swiss-empty">${esc(tr("swiss_no_coaches", "No coach layout available"))}</div>`;
         }
 
+        const passengerVehicles = asArray(vehicles).filter((vehicle) => (
+            vehicle?.number
+            || vehicle?.firstClassSeats
+            || vehicle?.secondClassSeats
+            || vehicle?.bikeHooks
+            || vehicle?.wheelchairSpaces
+        ));
         const grouped = new Map();
         coaches.forEach((coach, index) => {
-            const vehicle = findVehicleForCoach(coach, vehicles, index);
+            const vehicle = findVehicleForCoach(coach, passengerVehicles, index);
             if (!grouped.has(coach.sector)) grouped.set(coach.sector, []);
             grouped.get(coach.sector).push({ coach, vehicle, index });
         });
@@ -547,9 +645,15 @@
     }
 
     window.BelloSwiss = {
+        fetchSwissByTrainNumber,
         fetchSwissEc,
+        getCategory,
         getOperationDate,
+        getTodayInZurich,
+        getTrainNumber,
+        hasSwissHint,
         hideFormationCard,
+        isSwissBoundaryName,
         mergeTimelineStops,
         normalizeStationName,
         renderFormationCard,
