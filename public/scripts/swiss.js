@@ -298,6 +298,30 @@
         merged.push({ ...stop, __btVtIndex: vtIndex });
     }
 
+    function swissTimelineStops(swissEntries) {
+        return swissEntries
+            .filter((entry) => !isTechnicalSwissStop(entry.stop))
+            .map((entry) => toSwissTimelineStop(entry.stop));
+    }
+
+    function mergeByBoundaryAnchor(sourceStops, vtEntries, swissEntries) {
+        const swissStops = swissTimelineStops(swissEntries);
+        if (!sourceStops.length || !swissStops.length) return null;
+
+        const firstEntry = vtEntries[0];
+        const lastEntry = vtEntries[vtEntries.length - 1];
+
+        if (lastEntry && isSwissBoundaryName(lastEntry.stop?.stazione)) {
+            return [...sourceStops, ...swissStops];
+        }
+
+        if (firstEntry && isSwissBoundaryName(firstEntry.stop?.stazione)) {
+            return [...swissStops, ...sourceStops];
+        }
+
+        return null;
+    }
+
     function mergeTimelineStops(vtStops, swissData) {
         const sourceStops = asArray(vtStops);
         if (!swissData?.available || !asArray(swissData.stops).length) return sourceStops;
@@ -321,7 +345,7 @@
         })).filter((entry) => entry.key);
 
         const hasMatch = swissEntries.some((entry) => findVtEntryForSwiss(entry, vtByName));
-        if (!hasMatch) return sourceStops;
+        if (!hasMatch) return mergeByBoundaryAnchor(sourceStops, vtEntries, swissEntries) || sourceStops;
 
         const merged = [];
         const usedVtIndexes = new Set();
@@ -469,14 +493,6 @@
         return coaches;
     }
 
-    function findVehicleForCoach(coach, vehicles, fallbackIndex) {
-        if (coach.number) {
-            const byNumber = vehicles.find((vehicle) => vehicle.number === coach.number);
-            if (byNumber) return byNumber;
-        }
-        return vehicles[fallbackIndex] || null;
-    }
-
     function sectorForVehicle(vehicle, selectedStop) {
         const sectors = asArray(vehicle?.stopSectors);
         if (!sectors.length) return null;
@@ -574,6 +590,26 @@
         return Array.from(map.values()).sort((a, b) => (a.position || 9999) - (b.position || 9999));
     }
 
+    function sectorSortKey(sector) {
+        const value = String(sector || "TRAIN").toUpperCase();
+        if (!value || value === "TRAIN") return "ZZZ";
+        return value.split(/[,\s;]+/).filter(Boolean).join("");
+    }
+
+    function compareVehiclesByStopSector(selectedStop) {
+        return (left, right) => {
+            const leftSector = sectorSortKey(sectorForVehicle(left, selectedStop)?.sectors);
+            const rightSector = sectorSortKey(sectorForVehicle(right, selectedStop)?.sectors);
+            if (leftSector !== rightSector) return leftSector.localeCompare(rightSector);
+            return (left.position || 9999) - (right.position || 9999)
+                || (left.number || 9999) - (right.number || 9999);
+        };
+    }
+
+    function vehiclesForStopFallback(vehicles, selectedStop) {
+        return allVehicles(vehicles).slice().sort(compareVehiclesByStopSector(selectedStop));
+    }
+
     function vehicleHasPassengerSeats(vehicle) {
         return Number(vehicle?.firstClassSeats || 0) > 0 || Number(vehicle?.secondClassSeats || 0) > 0;
     }
@@ -602,11 +638,27 @@
         return vehicle?.number || coach?.number || vehicle?.vehicleNumber || vehicle?.position || "--";
     }
 
-    function coachByVehicle(vehicle, coaches, index) {
-        const byNumber = vehicle?.number
-            ? coaches.find((coach) => coach.number && coach.number === vehicle.number)
-            : null;
-        return byNumber || coaches[index] || null;
+    function takeVehicleForCoach(coach, vehicles, usedIndexes, fallbackIndex) {
+        if (coach?.number) {
+            const exactIndex = vehicles.findIndex((vehicle, index) => !usedIndexes.has(index) && vehicle.number === coach.number);
+            if (exactIndex >= 0) {
+                usedIndexes.add(exactIndex);
+                return vehicles[exactIndex];
+            }
+        }
+
+        if (fallbackIndex < vehicles.length && !usedIndexes.has(fallbackIndex)) {
+            usedIndexes.add(fallbackIndex);
+            return vehicles[fallbackIndex];
+        }
+
+        const nextIndex = vehicles.findIndex((_, index) => !usedIndexes.has(index));
+        if (nextIndex >= 0) {
+            usedIndexes.add(nextIndex);
+            return vehicles[nextIndex];
+        }
+
+        return null;
     }
 
     function shouldShowNoPassage(selectedSector, index) {
@@ -648,20 +700,51 @@
     }
 
     function buildVehicleItems(stop, vehicles) {
-        const orderedVehicles = allVehicles(vehicles);
+        const orderedVehicles = vehiclesForStopFallback(vehicles, stop);
         const coaches = parseFormationShortString(stop?.formationShortString);
-        if (orderedVehicles.length) {
-            return orderedVehicles.map((vehicle, index) => {
-                const coach = coachByVehicle(vehicle, coaches, index);
+
+        if (coaches.length) {
+            const usedVehicleIndexes = new Set();
+            const items = coaches.map((coach, index) => {
+                const vehicle = takeVehicleForCoach(coach, orderedVehicles, usedVehicleIndexes, index);
+                const selectedSector = sectorForVehicle(vehicle, stop);
                 return {
                     vehicle,
                     coach,
                     selectedStop: stop,
-                    selectedSector: sectorForVehicle(vehicle, stop),
-                    sector: vehicleSector(vehicle, coach, stop)
+                    selectedSector,
+                    sector: coach?.sector || selectedSector?.sectors || "TRAIN"
+                };
+            });
+
+            orderedVehicles.forEach((vehicle, index) => {
+                if (usedVehicleIndexes.has(index)) return;
+                const selectedSector = sectorForVehicle(vehicle, stop);
+                items.push({
+                    vehicle,
+                    coach: null,
+                    selectedStop: stop,
+                    selectedSector,
+                    sector: selectedSector?.sectors || "TRAIN"
+                });
+            });
+
+            return items;
+        }
+
+        if (orderedVehicles.length) {
+            return orderedVehicles.map((vehicle) => {
+                const selectedSector = sectorForVehicle(vehicle, stop);
+                return {
+                    vehicle,
+                    coach: null,
+                    selectedStop: stop,
+                    selectedSector,
+                    sector: vehicleSector(vehicle, null, stop)
                 };
             });
         }
+
         return coaches.map((coach, index) => ({
             vehicle: null,
             coach,
@@ -670,6 +753,19 @@
             sector: coach?.sector || "TRAIN",
             fallbackIndex: index
         }));
+    }
+
+    function vehiclesInDisplayOrder(stop, vehicles) {
+        const seen = new Set();
+        return buildVehicleItems(stop, vehicles)
+            .map((item) => item.vehicle)
+            .filter((vehicle) => {
+                if (!vehicle) return false;
+                const key = vehicleUniqueKey(vehicle);
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            });
     }
 
     function buildSectorGroups(items) {
@@ -712,6 +808,25 @@
         if (!map.has(id)) map.set(id, { id, label, icon, badge });
     }
 
+    const LEGEND_ORDER = [
+        "class_1",
+        "class_2",
+        "class_12",
+        "restaurant",
+        "low_floor",
+        "wheelchair",
+        "wheelchair_wc",
+        "bike",
+        "stroller",
+        "family",
+        "business",
+        "climated",
+        "no_passage",
+        "closed",
+        "emergency",
+        "loco"
+    ];
+
     function renderCoachLegend(items) {
         const legend = new Map();
         items.forEach((item, index) => {
@@ -728,7 +843,13 @@
         });
 
         if (!legend.size) return "";
-        const entries = Array.from(legend.values()).map((entry) => `
+        const entries = Array.from(legend.values())
+            .sort((left, right) => {
+                const leftIndex = LEGEND_ORDER.includes(left.id) ? LEGEND_ORDER.indexOf(left.id) : LEGEND_ORDER.length;
+                const rightIndex = LEGEND_ORDER.includes(right.id) ? LEGEND_ORDER.indexOf(right.id) : LEGEND_ORDER.length;
+                return leftIndex - rightIndex;
+            })
+            .map((entry) => `
             <div class="swiss-legend-item">
                 ${entry.badge
                     ? `<span class="swiss-legend-badge">${esc(entry.badge)}</span>`
@@ -818,7 +939,7 @@
     }
 
     function renderVehicleDetails(data, selectedStop) {
-        const vehicles = allVehicles(data?.vehicles);
+        const vehicles = vehiclesInDisplayOrder(selectedStop, data?.vehicles);
         if (!vehicles.length) {
             return `<div class="swiss-empty">${esc(tr("swiss_unavailable", "Swiss data unavailable"))}</div>`;
         }

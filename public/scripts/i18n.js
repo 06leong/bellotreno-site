@@ -112,7 +112,7 @@ const translations = {
         swiss_sector: "扇区",
         swiss_coach: "车厢",
         swiss_vehicles: "车辆明细",
-        swiss_vehicle_count: "车辆",
+        swiss_vehicle_count: "车厢数",
         swiss_vehicle_details: "车辆详情",
         swiss_first_class: "一等座",
         swiss_second_class: "二等座",

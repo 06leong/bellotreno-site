@@ -277,7 +277,7 @@ let _stId = '';
 let _stName = '';
 let _stBoardType = 'partenze';
 let _stBoardSeq = 0;
-const ST_SWISS_MAX_LOOKUPS = 6;
+const ST_SWISS_MAX_LOOKUPS = 10;
 
 /** Called from onclick attributes in station.astro HTML */
 window.switchBoardType = function (type) {
