@@ -402,7 +402,7 @@ async function _stEnhanceBoardWithSwiss(trains, boardSeq) {
         const cell = document.querySelector(`[data-route-cell="${index}"]`);
         if (!cell) continue;
 
-        const sourceText = translations[window.currentLang]?.swiss_source || 'Swiss Open Data / SBB';
+        const sourceText = translations[window.currentLang]?.swiss_source || 'Open Data';
         cell.classList.add('station-route-swiss');
         cell.innerHTML = `
             <span>${_stEsc(swissName)}</span>

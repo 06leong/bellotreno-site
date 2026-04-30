@@ -160,7 +160,27 @@
             .trim()
             .replace(/\s+/g, " ");
 
+        if (isSimplonGalleryKey(text)) {
+            return "DOMODOSSOLA";
+        }
+
         return text.replace(/\b(?:I|IT|CH)\b$/g, "").trim();
+    }
+
+    function isSimplonGalleryKey(key) {
+        const text = String(key || "").toUpperCase();
+        return text.includes("GALLERIA SEMPIONE")
+            || text.includes("GALLERIE DU SIMPLON")
+            || text.includes("GALERIE DU SIMPLON")
+            || text.includes("SIMPLON TUNNEL")
+            || text.includes("SIMPLONTUNNEL")
+            || (text.includes("SIMPLON") && (text.includes("GALLERY") || text.includes("GALLERIE") || text.includes("GALERIE") || text.includes("TUNNEL")));
+    }
+
+    function isTechnicalSwissStop(stop) {
+        const key = normalizeStationName(stop?.name || stop?.stazione || "");
+        const raw = String(stop?.name || stop?.stazione || "").toUpperCase();
+        return key === "DOMODOSSOLA" && isSimplonGalleryKey(raw);
     }
 
     function stationKeys(name) {
@@ -206,11 +226,12 @@
         const arrivalMs = parseIsoMs(stop.arrivalTime);
         const departureMs = parseIsoMs(stop.departureTime);
         const track = cleanTrack(stop.track);
+        const displayName = isTechnicalSwissStop(stop) ? "Domodossola" : stop.name;
 
         return {
             source: "swiss",
             id: stop.uic ? `CH-${stop.uic}` : `CH-${normalizeStationName(stop.name)}`,
-            stazione: stop.name,
+            stazione: displayName,
             arrivo_teorico: arrivalMs,
             partenza_teorica: departureMs,
             programmata: departureMs || arrivalMs,
@@ -310,7 +331,7 @@
             if (vtEntry && !usedVtIndexes.has(vtEntry.index)) {
                 merged.push(decorateVtStop(vtEntry.stop, swissEntry.stop, vtEntry.index));
                 usedVtIndexes.add(vtEntry.index);
-            } else if (!vtEntry) {
+            } else if (!vtEntry && !isTechnicalSwissStop(swissEntry.stop)) {
                 merged.push(toSwissTimelineStop(swissEntry.stop));
             }
         }
@@ -478,37 +499,100 @@
         return icons.map(([icon, label]) => `<span class="material-symbols-outlined" title="${esc(label)}">${icon}</span>`).join("");
     }
 
-    function renderCoachStrip(stop, vehicles) {
-        const coaches = parseFormationShortString(stop?.formationShortString);
-        if (!coaches.length) {
-            return `<div class="swiss-empty">${esc(tr("swiss_no_coaches", "No coach layout available"))}</div>`;
-        }
-
-        const passengerVehicles = asArray(vehicles).filter((vehicle) => (
+    function passengerVehicles(vehicles) {
+        return asArray(vehicles).filter((vehicle) => (
             vehicle?.number
             || vehicle?.firstClassSeats
             || vehicle?.secondClassSeats
             || vehicle?.bikeHooks
             || vehicle?.wheelchairSpaces
         ));
+    }
+
+    function vehicleClassLabel(vehicle) {
+        const first = Number(vehicle?.firstClassSeats || 0);
+        const second = Number(vehicle?.secondClassSeats || 0);
+        if (first > 0 && second > 0) return "1/2";
+        if (first > 0) return "1";
+        if (second > 0) return "2";
+        return "?";
+    }
+
+    function renderCoachFeatureIcons(coach, vehicle) {
+        const services = new Set(asArray(coach?.services));
+        const icons = [];
+        if (vehicle?.lowFloor || services.has("NF")) icons.push(["accessible_forward", tr("swiss_low_floor", "Low floor")]);
+        if (vehicle?.wheelchairSpaces || services.has("BHP")) icons.push(["accessible", tr("swiss_wheelchair", "Wheelchair")]);
+        if (vehicle?.bikeHooks || services.has("VH") || services.has("VR")) icons.push(["directions_bike", tr("swiss_bike", "Bike")]);
+        if (services.has("KW")) icons.push(["child_friendly", "Stroller"]);
+        if (String(coach?.classCode || vehicle?.typeCodeName || "").toUpperCase().includes("WR")) icons.push(["restaurant", "Restaurant"]);
+        return icons.map(([icon, label]) => `<span class="material-symbols-outlined" title="${esc(label)}">${icon}</span>`).join("");
+    }
+
+    function renderCoachCard({ coach, vehicle, selectedStop }) {
+        const selectedSector = sectorForVehicle(vehicle, selectedStop);
+        const number = coach?.number || vehicle?.number || "--";
+        const classLabel = coach?.classLabel || vehicleClassLabel(vehicle);
+        const type = vehicle?.typeCodeName || vehicle?.typeCode || coach?.classCode || "";
+        const sector = coach?.sector || selectedSector?.sectors || "";
+        const closed = coach?.closed || vehicle?.closed;
+
+        return `
+            <div class="swiss-coach${closed ? " swiss-coach-closed" : ""}">
+                <div class="swiss-coach-head">
+                    <span class="swiss-coach-caption">${esc(tr("swiss_coach", "Coach"))}</span>
+                    <span class="swiss-coach-class">${esc(classLabel)}</span>
+                </div>
+                <div class="swiss-coach-number">${esc(number)}</div>
+                ${type ? `<div class="swiss-coach-type">${esc(type)}</div>` : ""}
+                ${sector ? `<div class="swiss-coach-sector">${esc(tr("swiss_sector", "Sector"))} ${esc(sector)}</div>` : ""}
+                <div class="swiss-coach-icons">${renderCoachFeatureIcons(coach, vehicle)}</div>
+            </div>
+        `;
+    }
+
+    function renderVehicleCoachStrip(stop, vehicles) {
+        const grouped = new Map();
+        passengerVehicles(vehicles).forEach((vehicle) => {
+            const selectedSector = sectorForVehicle(vehicle, stop);
+            const sector = selectedSector?.sectors || "TRAIN";
+            if (!grouped.has(sector)) grouped.set(sector, []);
+            grouped.get(sector).push({ coach: { sector }, vehicle, selectedStop: stop });
+        });
+
+        if (!grouped.size) {
+            return `<div class="swiss-empty">${esc(tr("swiss_no_coaches", "No coach layout available"))}</div>`;
+        }
+
+        return Array.from(grouped.entries()).map(([sector, items]) => `
+            <div class="swiss-sector-group">
+                <div class="swiss-sector-label">${sector === "TRAIN" ? esc(tr("swiss_coach", "Coach")) : `${esc(tr("swiss_sector", "Sector"))} ${esc(sector)}`}</div>
+                <div class="swiss-coaches">
+                    ${items.map(renderCoachCard).join("")}
+                </div>
+            </div>
+        `).join("");
+    }
+
+    function renderCoachStrip(stop, vehicles) {
+        const coaches = parseFormationShortString(stop?.formationShortString);
+        if (!coaches.length) {
+            return renderVehicleCoachStrip(stop, vehicles);
+        }
+
+        const visibleVehicles = passengerVehicles(vehicles);
         const grouped = new Map();
         coaches.forEach((coach, index) => {
-            const vehicle = findVehicleForCoach(coach, passengerVehicles, index);
+            const vehicle = findVehicleForCoach(coach, visibleVehicles, index);
             if (!grouped.has(coach.sector)) grouped.set(coach.sector, []);
-            grouped.get(coach.sector).push({ coach, vehicle, index });
+            grouped.get(coach.sector).push({ coach, vehicle, selectedStop: stop, index });
         });
 
         return Array.from(grouped.entries()).map(([sector, items]) => `
             <div class="swiss-sector-group">
                 <div class="swiss-sector-label">${esc(tr("swiss_sector", "Sector"))} ${esc(sector)}</div>
                 <div class="swiss-coaches">
-                    ${items.map(({ coach, vehicle }) => `
-                        <div class="swiss-coach${coach.closed || vehicle?.closed ? " swiss-coach-closed" : ""}">
-                            <div class="swiss-coach-class">${esc(coach.classLabel)}</div>
-                            <div class="swiss-coach-number">${coach.number || vehicle?.number || "--"}</div>
-                            <div class="swiss-coach-icons">${renderServiceIcons(coach, vehicle)}</div>
-                        </div>
-                    `).join("")}
+                    ${items.map(renderCoachCard).join("")}
                 </div>
             </div>
         `).join("");
@@ -578,7 +662,7 @@
     function renderLoadingCard() {
         const card = document.getElementById("swissFormationCard");
         if (!card) return;
-        card.innerHTML = `<div class="swiss-loading"><span class="loading loading-spinner loading-sm text-primary"></span><span>${esc(tr("swiss_loading", "Loading Swiss formation..."))}</span></div>`;
+        card.innerHTML = `<div class="swiss-loading"><span class="loading loading-spinner loading-sm text-primary"></span><span>${esc(tr("swiss_loading", "Loading train formation..."))}</span></div>`;
         card.style.display = "block";
     }
 
@@ -603,6 +687,8 @@
             selectedIndex = withFormation >= 0 ? withFormation : 0;
         }
         const selectedStop = stops[selectedIndex] || stops[0] || null;
+        const wasCollapsed = card.querySelector(".swiss-body-wrap")?.classList.contains("swiss-collapsed") || false;
+        const terminalName = stops.length ? (stops[stops.length - 1]?.name || "") : "";
 
         const stopTabs = stops.map((stop, index) => `
             <button type="button" class="swiss-stop-tab${index === selectedIndex ? " active" : ""}" data-swiss-stop-index="${index}">
@@ -615,27 +701,43 @@
             <div class="swiss-header">
                 <div class="swiss-title">
                     <span class="material-symbols-outlined">view_carousel</span>
-                    <span>${esc(tr("swiss_title", "Swiss formation"))}</span>
+                    <span>${esc(tr("swiss_title", "Train formation"))}</span>
                 </div>
-                <div class="swiss-provider">${esc(tr("swiss_source", "Swiss Open Data / SBB"))}</div>
+                <div class="swiss-header-actions">
+                    <div class="swiss-provider">${esc(tr("swiss_source", "Open Data"))}</div>
+                    <button type="button" class="swiss-toggle" aria-label="Toggle formation">
+                        <span class="material-symbols-outlined${wasCollapsed ? "" : " swiss-rotated"}">expand_more</span>
+                    </button>
+                </div>
             </div>
-            <div class="swiss-meta">
-                <span><span class="material-symbols-outlined">update</span>${esc(tr("swiss_updated", "Updated"))}: ${esc(formatZurichDateTime(data.lastUpdate))}</span>
-                <span><span class="material-symbols-outlined">route</span>${esc(tr("swiss_run_status", "Run status"))}: ${esc(runStatusLabel(data.runs))}</span>
-            </div>
-            ${stops.length ? `<div class="swiss-stop-tabs">${stopTabs}</div>` : ""}
-            <div class="swiss-section">
-                <div class="swiss-section-title">${esc(tr("swiss_coach", "Coach"))} ${selectedStop?.track ? `<span>${esc(tr("swiss_track", "Track"))} ${esc(selectedStop.track)}</span>` : ""}</div>
-                <div class="swiss-coach-strip">${renderCoachStrip(selectedStop, asArray(data.vehicles))}</div>
-            </div>
-            <div class="swiss-section">
-                <div class="swiss-section-title">${esc(tr("swiss_vehicles", "Vehicles"))}</div>
-                <div class="swiss-vehicle-list">${renderVehicleDetails(data, selectedStop)}</div>
+            <div class="swiss-body-wrap${wasCollapsed ? " swiss-collapsed" : ""}">
+                <div class="swiss-body">
+                    <div class="swiss-meta">
+                        <span><span class="material-symbols-outlined">update</span>${esc(tr("swiss_updated", "Updated"))}: ${esc(formatZurichDateTime(data.lastUpdate))}</span>
+                        <span><span class="material-symbols-outlined">route</span>${esc(tr("swiss_run_status", "Run status"))}: ${esc(runStatusLabel(data.runs))}</span>
+                        ${terminalName ? `<span class="swiss-direction"><span class="material-symbols-outlined">trending_flat</span>${esc(terminalName)}</span>` : ""}
+                    </div>
+                    ${stops.length ? `<div class="swiss-stop-tabs">${stopTabs}</div>` : ""}
+                    <div class="swiss-section">
+                        <div class="swiss-section-title">${esc(tr("swiss_coach", "Coach"))} ${selectedStop?.track ? `<span>${esc(tr("swiss_track", "Track"))} ${esc(selectedStop.track)}</span>` : ""}</div>
+                        <div class="swiss-coach-strip">${renderCoachStrip(selectedStop, asArray(data.vehicles))}</div>
+                    </div>
+                    <div class="swiss-section">
+                        <div class="swiss-section-title">${esc(tr("swiss_vehicles", "Vehicles"))}</div>
+                        <div class="swiss-vehicle-list">${renderVehicleDetails(data, selectedStop)}</div>
+                    </div>
+                </div>
             </div>
         `;
 
         card.dataset.swissSelectedStop = String(selectedIndex);
         card.style.display = "block";
+        card.querySelector(".swiss-toggle")?.addEventListener("click", () => {
+            const body = card.querySelector(".swiss-body-wrap");
+            const icon = card.querySelector(".swiss-toggle .material-symbols-outlined");
+            body?.classList.toggle("swiss-collapsed");
+            icon?.classList.toggle("swiss-rotated");
+        });
         card.querySelectorAll(".swiss-stop-tab").forEach((button) => {
             button.addEventListener("click", () => {
                 card.dataset.swissSelectedStop = button.dataset.swissStopIndex;
@@ -654,6 +756,7 @@
         hasSwissHint,
         hideFormationCard,
         isSwissBoundaryName,
+        isTechnicalSwissStop,
         mergeTimelineStops,
         normalizeStationName,
         renderFormationCard,
