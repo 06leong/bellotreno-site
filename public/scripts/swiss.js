@@ -404,6 +404,9 @@
             classCode = previousClass || "?";
         }
 
+        const hiddenType = classCode.toUpperCase().replace(/:.*$/, "");
+        if (["F", "X"].includes(hiddenType)) return null;
+
         let classLabel = classCode;
         if (classCode.includes("12")) classLabel = "1/2";
         else if (classCode.includes("1")) classLabel = "1";
@@ -478,16 +481,97 @@
         const sectors = asArray(vehicle?.stopSectors);
         if (!sectors.length) return null;
         if (selectedStop?.uic) {
-            const exact = sectors.find((item) => item.uic === selectedStop.uic);
-            if (exact) return exact;
+            const exactMatches = sectors.filter((item) => item.uic === selectedStop.uic);
+            if (exactMatches.length) {
+                return exactMatches.find((item) => item.accessToPreviousVehicle === false) || exactMatches[0];
+            }
         }
         return sectors[0];
     }
 
+    function vehicleUniqueKey(vehicle) {
+        if (vehicle?.evn) return `evn:${vehicle.evn}`;
+        const fullNumber = [
+            vehicle?.buildTypeCode,
+            vehicle?.countryCode,
+            vehicle?.vehicleNumber,
+            vehicle?.checkNumber
+        ].filter(Boolean).join(":");
+        if (fullNumber) return `vehicle:${fullNumber}`;
+        return `fallback:${vehicle?.position || ""}:${vehicle?.number || ""}:${vehicle?.typeCodeName || ""}:${vehicle?.typeCode || ""}`;
+    }
+
+    function mergeUniqueBy(list, keyFn) {
+        const map = new Map();
+        asArray(list).forEach((item) => {
+            const key = keyFn(item);
+            if (!key || !map.has(key)) map.set(key || `item:${map.size}`, item);
+        });
+        return Array.from(map.values());
+    }
+
+    function mergeVehicle(existing, incoming) {
+        return {
+            ...existing,
+            position: Math.min(existing.position || incoming.position || 9999, incoming.position || existing.position || 9999),
+            number: existing.number || incoming.number,
+            typeCode: existing.typeCode || incoming.typeCode,
+            typeCodeName: existing.typeCodeName || incoming.typeCodeName,
+            buildTypeCode: existing.buildTypeCode || incoming.buildTypeCode,
+            countryCode: existing.countryCode || incoming.countryCode,
+            vehicleNumber: existing.vehicleNumber || incoming.vehicleNumber,
+            checkNumber: existing.checkNumber || incoming.checkNumber,
+            evn: existing.evn || incoming.evn,
+            parentEvn: existing.parentEvn || incoming.parentEvn,
+            length: Math.max(existing.length || 0, incoming.length || 0),
+            numberRestaurantSpace: Math.max(existing.numberRestaurantSpace || 0, incoming.numberRestaurantSpace || 0),
+            numberBeds: Math.max(existing.numberBeds || 0, incoming.numberBeds || 0),
+            firstClassSeats: Math.max(existing.firstClassSeats || 0, incoming.firstClassSeats || 0),
+            secondClassSeats: Math.max(existing.secondClassSeats || 0, incoming.secondClassSeats || 0),
+            bikeHooks: Math.max(existing.bikeHooks || 0, incoming.bikeHooks || 0),
+            wheelchairSpaces: Math.max(existing.wheelchairSpaces || 0, incoming.wheelchairSpaces || 0),
+            lowFloor: existing.lowFloor || incoming.lowFloor,
+            wheelchairToilet: existing.wheelchairToilet || incoming.wheelchairToilet,
+            wheelchairAccessibleRestaurant: existing.wheelchairAccessibleRestaurant || incoming.wheelchairAccessibleRestaurant,
+            disabledCompartment: existing.disabledCompartment || incoming.disabledCompartment,
+            wheelchairSpacesFirstClass: Math.max(existing.wheelchairSpacesFirstClass || 0, incoming.wheelchairSpacesFirstClass || 0),
+            wheelchairSpacesSecondClass: Math.max(existing.wheelchairSpacesSecondClass || 0, incoming.wheelchairSpacesSecondClass || 0),
+            wheelchairFoldingRamp: existing.wheelchairFoldingRamp || incoming.wheelchairFoldingRamp,
+            wheelchairGapBridging: existing.wheelchairGapBridging || incoming.wheelchairGapBridging,
+            wheelchairBoardingPlatformHeight: Math.max(existing.wheelchairBoardingPlatformHeight || 0, incoming.wheelchairBoardingPlatformHeight || 0),
+            bikePlatform: existing.bikePlatform || incoming.bikePlatform,
+            emergencyCallSystem: existing.emergencyCallSystem || incoming.emergencyCallSystem,
+            climated: existing.climated || incoming.climated,
+            wheelchairPicto: existing.wheelchairPicto || incoming.wheelchairPicto,
+            bikePicto: existing.bikePicto || incoming.bikePicto,
+            strollerPicto: existing.strollerPicto || incoming.strollerPicto,
+            familyZonePicto: existing.familyZonePicto || incoming.familyZonePicto,
+            businessZonePicto: existing.businessZonePicto || incoming.businessZonePicto,
+            closed: existing.closed || incoming.closed,
+            vehicleWillBePutAway: existing.vehicleWillBePutAway || incoming.vehicleWillBePutAway,
+            fromStop: existing.fromStop || incoming.fromStop,
+            toStop: existing.toStop || incoming.toStop,
+            segments: mergeUniqueBy([...(existing.segments || []), ...(incoming.segments || [])], (segment) => `${segment.fromStop || ""}|${segment.toStop || ""}`),
+            stopSectors: mergeUniqueBy([...(existing.stopSectors || []), ...(incoming.stopSectors || [])], (stop) => [
+                stop.uic || "",
+                stop.name || "",
+                stop.track || "",
+                stop.sectors || "",
+                stop.arrivalTime || "",
+                stop.departureTime || "",
+                stop.accessToPreviousVehicle
+            ].join("|"))
+        };
+    }
+
     function allVehicles(vehicles) {
-        return asArray(vehicles)
-            .slice()
-            .sort((a, b) => (a.position || 9999) - (b.position || 9999));
+        const map = new Map();
+        asArray(vehicles).forEach((vehicle) => {
+            const key = vehicleUniqueKey(vehicle);
+            if (map.has(key)) map.set(key, mergeVehicle(map.get(key), vehicle));
+            else map.set(key, vehicle);
+        });
+        return Array.from(map.values()).sort((a, b) => (a.position || 9999) - (b.position || 9999));
     }
 
     function vehicleHasPassengerSeats(vehicle) {
@@ -511,7 +595,7 @@
     }
 
     function coachTokenLooksLikeLoco(coach) {
-        return ["F", "LK", "X"].includes(String(coach?.classCode || "").toUpperCase());
+        return ["LK"].includes(String(coach?.classCode || "").toUpperCase());
     }
 
     function vehicleDisplayNumber(vehicle, coach) {
@@ -525,26 +609,31 @@
         return byNumber || coaches[index] || null;
     }
 
-    function featureEntries(coach, vehicle, selectedSector) {
+    function shouldShowNoPassage(selectedSector, index) {
+        return index > 0 && selectedSector?.accessToPreviousVehicle === false;
+    }
+
+    function featureEntries(coach, vehicle, selectedSector, index = 0) {
         const services = new Set(asArray(coach?.services));
         const entries = [];
-        if (vehicle?.lowFloor || services.has("NF")) entries.push(["accessible_forward", tr("swiss_low_floor", "Low floor")]);
-        if (vehicle?.wheelchairSpaces || vehicle?.wheelchairPicto || services.has("BHP")) entries.push(["accessible", tr("swiss_wheelchair", "Wheelchair")]);
-        if (vehicle?.bikeHooks || vehicle?.bikePlatform || vehicle?.bikePicto || services.has("VH") || services.has("VR")) entries.push(["directions_bike", tr("swiss_bike", "Bike")]);
-        if (vehicle?.strollerPicto || services.has("KW")) entries.push(["child_friendly", tr("swiss_stroller", "Stroller")]);
-        if (vehicle?.familyZonePicto || services.has("FZ") || services.has("FA")) entries.push(["family_restroom", tr("swiss_family", "Family")]);
-        if (vehicle?.businessZonePicto || services.has("BZ")) entries.push(["business_center", tr("swiss_business", "Business")]);
-        if (vehicle?.numberRestaurantSpace || vehicle?.wheelchairAccessibleRestaurant || String(coach?.classCode || vehicle?.typeCodeName || "").toUpperCase().includes("WR")) entries.push(["restaurant", tr("swiss_restaurant", "Restaurant")]);
-        if (vehicle?.climated) entries.push(["ac_unit", tr("swiss_climated", "Air-conditioned")]);
-        if (vehicle?.emergencyCallSystem) entries.push(["emergency_home", tr("swiss_emergency_call", "Emergency call")]);
-        if (selectedSector && selectedSector.accessToPreviousVehicle === false) entries.push(["link_off", tr("swiss_no_passage", "No passage")]);
-        if (vehicle?.closed || coach?.closed || vehicle?.vehicleWillBePutAway) entries.push(["block", tr("swiss_closed", "Closed")]);
+        if (vehicle?.lowFloor || services.has("NF")) entries.push({ id: "low_floor", icon: "accessible_forward", label: tr("swiss_low_floor", "Low floor") });
+        if (vehicle?.wheelchairSpaces || vehicle?.wheelchairPicto || services.has("BHP")) entries.push({ id: "wheelchair", icon: "accessible", label: tr("swiss_wheelchair", "Wheelchair") });
+        if (vehicle?.wheelchairToilet) entries.push({ id: "wheelchair_wc", icon: "wc", label: tr("swiss_wheelchair_wc", "Wheelchair WC") });
+        if (vehicle?.bikeHooks || vehicle?.bikePlatform || vehicle?.bikePicto || services.has("VH") || services.has("VR")) entries.push({ id: "bike", icon: "directions_bike", label: services.has("VR") ? tr("swiss_bike_reservation", "Bike reservation required") : tr("swiss_bike", "Bike") });
+        if (vehicle?.strollerPicto || services.has("KW")) entries.push({ id: "stroller", icon: "child_friendly", label: tr("swiss_stroller", "Stroller") });
+        if (vehicle?.familyZonePicto || services.has("FZ") || services.has("FA")) entries.push({ id: "family", icon: "family_restroom", label: tr("swiss_family", "Family") });
+        if (vehicle?.businessZonePicto || services.has("BZ")) entries.push({ id: "business", icon: "business_center", label: tr("swiss_business", "Business") });
+        if (vehicle?.numberRestaurantSpace || vehicle?.wheelchairAccessibleRestaurant || String(coach?.classCode || vehicle?.typeCodeName || "").toUpperCase().includes("WR")) entries.push({ id: "restaurant", icon: "restaurant", label: tr("swiss_restaurant", "Restaurant") });
+        if (vehicle?.climated) entries.push({ id: "climated", icon: "ac_unit", label: tr("swiss_climated", "Air-conditioned") });
+        if (vehicle?.emergencyCallSystem) entries.push({ id: "emergency", icon: "emergency_home", label: tr("swiss_emergency_call", "Emergency call") });
+        if (shouldShowNoPassage(selectedSector, index)) entries.push({ id: "no_passage", icon: "link_off", label: tr("swiss_no_passage", "No passage") });
+        if (vehicle?.closed || (!vehicle && coach?.closed) || vehicle?.vehicleWillBePutAway) entries.push({ id: "closed", icon: "block", label: tr("swiss_closed", "Closed") });
         return entries;
     }
 
-    function renderFeatureIcons(coach, vehicle, selectedSector) {
-        return featureEntries(coach, vehicle, selectedSector)
-            .map(([icon, label]) => `<span class="material-symbols-outlined" title="${esc(label)}">${icon}</span>`)
+    function renderFeatureIcons(coach, vehicle, selectedSector, index) {
+        return featureEntries(coach, vehicle, selectedSector, index)
+            .map((entry) => `<span class="material-symbols-outlined" title="${esc(entry.label)}">${esc(entry.icon)}</span>`)
             .join("");
     }
 
@@ -602,7 +691,7 @@
         const number = vehicleDisplayNumber(vehicle, coach);
         const classLabel = vehicleClassLabel(vehicle, coach);
         const type = vehicle?.typeCodeName || vehicle?.typeCode || coach?.classCode || "";
-        const closed = coach?.closed || vehicle?.closed || vehicle?.vehicleWillBePutAway;
+        const closed = vehicle ? (vehicle.closed || vehicle.vehicleWillBePutAway) : coach?.closed;
         const isLoco = isLikelyLocomotive(vehicle) || coachTokenLooksLikeLoco(coach);
         const roleClass = isLoco ? " swiss-coach-loco" : "";
 
@@ -614,7 +703,44 @@
                 </div>
                 <div class="swiss-coach-number">${esc(number)}</div>
                 ${type ? `<div class="swiss-coach-type">${esc(type)}</div>` : ""}
-                <div class="swiss-coach-icons">${renderFeatureIcons(coach, vehicle, selectedSector)}</div>
+                <div class="swiss-coach-icons">${renderFeatureIcons(coach, vehicle, selectedSector, index)}</div>
+            </div>
+        `;
+    }
+
+    function addLegendEntry(map, id, label, icon = "", badge = "") {
+        if (!map.has(id)) map.set(id, { id, label, icon, badge });
+    }
+
+    function renderCoachLegend(items) {
+        const legend = new Map();
+        items.forEach((item, index) => {
+            const classLabel = vehicleClassLabel(item.vehicle, item.coach);
+            if (classLabel === "1") addLegendEntry(legend, "class_1", tr("swiss_first_class", "1st class"), "", "1");
+            else if (classLabel === "2") addLegendEntry(legend, "class_2", tr("swiss_second_class", "2nd class"), "", "2");
+            else if (classLabel === "1/2") addLegendEntry(legend, "class_12", tr("swiss_mixed_class", "Mixed 1st and 2nd class"), "", "1/2");
+            if (isLikelyLocomotive(item.vehicle) || coachTokenLooksLikeLoco(item.coach)) {
+                addLegendEntry(legend, "loco", tr("swiss_loco", "Loco"), "train");
+            }
+            featureEntries(item.coach, item.vehicle, item.selectedSector, index).forEach((entry) => {
+                addLegendEntry(legend, entry.id, entry.label, entry.icon);
+            });
+        });
+
+        if (!legend.size) return "";
+        const entries = Array.from(legend.values()).map((entry) => `
+            <div class="swiss-legend-item">
+                ${entry.badge
+                    ? `<span class="swiss-legend-badge">${esc(entry.badge)}</span>`
+                    : `<span class="material-symbols-outlined">${esc(entry.icon)}</span>`}
+                <span>${esc(entry.label)}</span>
+            </div>
+        `).join("");
+
+        return `
+            <div class="swiss-legend">
+                <div class="swiss-legend-title">${esc(tr("swiss_legend", "Legend"))}</div>
+                <div class="swiss-legend-grid">${entries}</div>
             </div>
         `;
     }
@@ -636,10 +762,11 @@
                 ${groups}
                 ${items.map(renderCoachCard).join("")}
             </div>
+            ${renderCoachLegend(items)}
         `;
     }
 
-    function renderVehicleChips(vehicle, selectedSector) {
+    function renderVehicleChips(vehicle, selectedSector, index) {
         const chips = [];
         chips.push(`${esc(tr("swiss_first_class", "1st"))}: ${vehicle.firstClassSeats || 0}`);
         chips.push(`${esc(tr("swiss_second_class", "2nd"))}: ${vehicle.secondClassSeats || 0}`);
@@ -660,7 +787,7 @@
         if (vehicle.closed) chips.push(esc(tr("swiss_closed", "Closed")));
         if (vehicle.vehicleWillBePutAway) chips.push(esc(tr("swiss_put_away", "Put away")));
         if (vehicle.trolleyStatus && vehicle.trolleyStatus !== "Normal") chips.push(esc(vehicle.trolleyStatus));
-        if (selectedSector?.accessToPreviousVehicle === false) chips.push(esc(tr("swiss_no_passage", "No passage")));
+        if (shouldShowNoPassage(selectedSector, index)) chips.push(esc(tr("swiss_no_passage", "No passage")));
         if (selectedSector?.sectors) chips.push(`${esc(tr("swiss_sector", "Sector"))}: ${esc(selectedSector.sectors)}`);
         if (selectedSector?.track) chips.push(`${esc(tr("swiss_track", "Track"))}: ${esc(selectedSector.track)}`);
         if (vehicle.length) chips.push(`${esc(tr("swiss_length", "Length"))}: ${esc(vehicle.length)} m`);
@@ -680,17 +807,25 @@
             : "";
     }
 
+    function renderVehicleSegments(vehicle) {
+        const segments = asArray(vehicle.segments).length
+            ? vehicle.segments
+            : (vehicle.fromStop || vehicle.toStop ? [{ fromStop: vehicle.fromStop, toStop: vehicle.toStop }] : []);
+        const labels = segments
+            .map((segment) => `${esc(segment.fromStop || "--")} -> ${esc(segment.toStop || "--")}`)
+            .filter(Boolean);
+        return labels.length ? labels.join("; ") : "";
+    }
+
     function renderVehicleDetails(data, selectedStop) {
         const vehicles = allVehicles(data?.vehicles);
         if (!vehicles.length) {
             return `<div class="swiss-empty">${esc(tr("swiss_unavailable", "Swiss data unavailable"))}</div>`;
         }
 
-        return vehicles.map((vehicle) => {
+        return vehicles.map((vehicle, index) => {
             const selectedSector = sectorForVehicle(vehicle, selectedStop);
-            const fromTo = vehicle.fromStop || vehicle.toStop
-                ? `${esc(vehicle.fromStop || "--")} -> ${esc(vehicle.toStop || "--")}`
-                : "";
+            const fromTo = renderVehicleSegments(vehicle);
             const label = isLikelyLocomotive(vehicle) ? tr("swiss_loco", "Loco") : tr("swiss_vehicle", "Vehicle");
             return `
                 <div class="swiss-vehicle-row${vehicle.closed || vehicle.vehicleWillBePutAway ? " swiss-vehicle-closed" : ""}">
@@ -702,7 +837,7 @@
                         </div>
                         ${fromTo ? `<div class="swiss-vehicle-route">${esc(tr("swiss_from_to", "From/To"))}: ${fromTo}</div>` : ""}
                     </div>
-                    <div class="swiss-vehicle-chips">${renderVehicleChips(vehicle, selectedSector)}</div>
+                    <div class="swiss-vehicle-chips">${renderVehicleChips(vehicle, selectedSector, index)}</div>
                     ${renderVehicleDiagnostics(vehicle)}
                 </div>
             `;
@@ -755,6 +890,7 @@
         const selectedStop = stops[selectedIndex] || stops[0] || null;
         const wasCollapsed = card.querySelector(".swiss-body-wrap")?.classList.contains("swiss-collapsed") || false;
         const terminalName = stops.length ? (stops[stops.length - 1]?.name || "") : "";
+        const vehicleCount = Number(data.vehicleCount || allVehicles(data.vehicles).length || 0);
 
         const stopTabs = stops.map((stop, index) => `
             <button type="button" class="swiss-stop-tab${index === selectedIndex ? " active" : ""}" data-swiss-stop-index="${index}">
@@ -782,6 +918,7 @@
                     <div class="swiss-meta">
                         <span><span class="material-symbols-outlined">update</span>${esc(tr("swiss_updated", "Updated"))}: ${esc(formatZurichDateTime(data.lastUpdate))}</span>
                         <span><span class="material-symbols-outlined">route</span>${esc(tr("swiss_run_status", "Run status"))}: ${esc(runStatusLabel(data.runs))}</span>
+                        ${vehicleCount ? `<span><span class="material-symbols-outlined">train</span>${esc(tr("swiss_vehicle_count", "Vehicles"))}: ${esc(vehicleCount)}</span>` : ""}
                         ${terminalName ? `<span class="swiss-direction"><span class="material-symbols-outlined">trending_flat</span>${esc(terminalName)}</span>` : ""}
                     </div>
                     ${stops.length ? `<div class="swiss-stop-tabs">${stopTabs}</div>` : ""}

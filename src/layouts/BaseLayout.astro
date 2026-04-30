@@ -13,6 +13,13 @@ interface Props {
 
 const SITE_URL = 'https://real.bellotreno.org';
 const OG_IMAGE  = `${SITE_URL}/og-image.png`;
+const BUILD_ID = (
+    import.meta.env.PUBLIC_BUILD_ID
+    || process.env.CF_PAGES_COMMIT_SHA
+    || process.env.CF_PAGES_DEPLOYMENT_ID
+    || Date.now().toString(36)
+).slice(0, 16);
+const withBuildVersion = (src: string) => `${src}${src.includes('?') ? '&' : '?'}v=${BUILD_ID}`;
 
 const {
     title,
@@ -105,7 +112,7 @@ const canonicalURL = new URL(Astro.url.pathname, SITE_URL).href;
     <link href="https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <noscript><link href="https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined&display=swap" rel="stylesheet"></noscript>
 
-    <script is:inline src="/scripts/theme-init.js"></script>
+    <script is:inline src={withBuildVersion("/scripts/theme-init.js")}></script>
     <ClientRouter />
     <slot name="head" />
 </head>
@@ -123,10 +130,10 @@ const canonicalURL = new URL(Astro.url.pathname, SITE_URL).href;
         <Footer />
     </div>
 
-    <script is:inline src="/scripts/config.js"></script>
-    <script is:inline src="/scripts/i18n.js"></script>
-    <script is:inline src="/scripts/common.js"></script>
-    {pageScripts.map((src) => <script is:inline src={src}></script>)}
+    <script is:inline src={withBuildVersion("/scripts/config.js")}></script>
+    <script is:inline src={withBuildVersion("/scripts/i18n.js")}></script>
+    <script is:inline src={withBuildVersion("/scripts/common.js")}></script>
+    {pageScripts.map((src) => <script is:inline src={withBuildVersion(src)}></script>)}
     <slot name="scripts" />
 </body>
 </html>

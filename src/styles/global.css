@@ -1704,6 +1704,61 @@ footer span {
     opacity: 0.62;
 }
 
+.swiss-legend {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid color-mix(in oklch, var(--color-base-content) 8%, transparent);
+}
+
+.swiss-legend-title {
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: var(--color-base-content);
+    opacity: 0.58;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 8px;
+}
+
+.swiss-legend-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 7px 14px;
+}
+
+.swiss-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    color: var(--color-base-content);
+    font-size: 0.76rem;
+    opacity: 0.72;
+}
+
+.swiss-legend-item .material-symbols-outlined {
+    width: 20px;
+    flex: 0 0 20px;
+    font-size: 1rem;
+    color: var(--color-base-content);
+    opacity: 0.78;
+    text-align: center;
+}
+
+.swiss-legend-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    flex: 0 0 20px;
+    border-radius: 5px;
+    border: 1px solid color-mix(in oklch, var(--color-base-content) 18%, transparent);
+    background: color-mix(in oklch, var(--color-base-100) 72%, transparent);
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+
 .swiss-empty {
     color: var(--color-base-content);
     opacity: 0.55;

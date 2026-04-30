@@ -369,11 +369,14 @@ function _stSwissTerminalName(swissData) {
 }
 
 function _stShouldReplaceRouteName(currentName, swissName) {
-    if (!currentName || !swissName || !window.BelloSwiss) return false;
-    const currentKey = window.BelloSwiss.normalizeStationName(currentName);
+    if (!swissName || !window.BelloSwiss) return false;
+    const currentKey = currentName ? window.BelloSwiss.normalizeStationName(currentName) : '';
     const swissKey = window.BelloSwiss.normalizeStationName(swissName);
     const stationKey = window.BelloSwiss.normalizeStationName(_stName);
-    return Boolean(swissKey && swissKey !== currentKey && swissKey !== stationKey);
+    if (!swissKey || swissKey === currentKey || swissKey === stationKey) return false;
+
+    if (!currentKey) return true;
+    return Boolean(window.BelloSwiss.isSwissBoundaryName?.(currentName));
 }
 
 async function _stEnhanceBoardWithSwiss(trains, boardSeq) {
