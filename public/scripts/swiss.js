@@ -506,6 +506,7 @@
     }
 
     function vehicleUniqueKey(vehicle) {
+        if (vehicle?.evn && vehicle?.position) return `evn:${vehicle.evn}:pos:${vehicle.position}`;
         if (vehicle?.evn) return `evn:${vehicle.evn}`;
         const fullNumber = [
             vehicle?.buildTypeCode,
@@ -513,6 +514,7 @@
             vehicle?.vehicleNumber,
             vehicle?.checkNumber
         ].filter(Boolean).join(":");
+        if (fullNumber && vehicle?.position) return `vehicle:${fullNumber}:pos:${vehicle.position}`;
         if (fullNumber) return `vehicle:${fullNumber}`;
         return `fallback:${vehicle?.position || ""}:${vehicle?.number || ""}:${vehicle?.typeCodeName || ""}:${vehicle?.typeCode || ""}`;
     }
@@ -587,27 +589,17 @@
             if (map.has(key)) map.set(key, mergeVehicle(map.get(key), vehicle));
             else map.set(key, vehicle);
         });
-        return Array.from(map.values()).sort((a, b) => (a.position || 9999) - (b.position || 9999));
+        return Array.from(map.values()).sort(compareVehiclesByPhysicalOrder);
     }
 
-    function sectorSortKey(sector) {
-        const value = String(sector || "TRAIN").toUpperCase();
-        if (!value || value === "TRAIN") return "ZZZ";
-        return value.split(/[,\s;]+/).filter(Boolean).join("");
+    function compareVehiclesByPhysicalOrder(left, right) {
+        return (left?.position || 9999) - (right?.position || 9999)
+            || (left?.number || 9999) - (right?.number || 9999)
+            || String(left?.evn || left?.vehicleNumber || "").localeCompare(String(right?.evn || right?.vehicleNumber || ""));
     }
 
-    function compareVehiclesByStopSector(selectedStop) {
-        return (left, right) => {
-            const leftSector = sectorSortKey(sectorForVehicle(left, selectedStop)?.sectors);
-            const rightSector = sectorSortKey(sectorForVehicle(right, selectedStop)?.sectors);
-            if (leftSector !== rightSector) return leftSector.localeCompare(rightSector);
-            return (left.position || 9999) - (right.position || 9999)
-                || (left.number || 9999) - (right.number || 9999);
-        };
-    }
-
-    function vehiclesForStopFallback(vehicles, selectedStop) {
-        return allVehicles(vehicles).slice().sort(compareVehiclesByStopSector(selectedStop));
+    function vehiclesForFormation(vehicles) {
+        return allVehicles(vehicles).slice().sort(compareVehiclesByPhysicalOrder);
     }
 
     function vehicleHasPassengerSeats(vehicle) {
@@ -638,27 +630,22 @@
         return vehicle?.number || coach?.number || vehicle?.vehicleNumber || vehicle?.position || "--";
     }
 
-    function takeVehicleForCoach(coach, vehicles, usedIndexes, fallbackIndex) {
-        if (coach?.number) {
-            const exactIndex = vehicles.findIndex((vehicle, index) => !usedIndexes.has(index) && vehicle.number === coach.number);
-            if (exactIndex >= 0) {
-                usedIndexes.add(exactIndex);
-                return vehicles[exactIndex];
-            }
-        }
+    function coachQueuesByNumber(coaches) {
+        const queues = new Map();
+        asArray(coaches).forEach((coach) => {
+            if (!coach?.number) return;
+            const key = String(coach.number);
+            if (!queues.has(key)) queues.set(key, []);
+            queues.get(key).push(coach);
+        });
+        return queues;
+    }
 
-        if (fallbackIndex < vehicles.length && !usedIndexes.has(fallbackIndex)) {
-            usedIndexes.add(fallbackIndex);
-            return vehicles[fallbackIndex];
-        }
-
-        const nextIndex = vehicles.findIndex((_, index) => !usedIndexes.has(index));
-        if (nextIndex >= 0) {
-            usedIndexes.add(nextIndex);
-            return vehicles[nextIndex];
-        }
-
-        return null;
+    function takeCoachForVehicle(vehicle, queues) {
+        const key = vehicle?.number ? String(vehicle.number) : "";
+        if (!key || !queues.has(key)) return null;
+        const queue = queues.get(key);
+        return queue.length ? queue.shift() : null;
     }
 
     function shouldShowNoPassage(selectedSector, index) {
@@ -700,47 +687,21 @@
     }
 
     function buildVehicleItems(stop, vehicles) {
-        const orderedVehicles = vehiclesForStopFallback(vehicles, stop);
+        const orderedVehicles = vehiclesForFormation(vehicles);
         const coaches = parseFormationShortString(stop?.formationShortString);
 
-        if (coaches.length) {
-            const usedVehicleIndexes = new Set();
-            const items = coaches.map((coach, index) => {
-                const vehicle = takeVehicleForCoach(coach, orderedVehicles, usedVehicleIndexes, index);
+        if (orderedVehicles.length) {
+            const coachQueues = coachQueuesByNumber(coaches);
+            return orderedVehicles.map((vehicle) => {
+                const coach = takeCoachForVehicle(vehicle, coachQueues);
                 const selectedSector = sectorForVehicle(vehicle, stop);
                 return {
                     vehicle,
                     coach,
                     selectedStop: stop,
                     selectedSector,
-                    sector: coach?.sector || selectedSector?.sectors || "TRAIN"
-                };
-            });
-
-            orderedVehicles.forEach((vehicle, index) => {
-                if (usedVehicleIndexes.has(index)) return;
-                const selectedSector = sectorForVehicle(vehicle, stop);
-                items.push({
-                    vehicle,
-                    coach: null,
-                    selectedStop: stop,
-                    selectedSector,
-                    sector: selectedSector?.sectors || "TRAIN"
-                });
-            });
-
-            return items;
-        }
-
-        if (orderedVehicles.length) {
-            return orderedVehicles.map((vehicle) => {
-                const selectedSector = sectorForVehicle(vehicle, stop);
-                return {
-                    vehicle,
-                    coach: null,
-                    selectedStop: stop,
-                    selectedSector,
-                    sector: vehicleSector(vehicle, null, stop)
+                    sector: vehicleSector(vehicle, coach, stop),
+                    unitKey: unitKeyForVehicle(vehicle)
                 };
             });
         }
@@ -751,6 +712,7 @@
             selectedStop: stop,
             selectedSector: null,
             sector: coach?.sector || "TRAIN",
+            unitKey: unitKeyForCoach(coach),
             fallbackIndex: index
         }));
     }
@@ -782,23 +744,111 @@
         return groups;
     }
 
+    function vehicleSeries(vehicle, coach = null) {
+        const raw = String(vehicle?.typeCodeName || vehicle?.typeCode || coach?.classCode || "");
+        const match = raw.match(/\((\d{3})\)/);
+        return match ? match[1] : "";
+    }
+
+    function vehicleTypeCodeName(vehicle, coach = null) {
+        return String(vehicle?.typeCodeName || vehicle?.typeCode || coach?.classCode || "");
+    }
+
+    function typeCodeBase(value) {
+        return String(value || "")
+            .replace(/\([^)]*\)/g, "")
+            .replace(/-TI\b/i, "")
+            .replace(/\d+$/g, "");
+    }
+
+    function describeVehicleType(vehicle, coach = null) {
+        const raw = vehicleTypeCodeName(vehicle, coach);
+        if (!raw) return "";
+
+        const base = typeCodeBase(raw);
+        const baseUpper = base.toUpperCase();
+        const parts = [];
+        if (baseUpper.startsWith("WR")) parts.push(tr("swiss_type_restaurant_area", "Restaurant area"));
+        else if (baseUpper.startsWith("AB")) parts.push(tr("swiss_mixed_class", "Mixed 1st and 2nd class"));
+        else if (baseUpper.startsWith("A")) parts.push(tr("swiss_type_first_area", "1st class area"));
+        else if (baseUpper.startsWith("B")) parts.push(tr("swiss_type_second_area", "2nd class area"));
+
+        if (/t/i.test(base)) parts.push(tr("swiss_type_end_car", "end/driving-end car"));
+        if (/p/i.test(base)) parts.push(tr("swiss_type_open_coach", "open seating"));
+        if (/m/i.test(base)) parts.push(tr("swiss_type_long_coach", "long carbody"));
+
+        const series = vehicleSeries(vehicle, coach);
+        if (series === "501") parts.push(tr("swiss_type_giruno", "RABe 501 Giruno"));
+        else if (series === "610") parts.push(tr("swiss_type_astoro", "ETR 610 / RABe 503 Astoro"));
+
+        if (/-TI\(\s*610\s*\)/i.test(raw) || /-TI\b/i.test(raw)) {
+            parts.push(tr("swiss_type_trenitalia", "Trenitalia/FS"));
+        }
+
+        return mergeUniqueBy(parts.filter(Boolean), (part) => part).join(" · ");
+    }
+
+    function unitKeyForVehicle(vehicle) {
+        const series = vehicleSeries(vehicle);
+        const number = Number(vehicle?.number || 0);
+        if (series === "610" && number) return `${series}:${Math.max(1, Math.ceil(number / 10))}`;
+        if (series === "501" && number) return `${series}:${Math.max(1, Math.ceil(number / 20))}`;
+        return "";
+    }
+
+    function unitKeyForCoach(coach) {
+        const series = vehicleSeries(null, coach);
+        const number = Number(coach?.number || 0);
+        if (series === "610" && number) return `${series}:${Math.max(1, Math.ceil(number / 10))}`;
+        if (series === "501" && number) return `${series}:${Math.max(1, Math.ceil(number / 20))}`;
+        return "";
+    }
+
+    function unitLabel(key) {
+        const [series, group] = String(key || "").split(":");
+        if (!series || !group) return "";
+        const trainType = series === "501"
+            ? tr("swiss_type_giruno", "RABe 501 Giruno")
+            : series === "610"
+                ? tr("swiss_type_astoro", "ETR 610 / RABe 503 Astoro")
+                : series;
+        return `${tr("swiss_unit", "Unit")} ${group} · ${trainType}`;
+    }
+
+    function buildUnitGroups(items) {
+        const groups = [];
+        items.forEach((item, index) => {
+            const key = item.unitKey || "";
+            if (!key) return;
+            const last = groups[groups.length - 1];
+            if (last && last.key === key && last.start + last.length === index + 1) {
+                last.length += 1;
+            } else {
+                groups.push({ key, start: index + 1, length: 1 });
+            }
+        });
+        return groups.length > 1 ? groups : [];
+    }
+
     function renderCoachCard(item, index) {
         const { coach, vehicle, selectedSector } = item;
         const number = vehicleDisplayNumber(vehicle, coach);
         const classLabel = vehicleClassLabel(vehicle, coach);
-        const type = vehicle?.typeCodeName || vehicle?.typeCode || coach?.classCode || "";
+        const type = vehicleTypeCodeName(vehicle, coach);
+        const typeDescription = describeVehicleType(vehicle, coach);
         const closed = vehicle ? (vehicle.closed || vehicle.vehicleWillBePutAway) : coach?.closed;
         const isLoco = isLikelyLocomotive(vehicle) || coachTokenLooksLikeLoco(coach);
         const roleClass = isLoco ? " swiss-coach-loco" : "";
 
         return `
-            <div class="swiss-coach${closed ? " swiss-coach-closed" : ""}${roleClass}" style="grid-column:${index + 1};grid-row:2;">
+            <div class="swiss-coach${closed ? " swiss-coach-closed" : ""}${roleClass}" style="grid-column:${index + 1};grid-row:2;"${typeDescription ? ` title="${esc(typeDescription)}"` : ""}>
                 <div class="swiss-coach-head">
                     <span class="swiss-coach-caption">${esc(isLoco ? tr("swiss_loco", "Loco") : tr("swiss_vehicle", "Vehicle"))}</span>
                     <span class="swiss-coach-class">${esc(classLabel)}</span>
                 </div>
                 <div class="swiss-coach-number">${esc(number)}</div>
                 ${type ? `<div class="swiss-coach-type">${esc(type)}</div>` : ""}
+                ${typeDescription ? `<div class="swiss-coach-type-note">${esc(typeDescription)}</div>` : ""}
                 <div class="swiss-coach-icons">${renderFeatureIcons(coach, vehicle, selectedSector, index)}</div>
             </div>
         `;
@@ -877,11 +927,17 @@
                 ${esc(sectorLabel(group.key))}
             </div>
         `).join("");
+        const unitGroups = buildUnitGroups(items).map((group) => `
+            <div class="swiss-unit-segment" style="grid-column:${group.start} / span ${group.length};grid-row:3;">
+                ${esc(unitLabel(group.key))}
+            </div>
+        `).join("");
 
         return `
             <div class="swiss-formation-track" style="--vehicle-count:${items.length}">
                 ${groups}
                 ${items.map(renderCoachCard).join("")}
+                ${unitGroups}
             </div>
             ${renderCoachLegend(items)}
         `;
@@ -948,6 +1004,7 @@
             const selectedSector = sectorForVehicle(vehicle, selectedStop);
             const fromTo = renderVehicleSegments(vehicle);
             const label = isLikelyLocomotive(vehicle) ? tr("swiss_loco", "Loco") : tr("swiss_vehicle", "Vehicle");
+            const typeDescription = describeVehicleType(vehicle);
             return `
                 <div class="swiss-vehicle-row${vehicle.closed || vehicle.vehicleWillBePutAway ? " swiss-vehicle-closed" : ""}">
                     <div class="swiss-vehicle-main">
@@ -956,6 +1013,7 @@
                             <span>${esc(label)} ${esc(vehicle.number || vehicle.vehicleNumber || "--")}</span>
                             <span class="swiss-vehicle-type">${esc(vehicle.typeCodeName || vehicle.typeCode || "--")}</span>
                         </div>
+                        ${typeDescription ? `<div class="swiss-vehicle-type-note">${esc(typeDescription)}</div>` : ""}
                         ${fromTo ? `<div class="swiss-vehicle-route">${esc(tr("swiss_from_to", "From/To"))}: ${fromTo}</div>` : ""}
                     </div>
                     <div class="swiss-vehicle-chips">${renderVehicleChips(vehicle, selectedSector, index)}</div>
@@ -1010,8 +1068,15 @@
         }
         const selectedStop = stops[selectedIndex] || stops[0] || null;
         const wasCollapsed = card.querySelector(".swiss-body-wrap")?.classList.contains("swiss-collapsed") || false;
+        const formationKey = `${data.trainNumber || ""}|${data.operationDate || ""}`;
+        if (card.dataset.swissFormationKey !== formationKey) {
+            card.dataset.swissFormationKey = formationKey;
+            card.dataset.swissVehiclesExpanded = "false";
+        }
+        const vehiclesExpanded = card.dataset.swissVehiclesExpanded === "true";
         const terminalName = stops.length ? (stops[stops.length - 1]?.name || "") : "";
-        const vehicleCount = Number(data.vehicleCount || allVehicles(data.vehicles).length || 0);
+        const orderedVehicles = vehiclesInDisplayOrder(selectedStop, data?.vehicles);
+        const vehicleCount = Number(data.vehicleCount || orderedVehicles.length || 0);
 
         const stopTabs = stops.map((stop, index) => `
             <button type="button" class="swiss-stop-tab${index === selectedIndex ? " active" : ""}" data-swiss-stop-index="${index}">
@@ -1048,8 +1113,13 @@
                         <div class="swiss-coach-strip">${renderCoachStrip(selectedStop, asArray(data.vehicles))}</div>
                     </div>
                     <div class="swiss-section">
-                        <div class="swiss-section-title">${esc(tr("swiss_vehicles", "Vehicles"))}</div>
-                        <div class="swiss-vehicle-list">${renderVehicleDetails(data, selectedStop)}</div>
+                        <button type="button" class="swiss-section-title swiss-vehicles-toggle" aria-expanded="${vehiclesExpanded ? "true" : "false"}">
+                            <span>${esc(tr("swiss_vehicles", "Vehicles"))}${orderedVehicles.length ? ` · ${esc(orderedVehicles.length)}` : ""}</span>
+                            <span class="material-symbols-outlined${vehiclesExpanded ? " swiss-rotated" : ""}">expand_more</span>
+                        </button>
+                        <div class="swiss-vehicle-list-wrap${vehiclesExpanded ? "" : " swiss-vehicles-collapsed"}">
+                            <div class="swiss-vehicle-list">${renderVehicleDetails(data, selectedStop)}</div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1064,6 +1134,15 @@
             body?.classList.toggle("swiss-collapsed");
             icon?.classList.toggle("swiss-rotated");
             source?.classList.toggle("hidden", !body?.classList.contains("swiss-collapsed"));
+        });
+        card.querySelector(".swiss-vehicles-toggle")?.addEventListener("click", () => {
+            const wrap = card.querySelector(".swiss-vehicle-list-wrap");
+            const button = card.querySelector(".swiss-vehicles-toggle");
+            const icon = card.querySelector(".swiss-vehicles-toggle .material-symbols-outlined");
+            const expanded = wrap?.classList.toggle("swiss-vehicles-collapsed") === false;
+            card.dataset.swissVehiclesExpanded = expanded ? "true" : "false";
+            button?.setAttribute("aria-expanded", expanded ? "true" : "false");
+            icon?.classList.toggle("swiss-rotated", expanded);
         });
         card.querySelectorAll(".swiss-stop-tab").forEach((button) => {
             button.addEventListener("click", () => {

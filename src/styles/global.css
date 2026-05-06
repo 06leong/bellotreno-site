@@ -1579,9 +1579,25 @@ footer span {
     margin-bottom: 10px;
 }
 
+button.swiss-section-title {
+    width: 100%;
+    appearance: none;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    cursor: pointer;
+    font-family: inherit;
+    text-align: left;
+}
+
 .swiss-section-title span {
     text-transform: none;
     letter-spacing: 0;
+}
+
+.swiss-vehicles-toggle .material-symbols-outlined {
+    font-size: 1rem;
+    transition: transform 0.2s ease;
 }
 
 .swiss-coach-strip {
@@ -1619,9 +1635,25 @@ footer span {
     padding: 4px 8px;
 }
 
+.swiss-unit-segment {
+    min-height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-base-content);
+    opacity: 0.48;
+    font-size: 0.66rem;
+    font-weight: 750;
+    border-top: 1px solid color-mix(in oklch, var(--color-base-content) 12%, transparent);
+    padding-top: 5px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .swiss-coach {
     width: var(--coach-width);
-    min-height: 122px;
+    min-height: 140px;
     border-radius: 10px;
     border: 1px solid color-mix(in oklch, var(--color-primary) 25%, transparent);
     background: color-mix(in oklch, var(--color-base-100) 58%, transparent);
@@ -1686,6 +1718,22 @@ footer span {
     text-overflow: ellipsis;
     white-space: nowrap;
     max-width: 100%;
+}
+
+.swiss-coach-type-note,
+.swiss-vehicle-type-note {
+    font-size: 0.64rem;
+    line-height: 1.25;
+    color: var(--color-base-content);
+    opacity: 0.52;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.swiss-coach-type-note {
+    margin-top: 2px;
 }
 
 .swiss-coach-icons {
@@ -1766,12 +1814,24 @@ footer span {
     padding: 10px 0;
 }
 
+.swiss-vehicle-list-wrap {
+    display: grid;
+    grid-template-rows: 1fr;
+    transition: grid-template-rows 0.2s ease, opacity 0.2s ease;
+}
+
+.swiss-vehicle-list-wrap.swiss-vehicles-collapsed {
+    grid-template-rows: 0fr;
+    opacity: 0;
+}
+
 .swiss-vehicle-list {
     display: grid;
     gap: 8px;
     max-height: 340px;
     overflow-y: auto;
     padding-right: 4px;
+    min-height: 0;
 }
 
 .swiss-vehicle-row {
@@ -1817,6 +1877,10 @@ footer span {
     opacity: 0.58;
     margin-top: 4px;
     overflow-wrap: anywhere;
+}
+
+.swiss-vehicle-type-note {
+    margin-top: 4px;
 }
 
 .swiss-vehicle-chips {
@@ -1925,7 +1989,7 @@ footer span {
     }
 
     .swiss-coach {
-        min-height: 116px;
+        min-height: 134px;
     }
 
     .swiss-vehicle-row {
