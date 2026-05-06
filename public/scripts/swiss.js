@@ -506,7 +506,6 @@
     }
 
     function vehicleUniqueKey(vehicle) {
-        if (vehicle?.evn && vehicle?.position) return `evn:${vehicle.evn}:pos:${vehicle.position}`;
         if (vehicle?.evn) return `evn:${vehicle.evn}`;
         const fullNumber = [
             vehicle?.buildTypeCode,
@@ -514,7 +513,6 @@
             vehicle?.vehicleNumber,
             vehicle?.checkNumber
         ].filter(Boolean).join(":");
-        if (fullNumber && vehicle?.position) return `vehicle:${fullNumber}:pos:${vehicle.position}`;
         if (fullNumber) return `vehicle:${fullNumber}`;
         return `fallback:${vehicle?.position || ""}:${vehicle?.number || ""}:${vehicle?.typeCodeName || ""}:${vehicle?.typeCode || ""}`;
     }
@@ -593,7 +591,8 @@
     }
 
     function compareVehiclesByPhysicalOrder(left, right) {
-        return (left?.position || 9999) - (right?.position || 9999)
+        return vehicleUnitSortValue(left) - vehicleUnitSortValue(right)
+            || (left?.position || 9999) - (right?.position || 9999)
             || (left?.number || 9999) - (right?.number || 9999)
             || String(left?.evn || left?.vehicleNumber || "").localeCompare(String(right?.evn || right?.vehicleNumber || ""));
     }
@@ -768,10 +767,10 @@
         const base = typeCodeBase(raw);
         const baseUpper = base.toUpperCase();
         const parts = [];
-        if (baseUpper.startsWith("WR")) parts.push(tr("swiss_type_restaurant_area", "Restaurant area"));
+        if (baseUpper.startsWith("WR")) parts.push(tr("swiss_type_restaurant_area", "Restaurant"));
         else if (baseUpper.startsWith("AB")) parts.push(tr("swiss_mixed_class", "Mixed 1st and 2nd class"));
-        else if (baseUpper.startsWith("A")) parts.push(tr("swiss_type_first_area", "1st class area"));
-        else if (baseUpper.startsWith("B")) parts.push(tr("swiss_type_second_area", "2nd class area"));
+        else if (baseUpper.startsWith("A")) parts.push(tr("swiss_type_first_area", "1st class"));
+        else if (baseUpper.startsWith("B")) parts.push(tr("swiss_type_second_area", "2nd class"));
 
         if (/t/i.test(base)) parts.push(tr("swiss_type_end_car", "end/driving-end car"));
         if (/p/i.test(base)) parts.push(tr("swiss_type_open_coach", "open seating"));
@@ -791,7 +790,7 @@
     function unitKeyForVehicle(vehicle) {
         const series = vehicleSeries(vehicle);
         const number = Number(vehicle?.number || 0);
-        if (series === "610" && number) return `${series}:${Math.max(1, Math.ceil(number / 10))}`;
+        if (series === "610" && number) return `${series}:${number >= 10 ? Math.ceil(number / 10) : 1}`;
         if (series === "501" && number) return `${series}:${Math.max(1, Math.ceil(number / 20))}`;
         return "";
     }
@@ -799,9 +798,17 @@
     function unitKeyForCoach(coach) {
         const series = vehicleSeries(null, coach);
         const number = Number(coach?.number || 0);
-        if (series === "610" && number) return `${series}:${Math.max(1, Math.ceil(number / 10))}`;
+        if (series === "610" && number) return `${series}:${number >= 10 ? Math.ceil(number / 10) : 1}`;
         if (series === "501" && number) return `${series}:${Math.max(1, Math.ceil(number / 20))}`;
         return "";
+    }
+
+    function vehicleUnitSortValue(vehicle) {
+        const key = unitKeyForVehicle(vehicle);
+        if (!key) return 0;
+        const [, group] = key.split(":");
+        const parsed = Number.parseInt(group, 10);
+        return Number.isFinite(parsed) ? parsed : 0;
     }
 
     function unitLabel(key) {
@@ -1076,7 +1083,7 @@
         const vehiclesExpanded = card.dataset.swissVehiclesExpanded === "true";
         const terminalName = stops.length ? (stops[stops.length - 1]?.name || "") : "";
         const orderedVehicles = vehiclesInDisplayOrder(selectedStop, data?.vehicles);
-        const vehicleCount = Number(data.vehicleCount || orderedVehicles.length || 0);
+        const vehicleCount = Number(orderedVehicles.length || data.vehicleCount || 0);
 
         const stopTabs = stops.map((stop, index) => `
             <button type="button" class="swiss-stop-tab${index === selectedIndex ? " active" : ""}" data-swiss-stop-index="${index}">
@@ -1114,7 +1121,7 @@
                     </div>
                     <div class="swiss-section">
                         <button type="button" class="swiss-section-title swiss-vehicles-toggle" aria-expanded="${vehiclesExpanded ? "true" : "false"}">
-                            <span>${esc(tr("swiss_vehicles", "Vehicles"))}${orderedVehicles.length ? ` · ${esc(orderedVehicles.length)}` : ""}</span>
+                            <span>${esc(tr("swiss_vehicle_details_info", "Vehicle Details Info"))}</span>
                             <span class="material-symbols-outlined${vehiclesExpanded ? " swiss-rotated" : ""}">expand_more</span>
                         </button>
                         <div class="swiss-vehicle-list-wrap${vehiclesExpanded ? "" : " swiss-vehicles-collapsed"}">

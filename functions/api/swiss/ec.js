@@ -230,7 +230,6 @@ function buildVehicleSegments(props) {
 }
 
 function vehicleKey(vehicle) {
-    if (vehicle.evn && vehicle.position) return `evn:${vehicle.evn}:pos:${vehicle.position}`;
     if (vehicle.evn) return `evn:${vehicle.evn}`;
 
     const completeVehicleNumber = [
@@ -239,7 +238,6 @@ function vehicleKey(vehicle) {
         vehicle.vehicleNumber,
         vehicle.checkNumber
     ].filter(Boolean).join(":");
-    if (completeVehicleNumber && vehicle.position) return `vehicle:${completeVehicleNumber}:pos:${vehicle.position}`;
     if (completeVehicleNumber) return `vehicle:${completeVehicleNumber}`;
 
     return `fallback:${vehicle.position || ""}:${vehicle.number || ""}:${vehicle.typeCodeName || ""}:${vehicle.typeCode || ""}`;
