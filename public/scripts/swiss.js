@@ -526,6 +526,16 @@
         return Array.from(map.values());
     }
 
+    function mergeStatusFlag(existing, incoming) {
+        return Boolean(existing && incoming);
+    }
+
+    function preferTrolleyStatus(existing, incoming) {
+        if (!existing || existing === "Normal") return existing || incoming;
+        if (!incoming || incoming === "Normal") return incoming || existing;
+        return existing;
+    }
+
     function mergeVehicle(existing, incoming) {
         return {
             ...existing,
@@ -563,11 +573,18 @@
             strollerPicto: existing.strollerPicto || incoming.strollerPicto,
             familyZonePicto: existing.familyZonePicto || incoming.familyZonePicto,
             businessZonePicto: existing.businessZonePicto || incoming.businessZonePicto,
-            closed: existing.closed || incoming.closed,
-            vehicleWillBePutAway: existing.vehicleWillBePutAway || incoming.vehicleWillBePutAway,
+            closed: mergeStatusFlag(existing.closed, incoming.closed),
+            vehicleWillBePutAway: mergeStatusFlag(existing.vehicleWillBePutAway, incoming.vehicleWillBePutAway),
+            trolleyStatus: preferTrolleyStatus(existing.trolleyStatus, incoming.trolleyStatus),
             fromStop: existing.fromStop || incoming.fromStop,
             toStop: existing.toStop || incoming.toStop,
-            segments: mergeUniqueBy([...(existing.segments || []), ...(incoming.segments || [])], (segment) => `${segment.fromStop || ""}|${segment.toStop || ""}`),
+            segments: mergeUniqueBy([...(existing.segments || []), ...(incoming.segments || [])], (segment) => [
+                segment.fromStop || "",
+                segment.toStop || "",
+                segment.closed ? "closed" : "open",
+                segment.vehicleWillBePutAway ? "putaway" : "active",
+                segment.trolleyStatus || ""
+            ].join("|")),
             stopSectors: mergeUniqueBy([...(existing.stopSectors || []), ...(incoming.stopSectors || [])], (stop) => [
                 stop.uic || "",
                 stop.name || "",
@@ -651,7 +668,100 @@
         return index > 0 && selectedSector?.accessToPreviousVehicle === false;
     }
 
-    function featureEntries(coach, vehicle, selectedSector, index = 0) {
+    function isClosedTrolleyStatus(value) {
+        return /geschlossen/i.test(String(value || ""));
+    }
+
+    function stopKey(value) {
+        return normalizeStationName(value?.name || value?.stazione || value || "");
+    }
+
+    function stopIndexByKey(stops, key) {
+        const normalized = normalizeStationName(key);
+        if (!normalized) return -1;
+        return asArray(stops).findIndex((stop) => {
+            const candidate = stopKey(stop);
+            return candidate === normalized
+                || (candidate.length >= 5 && normalized.length >= 5 && (candidate.includes(normalized) || normalized.includes(candidate)));
+        });
+    }
+
+    function segmentContainsStop(segment, selectedKey, stops) {
+        const fromKey = stopKey(segment?.fromStop);
+        const toKey = stopKey(segment?.toStop);
+        if (fromKey === selectedKey || toKey === selectedKey) return true;
+
+        const selectedIndex = stopIndexByKey(stops, selectedKey);
+        const fromIndex = stopIndexByKey(stops, fromKey);
+        const toIndex = stopIndexByKey(stops, toKey);
+        if (selectedIndex < 0 || fromIndex < 0 || toIndex < 0) return false;
+
+        const start = Math.min(fromIndex, toIndex);
+        const end = Math.max(fromIndex, toIndex);
+        return selectedIndex >= start && selectedIndex <= end;
+    }
+
+    function segmentStatus(segment) {
+        const trolleyStatus = segment?.trolleyStatus || "";
+        return {
+            closed: Boolean(segment?.closed) || isClosedTrolleyStatus(trolleyStatus),
+            vehicleWillBePutAway: Boolean(segment?.vehicleWillBePutAway),
+            trolleyStatus,
+            segment: segment || null
+        };
+    }
+
+    function fallbackVehicleStatus(vehicle) {
+        const trolleyStatus = vehicle?.trolleyStatus || "";
+        return {
+            closed: Boolean(vehicle?.closed) || isClosedTrolleyStatus(trolleyStatus),
+            vehicleWillBePutAway: Boolean(vehicle?.vehicleWillBePutAway),
+            trolleyStatus,
+            segment: null
+        };
+    }
+
+    function preferredDisplaySegment(segments) {
+        const list = asArray(segments);
+        return list.find((segment) => {
+            const status = segmentStatus(segment);
+            return !status.closed && !status.vehicleWillBePutAway;
+        }) || list[0] || null;
+    }
+
+    function activeVehicleStatus(vehicle, selectedStop, stops) {
+        const segments = asArray(vehicle?.segments);
+        const selectedKey = stopKey(selectedStop);
+        if (segments.length && selectedKey) {
+            const fromMatch = preferredDisplaySegment(segments.filter((segment) => stopKey(segment?.fromStop) === selectedKey));
+            if (fromMatch) return segmentStatus(fromMatch);
+
+            const containingMatch = preferredDisplaySegment(segments.filter((segment) => segmentContainsStop(segment, selectedKey, stops)));
+            if (containingMatch) return segmentStatus(containingMatch);
+        }
+
+        if (segments.length) {
+            const activeSegment = preferredDisplaySegment(segments);
+            return segmentStatus(activeSegment);
+        }
+
+        return fallbackVehicleStatus(vehicle);
+    }
+
+    function vehicleIsClosedForDisplay(status, coach) {
+        return Boolean(status?.closed || status?.vehicleWillBePutAway || (!status && coach?.closed));
+    }
+
+    function trolleyStatusLabel(status) {
+        const value = String(status || "").trim();
+        if (!value || value === "Normal") return "";
+        if (/GeschlossenBetrieblich/i.test(value)) return tr("swiss_closed_operational", "Operationally closed");
+        if (/GeschlossenTechnisch/i.test(value)) return tr("swiss_closed_technical", "Technically closed");
+        if (/geschlossen/i.test(value)) return tr("swiss_closed", "Closed");
+        return value;
+    }
+
+    function featureEntries(coach, vehicle, selectedSector, index = 0, status = null) {
         const services = new Set(asArray(coach?.services));
         const entries = [];
         if (vehicle?.lowFloor || services.has("NF")) entries.push({ id: "low_floor", icon: "accessible_forward", label: tr("swiss_low_floor", "Low floor") });
@@ -665,12 +775,12 @@
         if (vehicle?.climated) entries.push({ id: "climated", icon: "ac_unit", label: tr("swiss_climated", "Air-conditioned") });
         if (vehicle?.emergencyCallSystem) entries.push({ id: "emergency", icon: "emergency_home", label: tr("swiss_emergency_call", "Emergency call") });
         if (shouldShowNoPassage(selectedSector, index)) entries.push({ id: "no_passage", icon: "link_off", label: tr("swiss_no_passage", "No passage") });
-        if (vehicle?.closed || (!vehicle && coach?.closed) || vehicle?.vehicleWillBePutAway) entries.push({ id: "closed", icon: "block", label: tr("swiss_closed", "Closed") });
+        if (vehicleIsClosedForDisplay(status, coach)) entries.push({ id: "closed", icon: "block", label: tr("swiss_closed", "Closed") });
         return entries;
     }
 
-    function renderFeatureIcons(coach, vehicle, selectedSector, index) {
-        return featureEntries(coach, vehicle, selectedSector, index)
+    function renderFeatureIcons(coach, vehicle, selectedSector, index, status) {
+        return featureEntries(coach, vehicle, selectedSector, index, status)
             .map((entry) => `<span class="material-symbols-outlined" title="${esc(entry.label)}">${esc(entry.icon)}</span>`)
             .join("");
     }
@@ -685,7 +795,7 @@
         return selectedSector?.sectors || coach?.sector || "TRAIN";
     }
 
-    function buildVehicleItems(stop, vehicles) {
+    function buildVehicleItems(stop, vehicles, stops = []) {
         const orderedVehicles = vehiclesForFormation(vehicles);
         const coaches = parseFormationShortString(stop?.formationShortString);
 
@@ -694,11 +804,13 @@
             return orderedVehicles.map((vehicle) => {
                 const coach = takeCoachForVehicle(vehicle, coachQueues);
                 const selectedSector = sectorForVehicle(vehicle, stop);
+                const status = activeVehicleStatus(vehicle, stop, stops);
                 return {
                     vehicle,
                     coach,
                     selectedStop: stop,
                     selectedSector,
+                    status,
                     sector: vehicleSector(vehicle, coach, stop),
                     unitKey: unitKeyForVehicle(vehicle)
                 };
@@ -710,15 +822,16 @@
             coach,
             selectedStop: stop,
             selectedSector: null,
+            status: null,
             sector: coach?.sector || "TRAIN",
             unitKey: unitKeyForCoach(coach),
             fallbackIndex: index
         }));
     }
 
-    function vehiclesInDisplayOrder(stop, vehicles) {
+    function vehiclesInDisplayOrder(stop, vehicles, stops = []) {
         const seen = new Set();
-        return buildVehicleItems(stop, vehicles)
+        return buildVehicleItems(stop, vehicles, stops)
             .map((item) => item.vehicle)
             .filter((vehicle) => {
                 if (!vehicle) return false;
@@ -772,17 +885,9 @@
         else if (baseUpper.startsWith("A")) parts.push(tr("swiss_type_first_area", "1st class"));
         else if (baseUpper.startsWith("B")) parts.push(tr("swiss_type_second_area", "2nd class"));
 
-        if (/t/i.test(base)) parts.push(tr("swiss_type_end_car", "end/driving-end car"));
-        if (/p/i.test(base)) parts.push(tr("swiss_type_open_coach", "open seating"));
-        if (/m/i.test(base)) parts.push(tr("swiss_type_long_coach", "long carbody"));
-
         const series = vehicleSeries(vehicle, coach);
         if (series === "501") parts.push(tr("swiss_type_giruno", "RABe 501 Giruno"));
-        else if (series === "610") parts.push(tr("swiss_type_astoro", "ETR 610 / RABe 503 Astoro"));
-
-        if (/-TI\(\s*610\s*\)/i.test(raw) || /-TI\b/i.test(raw)) {
-            parts.push(tr("swiss_type_trenitalia", "Trenitalia/FS"));
-        }
+        else if (series === "610") parts.push(tr("swiss_type_etr610_short", "ETR 610"));
 
         return mergeUniqueBy(parts.filter(Boolean), (part) => part).join(" · ");
     }
@@ -838,12 +943,12 @@
     }
 
     function renderCoachCard(item, index) {
-        const { coach, vehicle, selectedSector } = item;
+        const { coach, vehicle, selectedSector, status } = item;
         const number = vehicleDisplayNumber(vehicle, coach);
         const classLabel = vehicleClassLabel(vehicle, coach);
         const type = vehicleTypeCodeName(vehicle, coach);
         const typeDescription = describeVehicleType(vehicle, coach);
-        const closed = vehicle ? (vehicle.closed || vehicle.vehicleWillBePutAway) : coach?.closed;
+        const closed = vehicleIsClosedForDisplay(status, coach);
         const isLoco = isLikelyLocomotive(vehicle) || coachTokenLooksLikeLoco(coach);
         const roleClass = isLoco ? " swiss-coach-loco" : "";
 
@@ -856,7 +961,7 @@
                 <div class="swiss-coach-number">${esc(number)}</div>
                 ${type ? `<div class="swiss-coach-type">${esc(type)}</div>` : ""}
                 ${typeDescription ? `<div class="swiss-coach-type-note">${esc(typeDescription)}</div>` : ""}
-                <div class="swiss-coach-icons">${renderFeatureIcons(coach, vehicle, selectedSector, index)}</div>
+                <div class="swiss-coach-icons">${renderFeatureIcons(coach, vehicle, selectedSector, index, status)}</div>
             </div>
         `;
     }
@@ -894,7 +999,7 @@
             if (isLikelyLocomotive(item.vehicle) || coachTokenLooksLikeLoco(item.coach)) {
                 addLegendEntry(legend, "loco", tr("swiss_loco", "Loco"), "train");
             }
-            featureEntries(item.coach, item.vehicle, item.selectedSector, index).forEach((entry) => {
+            featureEntries(item.coach, item.vehicle, item.selectedSector, index, item.status).forEach((entry) => {
                 addLegendEntry(legend, entry.id, entry.label, entry.icon);
             });
         });
@@ -923,8 +1028,8 @@
         `;
     }
 
-    function renderCoachStrip(stop, vehicles) {
-        const items = buildVehicleItems(stop, vehicles);
+    function renderCoachStrip(stop, vehicles, stops = []) {
+        const items = buildVehicleItems(stop, vehicles, stops);
         if (!items.length) {
             return `<div class="swiss-empty">${esc(tr("swiss_no_coaches", "No coach layout available"))}</div>`;
         }
@@ -950,7 +1055,7 @@
         `;
     }
 
-    function renderVehicleChips(vehicle, selectedSector, index) {
+    function renderVehicleChips(vehicle, selectedSector, index, status = null) {
         const chips = [];
         chips.push(`${esc(tr("swiss_first_class", "1st"))}: ${vehicle.firstClassSeats || 0}`);
         chips.push(`${esc(tr("swiss_second_class", "2nd"))}: ${vehicle.secondClassSeats || 0}`);
@@ -968,9 +1073,10 @@
         if (vehicle.strollerPicto) chips.push(esc(tr("swiss_stroller", "Stroller")));
         if (vehicle.climated) chips.push(esc(tr("swiss_climated", "Air-conditioned")));
         if (vehicle.emergencyCallSystem) chips.push(esc(tr("swiss_emergency_call", "Emergency call")));
-        if (vehicle.closed) chips.push(esc(tr("swiss_closed", "Closed")));
-        if (vehicle.vehicleWillBePutAway) chips.push(esc(tr("swiss_put_away", "Put away")));
-        if (vehicle.trolleyStatus && vehicle.trolleyStatus !== "Normal") chips.push(esc(vehicle.trolleyStatus));
+        if (status?.closed) chips.push(esc(tr("swiss_closed", "Closed")));
+        if (status?.vehicleWillBePutAway) chips.push(esc(tr("swiss_put_away", "Put away")));
+        const statusLabel = trolleyStatusLabel(status?.trolleyStatus);
+        if (statusLabel) chips.push(esc(statusLabel));
         if (shouldShowNoPassage(selectedSector, index)) chips.push(esc(tr("swiss_no_passage", "No passage")));
         if (selectedSector?.sectors) chips.push(`${esc(tr("swiss_sector", "Sector"))}: ${esc(selectedSector.sectors)}`);
         if (selectedSector?.track) chips.push(`${esc(tr("swiss_track", "Track"))}: ${esc(selectedSector.track)}`);
@@ -1002,18 +1108,19 @@
     }
 
     function renderVehicleDetails(data, selectedStop) {
-        const vehicles = vehiclesInDisplayOrder(selectedStop, data?.vehicles);
+        const vehicles = vehiclesInDisplayOrder(selectedStop, data?.vehicles, data?.stops);
         if (!vehicles.length) {
             return `<div class="swiss-empty">${esc(tr("swiss_unavailable", "Swiss data unavailable"))}</div>`;
         }
 
         return vehicles.map((vehicle, index) => {
             const selectedSector = sectorForVehicle(vehicle, selectedStop);
+            const status = activeVehicleStatus(vehicle, selectedStop, data?.stops);
             const fromTo = renderVehicleSegments(vehicle);
             const label = isLikelyLocomotive(vehicle) ? tr("swiss_loco", "Loco") : tr("swiss_vehicle", "Vehicle");
             const typeDescription = describeVehicleType(vehicle);
             return `
-                <div class="swiss-vehicle-row${vehicle.closed || vehicle.vehicleWillBePutAway ? " swiss-vehicle-closed" : ""}">
+                <div class="swiss-vehicle-row${vehicleIsClosedForDisplay(status, null) ? " swiss-vehicle-closed" : ""}">
                     <div class="swiss-vehicle-main">
                         <div class="swiss-vehicle-title">
                             <span class="swiss-vehicle-position">${esc(tr("swiss_position", "Pos."))} ${vehicle.position || "--"}</span>
@@ -1023,7 +1130,7 @@
                         ${typeDescription ? `<div class="swiss-vehicle-type-note">${esc(typeDescription)}</div>` : ""}
                         ${fromTo ? `<div class="swiss-vehicle-route">${esc(tr("swiss_from_to", "From/To"))}: ${fromTo}</div>` : ""}
                     </div>
-                    <div class="swiss-vehicle-chips">${renderVehicleChips(vehicle, selectedSector, index)}</div>
+                    <div class="swiss-vehicle-chips">${renderVehicleChips(vehicle, selectedSector, index, status)}</div>
                     ${renderVehicleDiagnostics(vehicle)}
                 </div>
             `;
@@ -1082,7 +1189,7 @@
         }
         const vehiclesExpanded = card.dataset.swissVehiclesExpanded === "true";
         const terminalName = stops.length ? (stops[stops.length - 1]?.name || "") : "";
-        const orderedVehicles = vehiclesInDisplayOrder(selectedStop, data?.vehicles);
+        const orderedVehicles = vehiclesInDisplayOrder(selectedStop, data?.vehicles, stops);
         const vehicleCount = Number(orderedVehicles.length || data.vehicleCount || 0);
 
         const stopTabs = stops.map((stop, index) => `
@@ -1117,7 +1224,7 @@
                     ${stops.length ? `<div class="swiss-stop-tabs">${stopTabs}</div>` : ""}
                     <div class="swiss-section">
                         <div class="swiss-section-title">${esc(tr("swiss_coach", "Coach"))} ${selectedStop?.track ? `<span>${esc(tr("swiss_track", "Track"))} ${esc(selectedStop.track)}</span>` : ""}</div>
-                        <div class="swiss-coach-strip">${renderCoachStrip(selectedStop, asArray(data.vehicles))}</div>
+                        <div class="swiss-coach-strip">${renderCoachStrip(selectedStop, asArray(data.vehicles), stops)}</div>
                     </div>
                     <div class="swiss-section">
                         <button type="button" class="swiss-section-title swiss-vehicles-toggle" aria-expanded="${vehiclesExpanded ? "true" : "false"}">

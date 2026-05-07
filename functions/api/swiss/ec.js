@@ -103,6 +103,10 @@ function asOptionalBool(value) {
     return asBool(value);
 }
 
+function isClosedTrolleyStatus(value) {
+    return /geschlossen/i.test(String(value || ""));
+}
+
 function normalizeStopPoint(stopPoint) {
     return {
         uic: asString(stopPoint?.uic),
@@ -174,6 +178,7 @@ function normalizeVehicle(rawVehicle) {
 
     const trolleyStatus = asString(props.trolleyStatus);
     const vehicleWillBePutAway = asBool(props.vehicleWillBePutAway);
+    const closed = asBool(props.closed) || isClosedTrolleyStatus(trolleyStatus);
 
     return {
         position: asInt(rawVehicle?.position),
@@ -210,23 +215,29 @@ function normalizeVehicle(rawVehicle) {
         strollerPicto: asBool(picto.strollerPicto),
         familyZonePicto: asBool(picto.familyZonePicto),
         businessZonePicto: asBool(picto.businessZonePicto),
-        closed: asBool(props.closed) || /geschlossen/i.test(trolleyStatus || ""),
+        closed,
         vehicleWillBePutAway,
         trolleyStatus,
         fromStop: asString(props.fromStop?.name),
         toStop: asString(props.toStop?.name),
-        segments: buildVehicleSegments(props),
+        segments: buildVehicleSegments(props, closed, vehicleWillBePutAway, trolleyStatus),
         stopSectors: Array.isArray(rawVehicle?.formationVehicleAtScheduledStops)
             ? rawVehicle.formationVehicleAtScheduledStops.map(normalizeVehicleStop)
             : []
     };
 }
 
-function buildVehicleSegments(props) {
+function buildVehicleSegments(props, closed = false, vehicleWillBePutAway = false, trolleyStatus = null) {
     const fromStop = asString(props?.fromStop?.name);
     const toStop = asString(props?.toStop?.name);
     if (!fromStop && !toStop) return [];
-    return [{ fromStop, toStop }];
+    return [{
+        fromStop,
+        toStop,
+        closed: Boolean(closed),
+        vehicleWillBePutAway: Boolean(vehicleWillBePutAway),
+        trolleyStatus: asString(trolleyStatus)
+    }];
 }
 
 function vehicleKey(vehicle) {
@@ -256,6 +267,16 @@ function preferValue(currentValue, nextValue) {
     if (currentValue === null || currentValue === undefined || currentValue === "" || currentValue === 0) {
         return nextValue;
     }
+    return currentValue;
+}
+
+function mergeStatusFlag(existing, incoming) {
+    return Boolean(existing && incoming);
+}
+
+function preferTrolleyStatus(currentValue, nextValue) {
+    if (!currentValue || currentValue === "Normal") return currentValue || nextValue;
+    if (!nextValue || nextValue === "Normal") return nextValue || currentValue;
     return currentValue;
 }
 
@@ -296,14 +317,17 @@ function mergeVehicles(existing, incoming) {
         strollerPicto: existing.strollerPicto || incoming.strollerPicto,
         familyZonePicto: existing.familyZonePicto || incoming.familyZonePicto,
         businessZonePicto: existing.businessZonePicto || incoming.businessZonePicto,
-        closed: existing.closed || incoming.closed,
-        vehicleWillBePutAway: existing.vehicleWillBePutAway || incoming.vehicleWillBePutAway,
-        trolleyStatus: preferValue(existing.trolleyStatus, incoming.trolleyStatus),
+        closed: mergeStatusFlag(existing.closed, incoming.closed),
+        vehicleWillBePutAway: mergeStatusFlag(existing.vehicleWillBePutAway, incoming.vehicleWillBePutAway),
+        trolleyStatus: preferTrolleyStatus(existing.trolleyStatus, incoming.trolleyStatus),
         fromStop: preferValue(existing.fromStop, incoming.fromStop),
         toStop: preferValue(existing.toStop, incoming.toStop),
         segments: mergeUniqueObjects(existing.segments || [], incoming.segments || [], (segment) => [
             segment.fromStop || "",
-            segment.toStop || ""
+            segment.toStop || "",
+            segment.closed ? "closed" : "open",
+            segment.vehicleWillBePutAway ? "putaway" : "active",
+            segment.trolleyStatus || ""
         ].join("|")),
         stopSectors: mergeUniqueObjects(existing.stopSectors || [], incoming.stopSectors || [], (stop) => [
             stop.uic || "",
