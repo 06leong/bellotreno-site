@@ -2581,9 +2581,10 @@ button.swiss-section-title {
 
 .statistics-donut-wrap {
     display: grid;
-    grid-template-columns: minmax(150px, 180px) minmax(190px, 1fr);
-    gap: 18px;
-    align-items: center;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    justify-items: center;
+    align-items: start;
 }
 
 .statistics-donut {
@@ -2624,6 +2625,7 @@ button.swiss-section-title {
     display: grid;
     gap: 10px;
     min-width: 0;
+    width: min(100%, 360px);
 }
 
 .statistics-legend div {
@@ -2654,11 +2656,6 @@ button.swiss-section-title {
     overflow-wrap: normal;
 }
 
-.statistics-dual-donut .statistics-donut-wrap {
-    grid-template-columns: 150px minmax(160px, 1fr);
-    gap: 12px;
-}
-
 .statistics-dual-donut .statistics-donut {
     width: 150px;
 }
@@ -2677,6 +2674,18 @@ button.swiss-section-title {
     font-size: 0.9rem;
     margin: 0 0 10px;
     color: color-mix(in oklch, var(--color-base-content) 70%, transparent);
+}
+
+.statistics-table-link {
+    color: var(--color-primary);
+    font-weight: 800;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 4px;
+}
+
+.statistics-table-link:hover {
+    color: color-mix(in oklch, var(--color-primary) 75%, var(--color-base-content));
 }
 
 .statistics-bars {
