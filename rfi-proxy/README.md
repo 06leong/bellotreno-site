@@ -64,9 +64,8 @@ The frontend Cloudflare Pages Function injects this header from the `STATISTICS_
 ## Manual collector run
 
 ```bash
-curl -X POST \
-  -H "X-Bello-Stats-Token: $STATISTICS_SECURITY_TOKEN" \
-  http://127.0.0.1:8081/v1/collect
+docker compose exec bellotreno-statistics sh -lc \
+  'curl -X POST -H "X-Bello-Stats-Token: $STATISTICS_SECURITY_TOKEN" http://127.0.0.1:8081/v1/collect'
 ```
 
 The collector also runs automatically every `STATISTICS_COLLECTOR_INTERVAL_MINUTES` minutes when `STATISTICS_COLLECTOR_ENABLED=true`.

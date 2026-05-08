@@ -2581,7 +2581,7 @@ button.swiss-section-title {
 
 .statistics-donut-wrap {
     display: grid;
-    grid-template-columns: 180px minmax(0, 1fr);
+    grid-template-columns: minmax(150px, 180px) minmax(190px, 1fr);
     gap: 18px;
     align-items: center;
 }
@@ -2623,14 +2623,16 @@ button.swiss-section-title {
 .statistics-legend {
     display: grid;
     gap: 10px;
+    min-width: 0;
 }
 
 .statistics-legend div {
     display: grid;
-    grid-template-columns: 10px minmax(0, 1fr) auto;
+    grid-template-columns: 10px minmax(5.5rem, 1fr) max-content;
     gap: 8px;
     align-items: center;
     font-size: 0.86rem;
+    min-width: 0;
 }
 
 .statistics-legend span {
@@ -2643,6 +2645,26 @@ button.swiss-section-title {
     font-style: normal;
     color: color-mix(in oklch, var(--color-base-content) 56%, transparent);
     font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.statistics-legend b {
+    min-width: 0;
+    word-break: keep-all;
+    overflow-wrap: normal;
+}
+
+.statistics-dual-donut .statistics-donut-wrap {
+    grid-template-columns: 150px minmax(160px, 1fr);
+    gap: 12px;
+}
+
+.statistics-dual-donut .statistics-donut {
+    width: 150px;
+}
+
+.statistics-dual-donut .statistics-donut > div {
+    width: 84px;
 }
 
 .statistics-dual-donut {

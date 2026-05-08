@@ -933,7 +933,7 @@ def summary_for_date(date: str) -> dict[str, Any]:
             (date,),
         ).fetchall()
         worst = conn.execute(
-            "SELECT train_number, category, origin, destination, delay FROM trains WHERE date=? ORDER BY delay DESC LIMIT 1",
+            "SELECT train_key, train_number, category, origin, destination, relation_key, delay FROM trains WHERE date=? ORDER BY delay DESC LIMIT 1",
             (date,),
         ).fetchone()
         station_total = conn.execute("SELECT COUNT(*) AS total FROM station_registry").fetchone()
@@ -968,7 +968,15 @@ def summary_for_date(date: str) -> dict[str, Any]:
             },
         },
         "categories": [dict(row) for row in categories],
-        "worstTrain": dict(worst) if worst else None,
+        "worstTrain": {
+            "trainKey": worst["train_key"],
+            "trainNumber": worst["train_number"],
+            "category": worst["category"],
+            "origin": worst["origin"],
+            "destination": worst["destination"],
+            "route": worst["relation_key"],
+            "delay": worst["delay"],
+        } if worst else None,
         "disclaimer": "Unofficial statistics derived from observable ViaggiaTreno data.",
     }
 

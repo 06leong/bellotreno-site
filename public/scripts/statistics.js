@@ -245,9 +245,14 @@
         if (!el) return;
         const values = summaryCounts();
         const worst = values.worstTrain;
+        const worstNumber = worst?.trainNumber || worst?.train_number || worst?.number || worst?.train || "";
+        const worstRoute = [worst?.origin, worst?.destination].filter(Boolean).join(" -> ");
         const worstLabel = worst
-            ? `${worst.category || ""} ${worst.trainNumber || worst.number || worst.train || ""}`.trim()
+            ? `${worst.category || ""} ${worstNumber}`.trim() || "--"
             : "--";
+        const worstNote = worst
+            ? [worstRoute, worst?.delay ? `+${worst.delay} ${tr("minutes", "min")}` : ""].filter(Boolean).join(" - ")
+            : "";
         el.innerHTML = [
             metricCard("running", "directions_railway", tr("statistics_running_now", "Running now"), formatNumber(values.running)),
             metricCard("circulated", "today", tr("statistics_circulated_today", "Operated today"), formatNumber(values.circulated)),
@@ -256,7 +261,7 @@
             metricCard("cancelled", "cancel", tr("statistics_cancelled", "Cancelled"), formatNumber(values.cancelled)),
             metricCard("rescheduled", "published_with_changes", tr("statistics_rescheduled", "Rescheduled"), formatNumber(values.rescheduled)),
             metricCard("avg_delay", "timer", tr("statistics_avg_delay", "Average delay"), formatMinutes(values.avgDelay)),
-            metricCard("worst", "warning", tr("statistics_worst_train", "Worst train"), worstLabel, worst?.delay ? `+${worst.delay} ${tr("minutes", "min")}` : "")
+            metricCard("worst", "warning", tr("statistics_worst_train", "Worst train"), worstLabel, worstNote)
         ].join("");
     }
 
