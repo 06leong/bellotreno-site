@@ -58,6 +58,20 @@
         return `${minutes.toLocaleString(window.currentLang === "zh" ? "zh-CN" : "en-GB")} ${tr("minutes", "min")}`;
     }
 
+    function buildTrainHref(item) {
+        const number = item?.trainNumber || item?.train_number || item?.number || item?.train || "";
+        const cleanNumber = String(number).replace(/[^\d]/g, "") || String(number).trim();
+        return cleanNumber ? `/?train=${encodeURIComponent(cleanNumber)}` : "";
+    }
+
+    function buildStationHref(item) {
+        const code = item?.code || item?.stationCode || item?.station_code || item?.id || "";
+        const name = item?.name || item?.station || item?.stationName || item?.station_name || "";
+        if (!code || !name) return "";
+        const params = new URLSearchParams({ id: code, name, type: "partenze" });
+        return `/station?${params.toString()}`;
+    }
+
     function todayRome() {
         return new Intl.DateTimeFormat("sv-SE", {
             timeZone: "Europe/Rome",
@@ -198,7 +212,6 @@
         const cancelled = getPath(summary, ["counts.cancelled", "cancelled"], 0);
         const rescheduled = getPath(summary, ["counts.rescheduled", "rescheduled", "counts.reprogrammed"], 0);
         const avgDelay = getPath(summary, ["delayTotals.average", "delayTotals.avg", "avgDelay", "averageDelay"], 0);
-        const coverageRate = getPath(summary, ["coverage.rate", "coverage.percent", "completeness.rate", "completeness.percent"], null);
         const departureDelayed = getPath(summary, ["punctuality.departure.delayed", "departure.delayed"], 0);
         const departureOnTime = getPath(summary, ["punctuality.departure.onTime", "departure.onTime"], 0);
         const arrivalDelayed = getPath(summary, ["punctuality.arrival.delayed", "arrival.delayed"], 0);
@@ -217,7 +230,6 @@
             cancelled,
             rescheduled,
             avgDelay,
-            coverageRate,
             departureDelayed,
             departureOnTime,
             arrivalDelayed,
@@ -232,12 +244,12 @@
         const values = summaryCounts();
         const lastUpdated = getPath(summary, ["lastUpdated", "ultimoAggiornamento", "updatedAt"], null);
         const cadence = getPath(summary, ["collectionCadenceMinutes", "cadenceMinutes", "samplingMinutes"], null);
-        const coverageValue = values.coverageRate !== null
-            ? (asNumber(values.coverageRate) <= 1 ? pct(asNumber(values.coverageRate) * 100) : pct(values.coverageRate))
-            : "--";
+        const progressValue = values.circulated
+            ? `${formatNumber(values.monitored)} / ${formatNumber(values.circulated)}`
+            : formatNumber(values.monitored);
         if ($("statisticsLastUpdated")) $("statisticsLastUpdated").textContent = formatDateTime(lastUpdated);
         if ($("statisticsCadence")) $("statisticsCadence").textContent = cadence ? `${cadence} ${tr("minutes", "min")}` : "--";
-        if ($("statisticsCoverage")) $("statisticsCoverage").textContent = coverageValue;
+        if ($("statisticsCoverage")) $("statisticsCoverage").textContent = progressValue;
     }
 
     function renderMetrics() {
@@ -538,6 +550,19 @@
         return item[column] ?? "--";
     }
 
+    function itemCellHtml(item, column, index) {
+        const value = itemValue(item, column, index);
+        if (column === "train") {
+            const href = buildTrainHref(item);
+            return href ? `<a class="statistics-table-link" href="${esc(href)}">${esc(value)}</a>` : esc(value);
+        }
+        if (column === "station") {
+            const href = buildStationHref(item);
+            return href ? `<a class="statistics-table-link" href="${esc(href)}">${esc(value)}</a>` : esc(value);
+        }
+        return esc(value);
+    }
+
     function statusLabel(status) {
         const normalized = String(status || "").toLowerCase();
         if (normalized.includes("cancel")) return tr("statistics_status_cancelled", "Cancelled");
@@ -559,7 +584,7 @@
             body.innerHTML = `<tr><td colspan="${columns.length}">${esc(tr("statistics_no_rows", "No rows available"))}</td></tr>`;
         } else {
             body.innerHTML = state.tableItems.map((item, index) => `
-                <tr>${columns.map(([column]) => `<td>${esc(itemValue(item, column, index))}</td>`).join("")}</tr>
+                <tr>${columns.map(([column]) => `<td>${itemCellHtml(item, column, index)}</td>`).join("")}</tr>
             `).join("");
         }
 
