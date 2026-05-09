@@ -2403,7 +2403,7 @@ button.swiss-section-title {
 .statistics-date-field {
     display: grid;
     gap: 6px;
-    min-width: 180px;
+    min-width: 220px;
     font-size: 0.75rem;
     color: color-mix(in oklch, var(--color-base-content) 65%, transparent);
     font-weight: 700;
@@ -2415,6 +2415,15 @@ button.swiss-section-title {
 .statistics-filter-grid input {
     background: color-mix(in oklch, var(--color-base-100) 70%, transparent);
     border-color: color-mix(in oklch, var(--color-base-content) 14%, transparent);
+    color: var(--color-base-content);
+    min-height: 42px;
+}
+
+.statistics-date-field select {
+    width: 100%;
+    padding-inline: 14px 34px;
+    border-radius: 999px;
+    font-weight: 700;
 }
 
 .statistics-status {
@@ -2462,6 +2471,7 @@ button.swiss-section-title {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 12px;
     margin-bottom: 18px;
+    align-items: start;
 }
 
 .statistics-metric,
@@ -2473,24 +2483,26 @@ button.swiss-section-title {
 }
 
 .statistics-metric {
-    min-height: 112px;
+    height: 106px;
     border-radius: 22px;
-    padding: 16px;
+    padding: 14px;
     display: flex;
-    gap: 14px;
-    align-items: flex-start;
+    gap: 12px;
+    align-items: center;
+    overflow: hidden;
 }
 
 .statistics-metric > .material-symbols-outlined {
-    width: 36px;
-    height: 36px;
+    width: 34px;
+    height: 34px;
+    flex: 0 0 34px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     border-radius: 12px;
     background: color-mix(in oklch, var(--color-primary) 16%, transparent);
     color: var(--color-primary);
-    font-size: 1.25rem;
+    font-size: 1.15rem;
 }
 
 .statistics-metric small,
@@ -2500,13 +2512,29 @@ button.swiss-section-title {
     font-style: normal;
 }
 
+.statistics-metric small {
+    font-size: 0.78rem;
+    line-height: 1.15;
+    font-weight: 700;
+}
+
+.statistics-metric em {
+    font-size: 0.74rem;
+    line-height: 1.22;
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+
 .statistics-metric strong {
     display: block;
     color: var(--color-base-content);
-    font-size: 1.7rem;
+    font-size: clamp(1.35rem, 1.9vw, 1.55rem);
     line-height: 1.1;
     margin: 6px 0 2px;
     font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
 
 .statistics-grid {
@@ -2546,8 +2574,17 @@ button.swiss-section-title {
     height: 270px;
 }
 
+.statistics-line-chart-wrap {
+    position: relative;
+}
+
 .statistics-line-chart line {
     stroke: color-mix(in oklch, var(--color-base-content) 12%, transparent);
+}
+
+.statistics-line-chart .statistics-chart-grid {
+    stroke: color-mix(in oklch, var(--color-base-content) 8%, transparent);
+    stroke-dasharray: 4 6;
 }
 
 .statistics-line-chart polygon {
@@ -2564,11 +2601,50 @@ button.swiss-section-title {
 
 .statistics-line-chart circle {
     fill: var(--color-info);
+    cursor: pointer;
+    stroke: color-mix(in oklch, var(--color-base-100) 88%, transparent);
+    stroke-width: 2;
+}
+
+.statistics-line-chart circle:focus {
+    outline: none;
+    stroke: var(--color-primary);
+    stroke-width: 4;
 }
 
 .statistics-line-chart text {
     fill: color-mix(in oklch, var(--color-base-content) 58%, transparent);
     font-size: 12px;
+}
+
+.statistics-chart-tooltip {
+    position: absolute;
+    z-index: 2;
+    transform: translate(-50%, -112%);
+    min-width: 88px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: color-mix(in oklch, var(--color-base-100) 92%, #000 8%);
+    border: 1px solid color-mix(in oklch, var(--color-base-content) 12%, transparent);
+    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.24);
+    pointer-events: none;
+    text-align: center;
+}
+
+.statistics-chart-tooltip strong,
+.statistics-chart-tooltip span {
+    display: block;
+}
+
+.statistics-chart-tooltip strong {
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.statistics-chart-tooltip span {
+    margin-top: 3px;
+    font-size: 0.72rem;
+    color: color-mix(in oklch, var(--color-base-content) 62%, transparent);
 }
 
 .statistics-empty-chart {
@@ -2756,7 +2832,7 @@ button.swiss-section-title {
 
 .statistics-filter-grid {
     display: grid;
-    grid-template-columns: minmax(220px, 1fr) 150px 160px 190px;
+    grid-template-columns: minmax(220px, 1fr) 150px 170px;
     margin-bottom: 12px;
 }
 

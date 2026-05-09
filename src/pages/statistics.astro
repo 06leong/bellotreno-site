@@ -18,12 +18,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             <div class="statistics-controls">
                 <label class="statistics-date-field">
                     <span data-i18n="statistics_date">Date</span>
-                    <select id="statisticsDate"></select>
+                    <select id="statisticsDate" class="select select-bordered rounded-full"></select>
                 </label>
-                <button id="statisticsRefresh" class="btn btn-primary btn-sm rounded-full gap-2" type="button">
-                    <span class="material-symbols-outlined text-[1rem]">refresh</span>
-                    <span data-i18n="statistics_refresh">Refresh</span>
-                </button>
             </div>
         </section>
 
@@ -85,7 +81,6 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                 <button type="button" class="statistics-tab active" data-stat-view="trains" data-i18n="statistics_tab_trains">Trains</button>
                 <button type="button" class="statistics-tab" data-stat-view="stations" data-i18n="statistics_tab_stations">Stations</button>
                 <button type="button" class="statistics-tab" data-stat-view="relations" data-i18n="statistics_tab_relations">Relations</button>
-                <button type="button" class="statistics-tab" data-stat-view="ranking" data-i18n="statistics_tab_ranking">Ranking</button>
             </div>
 
             <div class="statistics-filter-grid">
@@ -100,11 +95,6 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                     <option value="not_departed" data-i18n="statistics_status_not_departed">Not Departed</option>
                     <option value="cancelled" data-i18n="statistics_status_cancelled">Cancelled</option>
                     <option value="rescheduled" data-i18n="statistics_status_rescheduled">Rescheduled</option>
-                </select>
-                <select id="statisticsRankingMetric" class="select select-bordered rounded-full">
-                    <option value="delay" data-i18n="statistics_rank_delay">Total delay</option>
-                    <option value="arrival_delay" data-i18n="statistics_rank_arrival">Arrival delay</option>
-                    <option value="departure_delay" data-i18n="statistics_rank_departure">Departure delay</option>
                 </select>
             </div>
 

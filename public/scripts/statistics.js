@@ -1,7 +1,8 @@
 (function () {
     const API_BASE = "/api/statistics";
     const PAGE_SIZE = 25;
-    const CATEGORY_OPTIONS = ["REG", "RV", "RE", "MET", "NCL", "FR", "FA", "FB", "IC", "ICN", "EC", "EN", "EXP", "TS"];
+    const CATEGORY_ORDER = ["REG", "MET", "FR", "FA", "FB", "IC", "ICN", "EC", "EXP", "NCL"];
+    const CATEGORY_OPTIONS = [...CATEGORY_ORDER, "RV", "RE", "EN", "TS"];
 
     const state = {
         date: "",
@@ -80,6 +81,11 @@
 
     function categoryColor(value) {
         return CATEGORY_COLORS[categoryCode(value)] || palette[0];
+    }
+
+    function categorySortIndex(value) {
+        const index = CATEGORY_ORDER.indexOf(categoryCode(value));
+        return index === -1 ? Number.MAX_SAFE_INTEGER : index;
     }
 
     function categoryBadgeHtml(value) {
@@ -351,30 +357,85 @@
         const max = Math.max(...values, 1);
         const width = 680;
         const height = 260;
-        const pad = 28;
-        const step = data.length > 1 ? (width - pad * 2) / (data.length - 1) : 0;
+        const padLeft = 52;
+        const padRight = 26;
+        const padTop = 24;
+        const padBottom = 34;
+        const plotWidth = width - padLeft - padRight;
+        const plotHeight = height - padTop - padBottom;
+        const step = data.length > 1 ? plotWidth / (data.length - 1) : 0;
         const coords = data.map((point, index) => {
-            const x = pad + step * index;
-            const y = height - pad - (pointValue(point) / max) * (height - pad * 2);
+            const x = padLeft + step * index;
+            const y = height - padBottom - (pointValue(point) / max) * plotHeight;
             return [x, y];
         });
         const line = coords.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
-        const area = `${pad},${height - pad} ${line} ${width - pad},${height - pad}`;
-        const ticks = data.filter((_, index) => index === 0 || index === data.length - 1 || index % Math.ceil(data.length / 6) === 0);
+        const area = `${padLeft},${height - padBottom} ${line} ${width - padRight},${height - padBottom}`;
+        const xStep = Math.max(1, Math.ceil(data.length / 8));
+        const xTicks = data.filter((_, index) => index === 0 || index === data.length - 1 || index % xStep === 0);
+        const yTicks = [0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+            const value = Math.round(max * ratio);
+            const y = height - padBottom - ratio * plotHeight;
+            return { value, y };
+        }).filter((tick, index, list) => list.findIndex((item) => item.value === tick.value) === index);
         return `
-            <svg class="statistics-line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(tr("statistics_chart_running", "Trains in circulation"))}">
-                <line x1="${pad}" y1="${height - pad}" x2="${width - pad}" y2="${height - pad}" />
-                <line x1="${pad}" y1="${pad}" x2="${pad}" y2="${height - pad}" />
-                <polygon points="${area}" />
-                <polyline points="${line}" />
-                ${coords.map(([x, y], index) => `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3"><title>${esc(pointLabel(data[index]))}: ${esc(pointValue(data[index]))}</title></circle>`).join("")}
-                <text x="${pad}" y="${pad - 8}">${esc(formatNumber(max))}</text>
-                ${ticks.map((point, index) => {
-                    const x = pad + step * data.indexOf(point);
-                    return `<text x="${x.toFixed(1)}" y="${height - 5}" text-anchor="${index === 0 ? "start" : "middle"}">${esc(pointLabel(point))}</text>`;
-                }).join("")}
-            </svg>
+            <div class="statistics-line-chart-wrap">
+                <svg class="statistics-line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(tr("statistics_chart_running", "Trains in circulation"))}">
+                    ${yTicks.map((tick) => `
+                        <line class="statistics-chart-grid" x1="${padLeft}" y1="${tick.y.toFixed(1)}" x2="${width - padRight}" y2="${tick.y.toFixed(1)}" />
+                        <text x="${padLeft - 10}" y="${(tick.y + 4).toFixed(1)}" text-anchor="end">${esc(formatNumber(tick.value))}</text>
+                    `).join("")}
+                    <line x1="${padLeft}" y1="${height - padBottom}" x2="${width - padRight}" y2="${height - padBottom}" />
+                    <line x1="${padLeft}" y1="${padTop}" x2="${padLeft}" y2="${height - padBottom}" />
+                    <polygon points="${area}" />
+                    <polyline points="${line}" />
+                    ${coords.map(([x, y], index) => {
+                        const label = pointLabel(data[index]);
+                        const value = pointValue(data[index]);
+                        return `
+                            <circle class="statistics-chart-point" tabindex="0" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5"
+                                data-label="${esc(label)}" data-value="${esc(formatNumber(value))}" data-x="${x.toFixed(1)}" data-y="${y.toFixed(1)}">
+                                <title>${esc(label)}: ${esc(formatNumber(value))}</title>
+                            </circle>
+                        `;
+                    }).join("")}
+                    ${xTicks.map((point, index) => {
+                        const dataIndex = data.indexOf(point);
+                        const x = padLeft + step * dataIndex;
+                        const anchor = index === 0 ? "start" : index === xTicks.length - 1 ? "end" : "middle";
+                        return `<text x="${x.toFixed(1)}" y="${height - 8}" text-anchor="${anchor}">${esc(pointLabel(point))}</text>`;
+                    }).join("")}
+                </svg>
+                <div class="statistics-chart-tooltip" hidden></div>
+            </div>
         `;
+    }
+
+    function bindRunningChartEvents() {
+        const chart = $("statisticsRunningChart");
+        if (!chart || chart.dataset.bound === "1") return;
+        chart.dataset.bound = "1";
+        const showPoint = (point) => {
+            const tooltip = chart.querySelector(".statistics-chart-tooltip");
+            if (!tooltip) return;
+            const label = point.dataset.label || "";
+            const value = point.dataset.value || "";
+            tooltip.innerHTML = `<strong>${esc(value)}</strong><span>${esc(label)}</span>`;
+            tooltip.style.left = `${(asNumber(point.dataset.x, 0) / 680) * 100}%`;
+            tooltip.style.top = `${(asNumber(point.dataset.y, 0) / 260) * 100}%`;
+            tooltip.hidden = false;
+        };
+        chart.addEventListener("click", (event) => {
+            const point = event.target.closest?.(".statistics-chart-point");
+            if (point) showPoint(point);
+        });
+        chart.addEventListener("keydown", (event) => {
+            if (event.key !== "Enter" && event.key !== " ") return;
+            const point = event.target.closest?.(".statistics-chart-point");
+            if (!point) return;
+            event.preventDefault();
+            showPoint(point);
+        });
     }
 
     function renderDonut(segments, title) {
@@ -406,7 +467,12 @@
         const data = asArray(categories).map((item) => ({
             label: item.label || item.category || item.name || item.code || "--",
             value: asNumber(item.value ?? item.count ?? item.total, 0)
-        })).filter((item) => item.value > 0);
+        })).filter((item) => item.value > 0)
+            .sort((a, b) => {
+                const order = categorySortIndex(a.label) - categorySortIndex(b.label);
+                if (order !== 0) return order;
+                return b.value - a.value;
+            });
         if (!data.length) return emptyChart();
         const max = Math.max(...data.map((item) => item.value), 1);
         return `
@@ -479,10 +545,8 @@
         });
         const category = $("statisticsCategory");
         const status = $("statisticsStatusFilter");
-        const metric = $("statisticsRankingMetric");
         if (category) category.style.display = view === "trains" ? "" : "none";
         if (status) status.style.display = view === "trains" ? "" : "none";
-        if (metric) metric.style.display = view === "ranking" ? "" : "none";
         if (shouldLoad) loadTable();
     }
 
@@ -503,7 +567,6 @@
         const q = queryValue();
         const category = $("statisticsCategory")?.value || "";
         const status = $("statisticsStatusFilter")?.value || "";
-        const metric = $("statisticsRankingMetric")?.value || "delay";
         let path = "/trains";
         let params = { date: state.date, page: state.page, pageSize: state.pageSize };
 
@@ -515,9 +578,6 @@
         } else if (state.activeView === "relations") {
             path = "/relations";
             params = { date: state.date, ...relationParams(q), page: state.page, pageSize: state.pageSize };
-        } else if (state.activeView === "ranking") {
-            path = "/ranking";
-            params = { date: state.date, metric, limit: state.pageSize };
         }
 
         try {
@@ -558,15 +618,6 @@
                 ["monitored", tr("statistics_monitored", "Monitored")],
                 ["cancelled", tr("statistics_cancelled", "Cancelled")],
                 ["avgDelay", tr("statistics_avg_delay", "Average delay")]
-            ];
-        }
-        if (state.activeView === "ranking") {
-            return [
-                ["rank", "#"],
-                ["train", tr("train", "Train")],
-                ["route", tr("statistics_route", "Route")],
-                ["delay", tr("statistics_delay", "Delay")],
-                ["status", tr("status", "Status")]
             ];
         }
         return [
@@ -643,7 +694,7 @@
             pageInfo.textContent = `${state.page} / ${totalPages} · ${totalLabel} ${formatNumber(state.total)}`;
         }
         if ($("statisticsPrev")) $("statisticsPrev").disabled = state.page <= 1 || state.tableLoading;
-        if ($("statisticsNext")) $("statisticsNext").disabled = state.page >= totalPages || state.tableLoading || state.activeView === "ranking";
+        if ($("statisticsNext")) $("statisticsNext").disabled = state.page >= totalPages || state.tableLoading;
     }
 
     async function loadCore() {
@@ -682,7 +733,7 @@
 
     function downloadCsv() {
         if (!state.date) return;
-        const view = state.activeView === "ranking" ? "trains" : state.activeView;
+        const view = state.activeView;
         const query = paramsString({
             date: state.date,
             view,
@@ -702,7 +753,6 @@
     }
 
     function bindEvents() {
-        $("statisticsRefresh")?.addEventListener("click", () => loadCore());
         $("statisticsDate")?.addEventListener("change", (event) => {
             state.date = event.target.value;
             state.page = 1;
@@ -718,7 +768,6 @@
         $("statisticsSearch")?.addEventListener("input", reloadTable);
         $("statisticsCategory")?.addEventListener("change", reloadTable);
         $("statisticsStatusFilter")?.addEventListener("change", reloadTable);
-        $("statisticsRankingMetric")?.addEventListener("change", reloadTable);
         $("statisticsCsv")?.addEventListener("click", downloadCsv);
         $("statisticsPrev")?.addEventListener("click", () => {
             if (state.page <= 1) return;
@@ -731,6 +780,7 @@
             state.page += 1;
             loadTable();
         });
+        bindRunningChartEvents();
     }
 
     function initStatisticsPage() {
