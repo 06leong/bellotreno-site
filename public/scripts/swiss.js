@@ -499,10 +499,67 @@
         if (selectedStop?.uic) {
             const exactMatches = sectors.filter((item) => item.uic === selectedStop.uic);
             if (exactMatches.length) {
-                return exactMatches.find((item) => item.accessToPreviousVehicle === false) || exactMatches[0];
+                return bestStopSector(exactMatches);
             }
         }
-        return sectors[0];
+        return bestStopSector(sectors);
+    }
+
+    function sectorRanks(value) {
+        const text = String(value || "").trim().toUpperCase();
+        if (!text || ["TRAIN", "UNKNOWN", "--"].includes(text)) return [];
+        const compact = text.replace(/[^A-Z]/g, "");
+        if (!compact || (compact.length > 4 && !/[,\s;/]/.test(text))) return [];
+        const letters = compact.split("");
+        return Array.from(new Set(letters))
+            .map((letter) => letter.charCodeAt(0) - 65)
+            .filter((rank) => rank >= 0 && rank < 26)
+            .sort((a, b) => a - b);
+    }
+
+    function canonicalSector(value) {
+        const ranks = sectorRanks(value);
+        if (!ranks.length) return value ? String(value) : "";
+        return ranks.map((rank) => String.fromCharCode(65 + rank)).join(",");
+    }
+
+    function sectorSortRange(value) {
+        const ranks = sectorRanks(value);
+        if (!ranks.length) {
+            return { min: 999, max: 999, mid: 999 };
+        }
+        const min = ranks[0];
+        const max = ranks[ranks.length - 1];
+        return { min, max, mid: (min + max) / 2 };
+    }
+
+    function normalizeStopSector(stopSector) {
+        if (!stopSector) return null;
+        return {
+            ...stopSector,
+            sectors: canonicalSector(stopSector.sectors || "")
+        };
+    }
+
+    function bestStopSector(stopSectors) {
+        const normalized = asArray(stopSectors).map(normalizeStopSector).filter(Boolean);
+        if (!normalized.length) return null;
+
+        const sorted = normalized.slice().sort((left, right) => {
+            const leftRange = sectorSortRange(left.sectors);
+            const rightRange = sectorSortRange(right.sectors);
+            return leftRange.min - rightRange.min
+                || leftRange.max - rightRange.max
+                || String(left.track || "").localeCompare(String(right.track || ""))
+                || String(left.name || "").localeCompare(String(right.name || ""));
+        });
+        const first = sorted[0];
+        return {
+            ...first,
+            accessToPreviousVehicle: sorted.some((item) => item.accessToPreviousVehicle === false)
+                ? false
+                : first.accessToPreviousVehicle
+        };
     }
 
     function vehicleUniqueKey(vehicle) {
@@ -609,8 +666,8 @@
 
     function compareVehiclesByPhysicalOrder(left, right) {
         return vehicleUnitSortValue(left) - vehicleUnitSortValue(right)
-            || (left?.position || 9999) - (right?.position || 9999)
             || (left?.number || 9999) - (right?.number || 9999)
+            || (left?.position || 9999) - (right?.position || 9999)
             || String(left?.evn || left?.vehicleNumber || "").localeCompare(String(right?.evn || right?.vehicleNumber || ""));
     }
 
@@ -790,9 +847,100 @@
         return `${tr("swiss_sector", "Sector")} ${sector}`;
     }
 
-    function vehicleSector(vehicle, coach, selectedStop) {
-        const selectedSector = sectorForVehicle(vehicle, selectedStop);
-        return selectedSector?.sectors || coach?.sector || "TRAIN";
+    function vehicleSector(vehicle, coach, selectedStop, selectedSector = null) {
+        const stopSector = selectedSector || sectorForVehicle(vehicle, selectedStop);
+        return canonicalSector(stopSector?.sectors || coach?.sector || "TRAIN") || "TRAIN";
+    }
+
+    function vehicleSortNumber(item) {
+        const parsed = Number.parseInt(vehicleDisplayNumber(item.vehicle, item.coach), 10);
+        return Number.isFinite(parsed) ? parsed : 9999;
+    }
+
+    function itemSectorRange(item) {
+        return sectorSortRange(item.sector);
+    }
+
+    function itemUnitSortValue(item) {
+        const key = item.unitKey || "";
+        if (!key) return 9999;
+        const parsed = Number.parseInt(key.split(":")[1] || "", 10);
+        return Number.isFinite(parsed) ? parsed : 9999;
+    }
+
+    function directionForUnit(items) {
+        const ranked = items
+            .map((item) => ({
+                number: vehicleSortNumber(item),
+                sector: itemSectorRange(item).mid
+            }))
+            .filter((item) => item.number !== 9999 && item.sector !== 999);
+
+        if (ranked.length < 2) return 1;
+
+        let numberSum = 0;
+        let sectorSum = 0;
+        ranked.forEach((item) => {
+            numberSum += item.number;
+            sectorSum += item.sector;
+        });
+        const numberMean = numberSum / ranked.length;
+        const sectorMean = sectorSum / ranked.length;
+        let covariance = 0;
+        ranked.forEach((item) => {
+            covariance += (item.number - numberMean) * (item.sector - sectorMean);
+        });
+        return covariance < 0 ? -1 : 1;
+    }
+
+    function compareItemsWithinUnit(direction) {
+        return (left, right) => {
+            const leftRange = itemSectorRange(left);
+            const rightRange = itemSectorRange(right);
+            const leftNumber = vehicleSortNumber(left);
+            const rightNumber = vehicleSortNumber(right);
+            return leftRange.min - rightRange.min
+                || leftRange.max - rightRange.max
+                || (direction < 0 ? rightNumber - leftNumber : leftNumber - rightNumber)
+                || (left.vehicle?.position || 9999) - (right.vehicle?.position || 9999)
+                || String(left.vehicle?.evn || left.vehicle?.vehicleNumber || "").localeCompare(String(right.vehicle?.evn || right.vehicle?.vehicleNumber || ""));
+        };
+    }
+
+    function orderVehicleItemsForStop(items) {
+        const groups = [];
+        const byUnit = new Map();
+
+        items.forEach((item, index) => {
+            const key = item.unitKey || `single:${index}`;
+            if (!byUnit.has(key)) {
+                const range = itemSectorRange(item);
+                const group = {
+                    key,
+                    firstIndex: index,
+                    minSector: range.min,
+                    maxSector: range.max,
+                    unitSort: itemUnitSortValue(item),
+                    items: []
+                };
+                byUnit.set(key, group);
+                groups.push(group);
+            }
+
+            const group = byUnit.get(key);
+            const range = itemSectorRange(item);
+            group.minSector = Math.min(group.minSector, range.min);
+            group.maxSector = Math.max(group.maxSector, range.max);
+            group.items.push(item);
+        });
+
+        return groups
+            .sort((left, right) => left.minSector - right.minSector
+                || left.maxSector - right.maxSector
+                || left.unitSort - right.unitSort
+                || left.firstIndex - right.firstIndex)
+            .flatMap((group) => group.items.slice().sort(compareItemsWithinUnit(directionForUnit(group.items))))
+            .map((item, index) => ({ ...item, displayPosition: index + 1 }));
     }
 
     function buildVehicleItems(stop, vehicles, stops = []) {
@@ -801,7 +949,7 @@
 
         if (orderedVehicles.length) {
             const coachQueues = coachQueuesByNumber(coaches);
-            return orderedVehicles.map((vehicle) => {
+            const items = orderedVehicles.map((vehicle) => {
                 const coach = takeCoachForVehicle(vehicle, coachQueues);
                 const selectedSector = sectorForVehicle(vehicle, stop);
                 const status = activeVehicleStatus(vehicle, stop, stops);
@@ -811,10 +959,11 @@
                     selectedStop: stop,
                     selectedSector,
                     status,
-                    sector: vehicleSector(vehicle, coach, stop),
+                    sector: vehicleSector(vehicle, coach, stop, selectedSector),
                     unitKey: unitKeyForVehicle(vehicle)
                 };
             });
+            return orderVehicleItemsForStop(items);
         }
 
         return coaches.map((coach, index) => ({
@@ -823,9 +972,10 @@
             selectedStop: stop,
             selectedSector: null,
             status: null,
-            sector: coach?.sector || "TRAIN",
+            sector: canonicalSector(coach?.sector || "TRAIN") || "TRAIN",
             unitKey: unitKeyForCoach(coach),
-            fallbackIndex: index
+            fallbackIndex: index,
+            displayPosition: index + 1
         }));
     }
 
@@ -842,10 +992,23 @@
             });
     }
 
+    function vehicleItemsInDisplayOrder(stop, vehicles, stops = []) {
+        const seen = new Set();
+        return buildVehicleItems(stop, vehicles, stops)
+            .filter((item) => {
+                if (!item.vehicle) return false;
+                const key = vehicleUniqueKey(item.vehicle);
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            })
+            .map((item, index) => ({ ...item, displayPosition: index + 1 }));
+    }
+
     function buildSectorGroups(items) {
         const groups = [];
         items.forEach((item, index) => {
-            const key = item.sector || "TRAIN";
+            const key = canonicalSector(item.sector || "TRAIN") || "TRAIN";
             const last = groups[groups.length - 1];
             if (last && last.key === key) {
                 last.length += 1;
@@ -1108,14 +1271,15 @@
     }
 
     function renderVehicleDetails(data, selectedStop) {
-        const vehicles = vehiclesInDisplayOrder(selectedStop, data?.vehicles, data?.stops);
-        if (!vehicles.length) {
+        const items = vehicleItemsInDisplayOrder(selectedStop, data?.vehicles, data?.stops);
+        if (!items.length) {
             return `<div class="swiss-empty">${esc(tr("swiss_unavailable", "Swiss data unavailable"))}</div>`;
         }
 
-        return vehicles.map((vehicle, index) => {
-            const selectedSector = sectorForVehicle(vehicle, selectedStop);
-            const status = activeVehicleStatus(vehicle, selectedStop, data?.stops);
+        return items.map((item, index) => {
+            const vehicle = item.vehicle;
+            const selectedSector = item.selectedSector || sectorForVehicle(vehicle, selectedStop);
+            const status = item.status || activeVehicleStatus(vehicle, selectedStop, data?.stops);
             const fromTo = renderVehicleSegments(vehicle);
             const label = isLikelyLocomotive(vehicle) ? tr("swiss_loco", "Loco") : tr("swiss_vehicle", "Vehicle");
             const typeDescription = describeVehicleType(vehicle);
@@ -1123,7 +1287,7 @@
                 <div class="swiss-vehicle-row${vehicleIsClosedForDisplay(status, null) ? " swiss-vehicle-closed" : ""}">
                     <div class="swiss-vehicle-main">
                         <div class="swiss-vehicle-title">
-                            <span class="swiss-vehicle-position">${esc(tr("swiss_position", "Pos."))} ${vehicle.position || "--"}</span>
+                            <span class="swiss-vehicle-position">${esc(tr("swiss_position", "Pos."))} ${item.displayPosition || index + 1}</span>
                             <span>${esc(label)} ${esc(vehicle.number || vehicle.vehicleNumber || "--")}</span>
                             <span class="swiss-vehicle-type">${esc(vehicle.typeCodeName || vehicle.typeCode || "--")}</span>
                         </div>
