@@ -429,7 +429,7 @@
         }
 
         const hiddenType = classCode.toUpperCase().replace(/:.*$/, "");
-        if (["F", "X"].includes(hiddenType)) return null;
+        if (["F", "X", "LK"].includes(hiddenType)) return null;
 
         let classLabel = classCode;
         if (classCode.includes("12")) classLabel = "1/2";
@@ -703,22 +703,103 @@
         return vehicle?.number || coach?.number || vehicle?.vehicleNumber || vehicle?.position || "--";
     }
 
-    function coachQueuesByNumber(coaches) {
+    function vehicleQueuesByNumber(vehicles) {
         const queues = new Map();
-        asArray(coaches).forEach((coach) => {
-            if (!coach?.number) return;
-            const key = String(coach.number);
+        asArray(vehicles).forEach((vehicle) => {
+            if (!vehicle?.number) return;
+            const key = String(vehicle.number);
             if (!queues.has(key)) queues.set(key, []);
-            queues.get(key).push(coach);
+            queues.get(key).push(vehicle);
         });
         return queues;
     }
 
-    function takeCoachForVehicle(vehicle, queues) {
-        const key = vehicle?.number ? String(vehicle.number) : "";
-        if (!key || !queues.has(key)) return null;
-        const queue = queues.get(key);
-        return queue.length ? queue.shift() : null;
+    function vehicleQueuesByPosition(vehicles) {
+        const queues = new Map();
+        asArray(vehicles).forEach((vehicle) => {
+            if (!vehicle?.position) return;
+            const key = String(vehicle.position);
+            if (!queues.has(key)) queues.set(key, []);
+            queues.get(key).push(vehicle);
+        });
+        return queues;
+    }
+
+    function takeVehicleFromQueue(queue, usedKeys) {
+        if (!queue) return null;
+        while (queue.length) {
+            const vehicle = queue.shift();
+            const key = vehicleUniqueKey(vehicle);
+            if (!usedKeys.has(key)) {
+                usedKeys.add(key);
+                return vehicle;
+            }
+        }
+        return null;
+    }
+
+    function takeVehicleForCoach(coach, coachIndex, numberQueues, positionQueues, usedKeys) {
+        const numberKey = coach?.number ? String(coach.number) : "";
+        if (numberKey && numberQueues.has(numberKey)) {
+            return takeVehicleFromQueue(numberQueues.get(numberKey), usedKeys);
+        }
+
+        if (!numberKey && !coachTokenLooksLikeLoco(coach)) {
+            return takeVehicleFromQueue(positionQueues.get(String(coachIndex + 1)), usedKeys);
+        }
+
+        return null;
+    }
+
+    function buildVehicleItem(vehicle, coach, stop, stops) {
+        const selectedSector = sectorForVehicle(vehicle, stop);
+        const status = activeVehicleStatus(vehicle, stop, stops);
+        return {
+            vehicle,
+            coach,
+            selectedStop: stop,
+            selectedSector,
+            status,
+            sector: vehicleSector(vehicle, coach, stop, selectedSector),
+            unitKey: unitKeyForVehicle(vehicle) || unitKeyForCoach(coach)
+        };
+    }
+
+    function buildVehicleItemsFromCoaches(coaches, orderedVehicles, stop, stops) {
+        const usedVehicleKeys = new Set();
+        const numberQueues = vehicleQueuesByNumber(orderedVehicles);
+        const positionQueues = vehicleQueuesByPosition(orderedVehicles);
+        const items = asArray(coaches).map((coach, index) => {
+            const vehicle = takeVehicleForCoach(coach, index, numberQueues, positionQueues, usedVehicleKeys);
+            return buildVehicleItem(vehicle, coach, stop, stops);
+        });
+
+        asArray(orderedVehicles).forEach((vehicle) => {
+            const key = vehicleUniqueKey(vehicle);
+            if (usedVehicleKeys.has(key)) return;
+            usedVehicleKeys.add(key);
+            items.push(buildVehicleItem(vehicle, null, stop, stops));
+        });
+
+        return items.map((item, index) => ({ ...item, displayPosition: index + 1 }));
+    }
+
+    function buildVehicleItemsFromVehicles(orderedVehicles, stop, stops) {
+        return orderVehicleItemsForStop(asArray(orderedVehicles).map((vehicle) => buildVehicleItem(vehicle, null, stop, stops)));
+    }
+
+    function fallbackCoachItems(coaches, stop) {
+        return asArray(coaches).map((coach, index) => ({
+            vehicle: null,
+            coach,
+            selectedStop: stop,
+            selectedSector: null,
+            status: null,
+            sector: canonicalSector(coach?.sector || "TRAIN") || "TRAIN",
+            unitKey: unitKeyForCoach(coach),
+            fallbackIndex: index,
+            displayPosition: index + 1
+        }));
     }
 
     function shouldShowNoPassage(selectedSector, index) {
@@ -849,7 +930,7 @@
 
     function vehicleSector(vehicle, coach, selectedStop, selectedSector = null) {
         const stopSector = selectedSector || sectorForVehicle(vehicle, selectedStop);
-        return canonicalSector(stopSector?.sectors || coach?.sector || "TRAIN") || "TRAIN";
+        return canonicalSector(coach?.sector || stopSector?.sectors || "TRAIN") || "TRAIN";
     }
 
     function vehicleSortNumber(item) {
@@ -893,15 +974,41 @@
         return covariance < 0 ? -1 : 1;
     }
 
-    function compareItemsWithinUnit(direction) {
+    function shouldPreferNumberOrderForUnit(items) {
+        if (!asArray(items).some((item) => item.unitKey)) return false;
+
+        const numbers = asArray(items)
+            .map(vehicleSortNumber)
+            .filter((number) => number !== 9999);
+        const uniqueNumbers = Array.from(new Set(numbers)).sort((left, right) => left - right);
+        if (uniqueNumbers.length < 2) return false;
+
+        const span = uniqueNumbers[uniqueNumbers.length - 1] - uniqueNumbers[0] + 1;
+        return span <= uniqueNumbers.length + 2;
+    }
+
+    function directedNumberCompare(leftNumber, rightNumber, direction) {
+        if (leftNumber === 9999 || rightNumber === 9999) return 0;
+        return direction < 0 ? rightNumber - leftNumber : leftNumber - rightNumber;
+    }
+
+    function compareItemsWithinUnit(direction, preferNumberOrder = false) {
         return (left, right) => {
             const leftRange = itemSectorRange(left);
             const rightRange = itemSectorRange(right);
             const leftNumber = vehicleSortNumber(left);
             const rightNumber = vehicleSortNumber(right);
+            if (preferNumberOrder) {
+                return directedNumberCompare(leftNumber, rightNumber, direction)
+                    || leftRange.min - rightRange.min
+                    || leftRange.max - rightRange.max
+                    || (left.vehicle?.position || 9999) - (right.vehicle?.position || 9999)
+                    || String(left.vehicle?.evn || left.vehicle?.vehicleNumber || "").localeCompare(String(right.vehicle?.evn || right.vehicle?.vehicleNumber || ""));
+            }
+
             return leftRange.min - rightRange.min
                 || leftRange.max - rightRange.max
-                || (direction < 0 ? rightNumber - leftNumber : leftNumber - rightNumber)
+                || directedNumberCompare(leftNumber, rightNumber, direction)
                 || (left.vehicle?.position || 9999) - (right.vehicle?.position || 9999)
                 || String(left.vehicle?.evn || left.vehicle?.vehicleNumber || "").localeCompare(String(right.vehicle?.evn || right.vehicle?.vehicleNumber || ""));
         };
@@ -939,7 +1046,7 @@
                 || left.maxSector - right.maxSector
                 || left.unitSort - right.unitSort
                 || left.firstIndex - right.firstIndex)
-            .flatMap((group) => group.items.slice().sort(compareItemsWithinUnit(directionForUnit(group.items))))
+            .flatMap((group) => group.items.slice().sort(compareItemsWithinUnit(directionForUnit(group.items), shouldPreferNumberOrderForUnit(group.items))))
             .map((item, index) => ({ ...item, displayPosition: index + 1 }));
     }
 
@@ -948,35 +1055,13 @@
         const coaches = parseFormationShortString(stop?.formationShortString);
 
         if (orderedVehicles.length) {
-            const coachQueues = coachQueuesByNumber(coaches);
-            const items = orderedVehicles.map((vehicle) => {
-                const coach = takeCoachForVehicle(vehicle, coachQueues);
-                const selectedSector = sectorForVehicle(vehicle, stop);
-                const status = activeVehicleStatus(vehicle, stop, stops);
-                return {
-                    vehicle,
-                    coach,
-                    selectedStop: stop,
-                    selectedSector,
-                    status,
-                    sector: vehicleSector(vehicle, coach, stop, selectedSector),
-                    unitKey: unitKeyForVehicle(vehicle)
-                };
-            });
-            return orderVehicleItemsForStop(items);
+            if (coaches.length) {
+                return buildVehicleItemsFromCoaches(coaches, orderedVehicles, stop, stops);
+            }
+            return buildVehicleItemsFromVehicles(orderedVehicles, stop, stops);
         }
 
-        return coaches.map((coach, index) => ({
-            vehicle: null,
-            coach,
-            selectedStop: stop,
-            selectedSector: null,
-            status: null,
-            sector: canonicalSector(coach?.sector || "TRAIN") || "TRAIN",
-            unitKey: unitKeyForCoach(coach),
-            fallbackIndex: index,
-            displayPosition: index + 1
-        }));
+        return fallbackCoachItems(coaches, stop);
     }
 
     function vehiclesInDisplayOrder(stop, vehicles, stops = []) {
