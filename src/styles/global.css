@@ -2059,6 +2059,8 @@ button.swiss-section-title {
 .badge-arrow        { background-color: #bc3433; }
 .badge-intercity    { background-color: #008ad8; }
 .badge-international{ background-color: #3c8149; }
+.train-badge.badge-ncl { background-color: #d9dee7; color: #263241 !important; }
+.train-badge.badge-statistics-fallback { background-color: #69737f; }
 .badge-storico      { background-color: #827654; }
 .badge-espresso     { background-color: #35556b; }
 
@@ -2686,6 +2688,14 @@ button.swiss-section-title {
 
 .statistics-table-link:hover {
     color: color-mix(in oklch, var(--color-primary) 75%, var(--color-base-content));
+}
+
+.statistics-category-badge {
+    min-width: 46px;
+    padding: 3px 8px;
+    font-size: 0.78rem;
+    box-shadow: none;
+    top: 0;
 }
 
 .statistics-bars {

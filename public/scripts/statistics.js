@@ -1,7 +1,7 @@
 (function () {
     const API_BASE = "/api/statistics";
     const PAGE_SIZE = 25;
-    const CATEGORY_OPTIONS = ["REG", "RV", "RE", "MET", "FR", "FA", "FB", "IC", "ICN", "EC", "EN", "EXP", "TS"];
+    const CATEGORY_OPTIONS = ["REG", "RV", "RE", "MET", "NCL", "FR", "FA", "FB", "IC", "ICN", "EC", "EN", "EXP", "TS"];
 
     const state = {
         date: "",
@@ -18,6 +18,22 @@
     };
 
     const palette = ["#65bfc0", "#5b9ee4", "#ec6685", "#f4b35d", "#83c77f", "#a78bfa", "#f78fb3", "#7dd3fc"];
+    const CATEGORY_COLORS = {
+        REG: "#70a84a",
+        RE: "#70a84a",
+        RV: "#70a84a",
+        MET: "#70a84a",
+        NCL: "#d9dee7",
+        FR: "#bc3433",
+        FB: "#bc3433",
+        FA: "#bc3433",
+        IC: "#008ad8",
+        ICN: "#008ad8",
+        EC: "#3c8149",
+        EN: "#3c8149",
+        TS: "#827654",
+        EXP: "#35556b"
+    };
 
     function tr(key, fallback) {
         const dict = typeof translations !== "undefined" ? translations : window.translations;
@@ -56,6 +72,29 @@
     function formatMinutes(value) {
         const minutes = asNumber(value, 0);
         return `${minutes.toLocaleString(window.currentLang === "zh" ? "zh-CN" : "en-GB")} ${tr("minutes", "min")}`;
+    }
+
+    function categoryCode(value) {
+        return String(value || "").trim().toUpperCase();
+    }
+
+    function categoryColor(value) {
+        return CATEGORY_COLORS[categoryCode(value)] || palette[0];
+    }
+
+    function categoryBadgeHtml(value) {
+        const cat = categoryCode(value);
+        if (!cat || cat === "--") return "--";
+        const badgeClass = (window.getBadgeClass ? window.getBadgeClass(cat) : "") || "badge-statistics-fallback";
+        return `<span class="train-badge statistics-category-badge ${esc(badgeClass)}">${esc(cat)}</span>`;
+    }
+
+    function operatorName(value) {
+        const raw = String(value ?? "").trim();
+        if (!raw) return "--";
+        const map = window.CLIENT_MAP || {};
+        const mapped = map[raw] || map[Number(raw)];
+        return mapped || raw;
     }
 
     function buildTrainHref(item) {
@@ -209,8 +248,10 @@
         const circulated = getPath(summary, ["counts.circulated", "counts.treniGiorno", "treniGiorno", "circulated"], 0);
         const running = getPath(summary, ["counts.running", "counts.treniCircolanti", "treniCircolanti", "running"], 0);
         const regular = getPath(summary, ["counts.regular", "regular"], 0);
+        const delayed = getPath(summary, ["counts.delayed", "delayed"], 0);
         const cancelled = getPath(summary, ["counts.cancelled", "cancelled"], 0);
         const rescheduled = getPath(summary, ["counts.rescheduled", "rescheduled", "counts.reprogrammed"], 0);
+        const notDeparted = getPath(summary, ["counts.notDeparted", "notDeparted", "counts.not_departed"], 0);
         const avgDelay = getPath(summary, ["delayTotals.average", "delayTotals.avg", "avgDelay", "averageDelay"], 0);
         const indexedStations = getPath(summary, ["coverage.stations", "stationsIndexed", "stationCount"], null);
         const departureDelayed = getPath(summary, ["punctuality.departure.delayed", "departure.delayed"], 0);
@@ -228,8 +269,10 @@
             circulated,
             running,
             regular,
+            delayed,
             cancelled,
             rescheduled,
+            notDeparted,
             avgDelay,
             indexedStations,
             departureDelayed,
@@ -368,10 +411,10 @@
         const max = Math.max(...data.map((item) => item.value), 1);
         return `
             <div class="statistics-bars">
-                ${data.slice(0, 10).map((item, index) => `
+                ${data.slice(0, 10).map((item) => `
                     <div class="statistics-bar-row">
-                        <span>${esc(item.label)}</span>
-                        <div><i style="width:${Math.max(2, (item.value / max) * 100)}%;background:${palette[index % palette.length]}"></i></div>
+                        <span>${categoryBadgeHtml(item.label)}</span>
+                        <div><i style="width:${Math.max(2, (item.value / max) * 100)}%;background:${esc(categoryColor(item.label))}"></i></div>
                         <strong>${esc(formatNumber(item.value))}</strong>
                     </div>
                 `).join("")}
@@ -388,6 +431,7 @@
         if ($("statisticsRegularityChart")) {
             $("statisticsRegularityChart").innerHTML = renderDonut([
                 { label: tr("statistics_regular", "Regular"), value: values.regular, color: "#65bfc0" },
+                { label: tr("statistics_status_delayed", "Delayed"), value: values.delayed, color: "#5b9ee4" },
                 { label: tr("statistics_rescheduled", "Rescheduled"), value: values.rescheduled, color: "#f4b35d" },
                 { label: tr("statistics_cancelled", "Cancelled"), value: values.cancelled, color: "#ec6685" }
             ], tr("statistics_trains", "trains"));
@@ -543,12 +587,12 @@
         if (column === "code") return item.code || item.stationCode || item.id || "--";
         if (column === "relation") return item.relation || [item.from, item.to].filter(Boolean).join(" → ") || "--";
         if (column === "category") return item.category || item.trainCategory || "--";
-        if (column === "operator") return item.operator || item.client || "--";
+        if (column === "operator") return operatorName(item.operator || item.client);
         if (column === "delay") return formatMinutes(item.delay ?? item.totalDelay ?? item.arrivalDelay ?? item.departureDelay);
         if (column === "avgDelay") return formatMinutes(item.avgDelay ?? item.averageDelay ?? item.delayAverage);
         if (column === "monitored") return formatNumber(item.monitored ?? item.count ?? item.total);
         if (column === "cancelled") return formatNumber(item.cancelled);
-        if (column === "status") return statusLabel(item.status || item.state || (item.cancelled ? "cancelled" : item.delay > 5 ? "delayed" : "regular"));
+        if (column === "status") return statusLabel(item.status || item.state || (item.notDeparted ? "not_departed" : item.cancelled ? "cancelled" : item.delay > 5 ? "delayed" : "regular"));
         return item[column] ?? "--";
     }
 
@@ -562,12 +606,14 @@
             const href = buildStationHref(item);
             return href ? `<a class="statistics-table-link" href="${esc(href)}">${esc(value)}</a>` : esc(value);
         }
+        if (column === "category") return categoryBadgeHtml(value);
         return esc(value);
     }
 
     function statusLabel(status) {
         const normalized = String(status || "").toLowerCase();
         if (normalized.includes("cancel")) return tr("statistics_status_cancelled", "Cancelled");
+        if (normalized.includes("not_departed") || normalized.includes("not departed") || normalized.includes("non_partito") || normalized.includes("nonpartito")) return tr("statistics_status_not_departed", tr("not_departed", "Not Departed"));
         if (normalized.includes("resched") || normalized.includes("ripro")) return tr("statistics_status_rescheduled", "Rescheduled");
         if (normalized.includes("delay") || normalized.includes("ritard")) return tr("statistics_status_delayed", "Delayed");
         return tr("statistics_status_regular", "Regular");

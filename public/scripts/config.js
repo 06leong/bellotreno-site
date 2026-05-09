@@ -40,6 +40,7 @@ const CAT_MAP = {
     "FA": "Frecciargento",
     "EN": "EuroNight",
     "RE": "Regionale",
+    "NCL": "NCL",
     "TS": "Treno Storico",
     "EXP": "Espresso"
 };
@@ -111,6 +112,7 @@ window.getBadgeClass = function (catCode) {
     if (['FR', 'FB', 'FA'].includes(catCode)) return 'badge-arrow';
     if (['IC', 'ICN'].includes(catCode)) return 'badge-intercity';
     if (['EC', 'EN'].includes(catCode)) return 'badge-international';
+    if (catCode === 'NCL') return 'badge-ncl';
     if (catCode === 'TS') return 'badge-storico';
     if (catCode === 'EXP') return 'badge-espresso';
     return '';

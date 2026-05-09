@@ -31,6 +31,7 @@ COLLECTOR_MAX_RUNTIME_SECONDS = int(os.getenv("COLLECTOR_MAX_RUNTIME_SECONDS", "
 COLLECTOR_CONCURRENCY = max(1, int(os.getenv("COLLECTOR_CONCURRENCY", "3")))
 DETAIL_LIMIT_PER_RUN = max(0, int(os.getenv("DETAIL_LIMIT_PER_RUN", "0")))
 RETENTION_DAYS = max(1, int(os.getenv("RETENTION_DAYS", "30")))
+STATION_REGISTRY_REFRESH_DAYS = max(1, int(os.getenv("STATION_REGISTRY_REFRESH_DAYS", "7")))
 REGION_CODES = [
     int(item.strip())
     for item in os.getenv("REGION_CODES", "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22").split(",")
@@ -67,6 +68,11 @@ def drop_if_incompatible(conn: sqlite3.Connection, table: str, required_columns:
     row = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone()
     if row and not required_columns.issubset(table_columns(conn, table)):
         conn.execute(f"DROP TABLE {table}")
+
+
+def ensure_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
+    if column not in table_columns(conn, table):
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
 def init_db() -> None:
@@ -118,6 +124,7 @@ def init_db() -> None:
                 delay INTEGER DEFAULT 0,
                 cancelled INTEGER DEFAULT 0,
                 rescheduled INTEGER DEFAULT 0,
+                not_departed INTEGER DEFAULT 0,
                 scheduled_departure TEXT,
                 scheduled_arrival TEXT,
                 last_seen TEXT,
@@ -198,6 +205,7 @@ def init_db() -> None:
             );
             """
         )
+        ensure_column(conn, "trains", "not_departed", "INTEGER DEFAULT 0")
 
 
 def now_rome() -> datetime:
@@ -210,6 +218,16 @@ def today_rome() -> str:
 
 def iso_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def parse_iso_datetime(value: Any) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
 
 
 def js_date_string(dt: datetime | None = None) -> str:
@@ -278,6 +296,15 @@ def as_int(value: Any, default: int = 0) -> int:
         return default
 
 
+def as_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    text = str(value or "").strip().lower()
+    return text in {"1", "true", "t", "yes", "y", "si", "s"}
+
+
 def pick(source: dict[str, Any], *keys: str, default: Any = None) -> Any:
     for key in keys:
         value = source.get(key)
@@ -332,9 +359,23 @@ def status_from_item(item: dict[str, Any]) -> str:
         return "cancelled"
     if provvedimento in {2, 3} or str(pick(item, "riprogrammazione", default="N")).upper() not in {"", "N", "NO"}:
         return "rescheduled"
+    if is_not_departed(item):
+        return "not_departed"
     if as_int(pick(item, "ritardo", "delay", default=0)) > 5:
         return "delayed"
     return "regular"
+
+
+def is_not_departed(item: dict[str, Any]) -> bool:
+    if as_bool(pick(item, "nonPartito", "notDeparted", default=False)):
+        return True
+    for key in ("compRitardo", "compRitardoAndamento"):
+        value = item.get(key)
+        values = value if isinstance(value, list) else [value]
+        for entry in values:
+            if "non partito" in str(entry or "").lower() or "not departed" in str(entry or "").lower():
+                return True
+    return False
 
 
 def normalize_station_from_region(raw: dict[str, Any], region_code: int) -> dict[str, Any] | None:
@@ -407,8 +448,35 @@ def load_optional_station_csv() -> list[dict[str, Any]]:
     return rows
 
 
-def refresh_station_registry() -> list[dict[str, Any]]:
+def load_station_registry() -> list[dict[str, Any]]:
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT station_code, station_name, region_code, latitude, longitude, source, updated_at
+            FROM station_registry
+            ORDER BY region_code, station_name
+            """
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def station_registry_refresh_due() -> bool:
+    with db() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) AS total, MAX(updated_at) AS last_updated FROM station_registry"
+        ).fetchone()
+    if not row or as_int(row["total"]) == 0:
+        return True
+    last_updated = parse_iso_datetime(row["last_updated"])
+    if not last_updated:
+        return True
+    age = datetime.now(timezone.utc) - last_updated.astimezone(timezone.utc)
+    return age >= timedelta(days=STATION_REGISTRY_REFRESH_DAYS)
+
+
+def refresh_station_registry(require_complete: bool = False) -> list[dict[str, Any]]:
     stations_by_code: dict[str, dict[str, Any]] = {}
+    failed_regions = 0
     with ThreadPoolExecutor(max_workers=min(COLLECTOR_CONCURRENCY, 4)) as executor:
         futures = [executor.submit(fetch_region_stations, region_code) for region_code in REGION_CODES]
         for future in as_completed(futures):
@@ -416,12 +484,18 @@ def refresh_station_registry() -> list[dict[str, Any]]:
                 for station in future.result():
                     stations_by_code.setdefault(station["station_code"], station)
             except Exception as exc:
+                failed_regions += 1
                 app.logger.warning("station region fetch failed: %s", exc)
 
     for station in load_optional_station_csv():
         stations_by_code.setdefault(station["station_code"], station)
 
+    if failed_regions and require_complete:
+        raise RuntimeError(f"station registry refresh failed for {failed_regions} region(s)")
+
     stations = sorted(stations_by_code.values(), key=lambda item: (item["region_code"], item["station_name"]))
+    if not stations:
+        raise RuntimeError("station registry refresh returned no stations")
     with db() as conn:
         conn.executemany(
             """
@@ -440,7 +514,20 @@ def refresh_station_registry() -> list[dict[str, Any]]:
             """,
             stations,
         )
-    return stations
+    return load_station_registry()
+
+
+def stations_for_collection() -> tuple[list[dict[str, Any]], bool]:
+    cached = load_station_registry()
+    if cached and not station_registry_refresh_due():
+        return cached, False
+    try:
+        return refresh_station_registry(require_complete=bool(cached)), True
+    except Exception as exc:
+        if cached:
+            app.logger.warning("station registry refresh failed; using cached registry: %s", exc)
+            return cached, False
+        raise
 
 
 def fetch_board(station_code: str, board_type: str) -> list[dict[str, Any]]:
@@ -480,6 +567,7 @@ def normalize_train(item: dict[str, Any], seen_at: str, has_details: bool = Fals
     status = status_from_item(item)
     cancelled = 1 if status == "cancelled" else 0
     rescheduled = 1 if status == "rescheduled" else 0
+    not_departed = 1 if is_not_departed(item) else 0
     completed = cancelled
     if stops:
         last_arrival_actual = pick(last_stop, "arrivoReale", "effettiva", default=None)
@@ -509,6 +597,7 @@ def normalize_train(item: dict[str, Any], seen_at: str, has_details: bool = Fals
         "delay": max(delay, departure_delay, arrival_delay),
         "cancelled": cancelled,
         "rescheduled": rescheduled,
+        "not_departed": not_departed,
         "scheduled_departure": scheduled_departure,
         "scheduled_arrival": scheduled_arrival,
         "last_seen": seen_at,
@@ -525,12 +614,12 @@ def upsert_train(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
         INSERT INTO trains (
             date, train_key, train_number, departure_epoch_ms, category, operator, status, origin, destination,
             origin_code, destination_code, relation_key, departure_delay, arrival_delay, delay,
-            cancelled, rescheduled, scheduled_departure, scheduled_arrival, last_seen, detail_last_seen,
+            cancelled, rescheduled, not_departed, scheduled_departure, scheduled_arrival, last_seen, detail_last_seen,
             has_details, completed, raw_json
         ) VALUES (
             :date, :train_key, :train_number, :departure_epoch_ms, :category, :operator, :status, :origin, :destination,
             :origin_code, :destination_code, :relation_key, :departure_delay, :arrival_delay, :delay,
-            :cancelled, :rescheduled, :scheduled_departure, :scheduled_arrival, :last_seen, :detail_last_seen,
+            :cancelled, :rescheduled, :not_departed, :scheduled_departure, :scheduled_arrival, :last_seen, :detail_last_seen,
             :has_details, :completed, :raw_json
         )
         ON CONFLICT(date, train_key) DO UPDATE SET
@@ -549,6 +638,7 @@ def upsert_train(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
             delay=excluded.delay,
             cancelled=excluded.cancelled,
             rescheduled=excluded.rescheduled,
+            not_departed=excluded.not_departed,
             scheduled_departure=COALESCE(NULLIF(excluded.scheduled_departure, ''), trains.scheduled_departure),
             scheduled_arrival=COALESCE(NULLIF(excluded.scheduled_arrival, ''), trains.scheduled_arrival),
             last_seen=excluded.last_seen,
@@ -810,7 +900,7 @@ def collect_once() -> dict[str, Any]:
             ),
         )
 
-    stations = refresh_station_registry()
+    stations, station_registry_refreshed = stations_for_collection()
     board_rows_count = 0
     detail_candidates_by_key: dict[str, dict[str, str]] = {}
 
@@ -867,6 +957,8 @@ def collect_once() -> dict[str, Any]:
         "date": date,
         "lastUpdated": seen_at,
         "stations": len(stations),
+        "stationRegistryRefreshed": station_registry_refreshed,
+        "stationRegistryRefreshDays": STATION_REGISTRY_REFRESH_DAYS,
         "boardTypes": BOARD_TYPES,
         "boardRows": board_rows_count,
         "detailQueue": len(queue),
@@ -903,8 +995,10 @@ def summary_for_date(date: str) -> dict[str, Any]:
                 COUNT(*) AS monitored,
                 SUM(cancelled) AS cancelled,
                 SUM(rescheduled) AS rescheduled,
+                SUM(CASE WHEN status='delayed' THEN 1 ELSE 0 END) AS delayed,
+                SUM(CASE WHEN status='not_departed' THEN 1 ELSE 0 END) AS not_departed,
                 SUM(CASE WHEN status='regular' THEN 1 ELSE 0 END) AS regular,
-                AVG(delay) AS avg_delay
+                AVG(CASE WHEN status<>'not_departed' THEN delay END) AS avg_delay
             FROM trains WHERE date=?
             """,
             (date,),
@@ -915,7 +1009,7 @@ def summary_for_date(date: str) -> dict[str, Any]:
                 SUM(CASE WHEN arrival_delay < 0 THEN 1 ELSE 0 END) AS early,
                 SUM(CASE WHEN arrival_delay BETWEEN 0 AND 5 THEN 1 ELSE 0 END) AS on_time,
                 SUM(CASE WHEN arrival_delay > 5 THEN 1 ELSE 0 END) AS delayed
-            FROM trains WHERE date=?
+            FROM trains WHERE date=? AND status<>'not_departed'
             """,
             (date,),
         ).fetchone()
@@ -924,7 +1018,7 @@ def summary_for_date(date: str) -> dict[str, Any]:
             SELECT
                 SUM(CASE WHEN departure_delay BETWEEN 0 AND 5 THEN 1 ELSE 0 END) AS on_time,
                 SUM(CASE WHEN departure_delay > 5 THEN 1 ELSE 0 END) AS delayed
-            FROM trains WHERE date=?
+            FROM trains WHERE date=? AND status<>'not_departed'
             """,
             (date,),
         ).fetchone()
@@ -952,8 +1046,10 @@ def summary_for_date(date: str) -> dict[str, Any]:
             "circulated": treni_giorno,
             "monitored": monitored,
             "regular": as_int(counts["regular"] if counts else 0),
+            "delayed": as_int(counts["delayed"] if counts else 0),
             "cancelled": as_int(counts["cancelled"] if counts else 0),
             "rescheduled": as_int(counts["rescheduled"] if counts else 0),
+            "notDeparted": as_int(counts["not_departed"] if counts else 0),
         },
         "delayTotals": {"average": round(float(counts["avg_delay"] or 0), 2) if counts else 0},
         "punctuality": {
@@ -1057,7 +1153,8 @@ def trains_endpoint() -> Response:
     sql = f"""
         SELECT train_key, train_number AS trainNumber, category, operator, status,
                origin, destination, relation_key AS route, delay, departure_delay AS departureDelay,
-               arrival_delay AS arrivalDelay, has_details AS hasDetails, completed, last_seen AS lastSeen
+               arrival_delay AS arrivalDelay, not_departed AS notDeparted,
+               has_details AS hasDetails, completed, last_seen AS lastSeen
         FROM trains
         WHERE {' AND '.join(where)}
         ORDER BY last_seen DESC, delay DESC

@@ -22,7 +22,8 @@ Do not commit `.env`. Use `.env.example` as the template.
 
 The statistics service follows the same broad model as `railway-opendata`:
 
-- it refreshes the ViaggiaTreno station registry from `elencoStazioni/1..22`;
+- it refreshes the ViaggiaTreno station registry from `elencoStazioni/1..22` weekly by default, then reuses the saved SQLite `station_registry` between refreshes;
+- if a station-registry refresh fails, it falls back to the saved `station_registry` instead of aborting collection;
 - it scans every discovered station board, not a small seed list;
 - it discovers trains from station departures and calls `andamentoTreno` with `(origin station, train number, departure-day midnight)`;
 - it stores one row per train and one row per stop in SQLite, then rebuilds daily station/relation aggregates.
