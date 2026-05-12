@@ -20,7 +20,7 @@ No lint, typecheck, or test scripts exist. TypeScript is checked implicitly by A
 
 - **Static site** (`output: 'static'` in `astro.config.mjs`). No SSR.
 - **`site`** is set to `'https://real.bellotreno.org'` in `astro.config.mjs` — required for sitemap generation and canonical URLs.
-- **Astro pages** live in `src/pages/`: `index.astro`, `station.astro`, `infomobilita.astro`, `about.astro`.
+- **Astro pages** live in `src/pages/`: `index.astro`, `station.astro`, `infomobilita.astro`, `statistics.astro`, `about.astro`.
 - **Layouts**: single `src/layouts/BaseLayout.astro` wraps all pages. Accepts `title`, `description`, and `pageScripts: string[]` props.
 - **Components**: `src/components/` — `Navbar.astro`, `Footer.astro`, `BackToTop.astro`.
 - **All application logic is vanilla JS** in `public/scripts/` (not bundled by Astro, served as static files):
@@ -30,6 +30,8 @@ No lint, typecheck, or test scripts exist. TypeScript is checked implicitly by A
   - `main.js` — train search, results rendering, SmartCaring card (index page)
   - `station.js` — station departure/arrival board utilities **+ full station page logic** (`_stLoadBoard`, `_stRenderBoard`, `_stFetchWeather`, `window.switchBoardType`)
   - `infomobilita.js` — RSS/news page
+  - `statistics.js` — railway statistics dashboard, charts, query table, and links into train/station pages
+  - `swiss.js` — Swiss OpenTransportData formation fetch, timeline merge, coach strip, vehicle details, TILO/EC/REG cross-border enrichment
   - `theme-init.js` — inlined in `<head>` to prevent flash
 
 **Script load order in BaseLayout matters**: `config.js → i18n.js → common.js → [page-specific scripts]`. Page scripts passed via `pageScripts` prop are appended last.
@@ -62,6 +64,34 @@ window.COUNTER_URL = "https://site-counter.bellotreno.workers.dev/"
 ```
 
 These Workers are **not in this repo**. Direct calls to `viaggiatreno.it` fail in browser due to CORS.
+
+---
+
+## Current feature notes
+
+### Swiss formation
+
+- Pages Functions live under `functions/api/swiss/`. They read `SWISS_TRAIN_FORMATION_API_KEY` from Cloudflare Pages Secrets and must never expose the token to the browser.
+- `public/scripts/swiss.js` owns Swiss fetch/cache, timeline merge, TILO image override, coach strip rendering, and vehicle detail rendering.
+- Vehicle identity is based primarily on EVN. Same EVN records from different route segments are merged into one display vehicle with `segments`.
+- Closed state is segment-specific. Do not OR `closed` / `trolleyStatus` globally across all segments; the UI must resolve the active segment for the selected stop.
+- Coach display must keep a stable vehicle sequence while using the selected stop only for track/sector/no-passage display. Sector labels should be normalized and displayed from A onward in station-facing order.
+- Known EMU groups need conservative handling: ETR 610 usually groups in 7-car units, RABe 501/Giruno in 11-car units. Preserve unit order and avoid duplicate `position` values causing interleaved coach sequences.
+- Station board Swiss enrichment is protective: only replace a visible origin/destination when ViaggiaTreno is blank or clearly truncated at a border station such as Chiasso or Domodossola. Never downgrade a correct Italian terminal to a Swiss border station.
+
+### Statistics
+
+- The frontend statistics page uses `public/scripts/statistics.js` and calls only `/api/statistics/*`.
+- `functions/api/statistics/[[path]].js` proxies requests to `STATISTICS_API_BASE_URL` and injects `STATISTICS_API_TOKEN`. The browser must not know the VPS token.
+- The VPS statistics service lives in `rfi-proxy/statistics/` but deploys as a separate Docker service in the same compose project. It stores SQLite data in the mounted `statistics-data` volume.
+- `/statistiche/0` from ViaggiaTreno is only a global counter. Category, route, station, delay, cancellation, and relation statistics come from station registry + station boards + `andamentoTreno` sampling.
+- Keep UI labels concrete. Avoid showing ratios such as "coverage" unless the numerator and denominator are clear to users.
+
+### Cache and deployment
+
+- Static `/scripts/*.js` files are served with build-version query parameters from `BaseLayout.astro`.
+- `public/_headers` keeps HTML and scripts revalidated while allowing hashed Astro assets under `/_astro/*` to be immutable.
+- Do not add a service worker unless the update lifecycle is explicitly designed; stale SW caches are harder to debug than normal browser cache.
 
 ---
 

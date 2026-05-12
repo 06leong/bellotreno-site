@@ -1202,3 +1202,18 @@ https://api.opentransportdata.swiss/formation/v2/formations_full
 9. Token hash 不用于 API 调用。
 10. 跨境数据要接受“部分字段缺失”，但不能丢掉可用的 stop sequence 和 geometry。
 
+## 15. BelloTreno 当前实现补充（2026-05）
+
+BelloTreno 当前上线版本只把 Swiss OpenTransportData 用作实时编组和跨境补全，不把它做成完整瑞士路线规划器：
+
+- 车次详情使用 Train Formation Service；OJP 仍保留为未来行程规划或更完整路线几何的候选方案。
+- Cloudflare Pages Function 从 `SWISS_TRAIN_FORMATION_API_KEY` 读取 token，并在服务端请求 `formation/v2/formations_full`，前端不会接触 token。
+- 只对当天 `Europe/Zurich` operation date 自动查询；查询失败、无数据或不支持时，页面必须完全回退 ViaggiaTreno。
+- 车辆去重以 EVN 为第一优先级。同一个 EVN 在不同运行区间出现多次时，应合并为同一辆车，并保留多个 `segments`。
+- `closed`、`vehicleWillBePutAway`、`trolleyStatus` 是分段状态，不能跨所有区间做全局 OR 合并；UI 应按当前选中停站解析有效区间。
+- `accessToPreviousVehicle=false` 只表示与前一辆车不可贯通，不等于车辆关闭，也不应触发置灰。
+- Coach 区域以标准化后的车辆列表保证稳定身份和车辆详情，当前选中停站只负责提供 track、sector 和 no-passage 展示。
+- 扇区标签需要标准化，并以站台视角从 A 开始显示。ETR 610 通常按 7 节一组、RABe 501/Giruno 通常按 11 节一组处理，避免 provider 重复 position 造成重联车辆交错。
+- `formationShortString` 可作为停站层面的补充提示，但不能替代 EVN 车辆身份。
+- 车站页跨境补全必须保守：只有 ViaggiaTreno 终点/始发为空或明显截断在 Chiasso、Domodossola 等边境站时才替换；不能把正确的意大利终点降级为瑞士边境站。
+

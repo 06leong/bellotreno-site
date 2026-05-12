@@ -1,230 +1,128 @@
 # BelloTreno
 
+![BelloTreno project banner](public/readme-banner.svg)
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Astro](https://img.shields.io/badge/Astro-5.x-orange.svg)](https://astro.build/)
-[![Cloudflare Pages](https://img.shields.io/badge/Deploy-Cloudflare%20Pages-f38020.svg)](https://pages.cloudflare.com/)
+[![Cloudflare Pages](https://img.shields.io/badge/Cloudflare-Pages-f38020.svg)](https://pages.cloudflare.com/)
 
-BelloTreno is a web application for checking real-time Italian railway information, with a focus on train running details, station departure and arrival boards, disruption notices, and cross-border services between Italy and Switzerland.
+BelloTreno is a real-time railway information website focused on Italian trains.
+It brings together train running details, station departure and arrival boards,
+RFI travel notices, cross-border formation data, and daily operating statistics in
+a cleaner interface for railway enthusiasts and travelers.
 
 Live site: [real.bellotreno.org](https://real.bellotreno.org/)
 
-This project is a personal railway data research and presentation project. It is not affiliated with Trenitalia, RFI, FS Italiane, SBB, Trenord, TILO, or OpenTransportData.swiss.
+This is a personal railway data research project. It is not affiliated with
+Trenitalia, RFI, FS Italiane, SBB, Trenord, TILO, or OpenTransportData.swiss.
 
-## Features
+## What It Does
 
-- Search Italian trains by train number through ViaggiaTreno data.
-- Display real-time train status, delay, platforms, stop sequence, and route details.
-- Show station departure and arrival boards with platform and destination information.
-- Provide RFI travel notices from public RSS feeds.
-- Show SmartCaring running reports for supported train categories.
-- Support Chinese, English, and Italian UI text.
-- Support light, dark, and system themes.
-- Enrich supported Swiss cross-border trains with OpenTransportData.swiss Train Formation data.
-- Add Swiss-only stops, platform sectors, coach formation, vehicle details, accessibility, bicycle, and seat information when formation data is available.
-- Keep the ViaggiaTreno-only experience unchanged when Swiss data is unavailable.
+BelloTreno helps users inspect the current state of Italian railway services:
 
-## Tech Stack
+- Search a train number and view its route, status, delay, platforms, stop list,
+  and last known position.
+- Open station boards for departures and arrivals, including platform changes and
+  destination information.
+- Read RFI travel notices and filter public disruption information by region.
+- View supported Swiss cross-border train formations, including coach order,
+  platform sectors, accessibility, bicycle, seat, and vehicle details.
+- Enrich selected EC, TILO, SBB/Trenord regional, and other Swiss-linked services
+  when OpenTransportData.swiss formation data is available.
+- Explore daily railway operating statistics, including running trains,
+  cancellations, rescheduled services, categories, punctuality, stations, and
+  relations.
+- Use the site in Chinese, English, or Italian, with light, dark, and system
+  themes.
 
-- [Astro](https://astro.build/) 5
-- Tailwind CSS 4
-- DaisyUI 5
-- Vanilla JavaScript
-- Cloudflare Pages
-- Cloudflare Pages Functions
-- Cloudflare Workers
-- OpenTransportData.swiss Train Formation Service
+## Main Features
 
-The ViaggiaTreno backend proxy used by this deployment is hosted separately and is not included in this repository.
+### Train Details
 
-## Architecture
+The main search page is built around train-number lookup. It keeps the
+ViaggiaTreno result as the authoritative Italian data source, then adds extra
+information only when a compatible source is available.
 
-```text
-Browser
-  |
-  | Static frontend
-  v
-Cloudflare Pages
-  |
-  | /api/swiss/formation
-  v
-Cloudflare Pages Function
-  |
-  | Bearer token stored in Cloudflare secret
-  v
-OpenTransportData.swiss Train Formation API
+### Station Boards
 
-Browser
-  |
-  | ViaggiaTreno and RFI requests
-  v
-Cloudflare Workers proxy
-  |
-  v
-External backend proxy
-  |
-  v
-ViaggiaTreno / RFI public services
-```
+Station pages show departures and arrivals with operator/category badges,
+platforms, route endpoints, and selected Swiss completion for border-truncated
+services.
 
-The frontend is static and can be deployed to Cloudflare Pages. The Swiss formation integration runs through a Pages Function so the OpenTransportData.swiss token is never exposed to the browser.
+### Train Formation
 
-## Project Structure
+For supported cross-border trains, BelloTreno can show a passenger-facing coach
+strip with platform sectors, coach numbers, seating classes, vehicle facilities,
+and detailed EVN/type information. If formation data is unavailable, the normal
+Italian train view remains unchanged.
 
-```text
-.
-|-- functions/              # Cloudflare Pages Functions
-|   `-- api/swiss/          # Swiss formation proxy endpoints
-|-- public/
-|   |-- pic/                # Public train/operator images
-|   `-- scripts/            # Browser-side application logic
-|-- src/
-|   |-- layouts/            # Shared Astro layout
-|   |-- pages/              # Astro pages
-|   `-- styles/             # Global styles
-|-- doc/                    # Project notes and API research
-|-- package.json
-`-- README.md
-```
+### Railway Statistics
 
-## Getting Started
-
-### Requirements
-
-- Node.js 18 or newer
-- npm
-
-### Install
-
-```bash
-npm install
-```
-
-### Development
-
-```bash
-npm run dev
-```
-
-Astro will start a local development server, usually at `http://localhost:4321`.
-
-### Build
-
-```bash
-npm run build
-```
-
-### Preview the Static Build
-
-```bash
-npm run preview
-```
-
-## Cloudflare Pages Functions
-
-The Swiss formation endpoint is implemented as a Cloudflare Pages Function:
-
-```http
-GET /api/swiss/formation?train=36&date=2026-04-30
-```
-
-It calls:
-
-```text
-https://api.opentransportdata.swiss/formation/v2/formations_full
-```
-
-Required Cloudflare secret:
-
-```text
-SWISS_TRAIN_FORMATION_API_KEY
-```
-
-Optional environment variables:
-
-```text
-SWISS_TRAIN_FORMATION_API_BASE_URL
-SWISS_TRAIN_FORMATION_FULL_PATH
-SWISS_TRAIN_FORMATION_EVU
-SWISS_TRAIN_FORMATION_USER_AGENT
-```
-
-Default values:
-
-```text
-SWISS_TRAIN_FORMATION_API_BASE_URL=https://api.opentransportdata.swiss/formation
-SWISS_TRAIN_FORMATION_FULL_PATH=/v2/formations_full
-SWISS_TRAIN_FORMATION_EVU=SBBP
-SWISS_TRAIN_FORMATION_USER_AGENT=BelloTreno/1.0
-```
-
-Local Pages Function testing can be done with Wrangler:
-
-```bash
-npm run build
-npx wrangler pages dev dist --binding SWISS_TRAIN_FORMATION_API_KEY=<your-token>
-```
-
-For production, add `SWISS_TRAIN_FORMATION_API_KEY` in Cloudflare Pages:
-
-```text
-Cloudflare Dashboard -> Workers & Pages -> your Pages project -> Settings -> Environment variables
-```
-
-Use a secret variable, not a public client-side variable.
+The statistics page summarizes observable daily operations from the backend
+collector: trains in circulation, monitored trains, regular/cancelled/rescheduled
+services, delay leaders, station summaries, relation summaries, and category
+distribution.
 
 ## Data Sources
 
-BelloTreno combines several public or externally proxied data sources:
+BelloTreno combines public and externally proxied railway data:
 
-- ViaggiaTreno public endpoints for Italian train and station running data.
-- RFI public RSS feeds for disruption and travel information.
-- ViaggiaTreno SmartCaring data through a dedicated worker.
-- OpenTransportData.swiss Train Formation Service for supported Swiss cross-border train formations.
+- ViaggiaTreno train and station running data.
+- RFI public travel notice feeds.
+- ViaggiaTreno SmartCaring notices for supported services.
+- OpenTransportData.swiss Train Formation Service for selected Swiss cross-border
+  formations.
+- A VPS-side statistics collector that scans ViaggiaTreno station boards and
+  stores daily aggregates.
 
-Swiss formation data is only used when a train number and operation date can be matched. If the Swiss API returns no supported data, the UI falls back to the ViaggiaTreno result.
+Data availability depends on the upstream systems. Some operators and local
+railway companies may remain incomplete or unavailable.
 
-## Security Notes
+## Project Status
 
-- Swiss API tokens are read from `context.env` inside Cloudflare Pages Functions.
-- Tokens are never sent to the browser.
-- The Pages Function checks request origin and referer against allowed hosts.
-- The repository ignores `.env*` and `.dev.vars*` files by default.
-- API-sourced strings should be escaped before insertion into `innerHTML`.
+The project currently focuses on:
+
+- Italian train search and station boards.
+- Swiss cross-border enrichment for practical passenger information.
+- Daily observable railway statistics.
+- Mobile-friendly use and multilingual presentation.
+
+Known limitations include imperfect upstream station/platform data, incomplete
+coverage for some local railway companies, and the fact that statistics are based
+on observable data rather than official full-network reports.
 
 ## Documentation
 
-Additional notes are available in the `doc/` directory:
+Detailed implementation notes live in the `doc/` directory:
 
-- `doc/PROJECT_GUIDE.md`
-- `doc/AGENTS.md`
-- `doc/blog-viaggiatreno-api.md`
-- `doc/swiss-open-data-api-guide.zh-CN.md`
-- `doc/swiss-open-data-integration-guide.md`
+- [Project guide](doc/PROJECT_GUIDE.md)
+- [Agent/developer notes](doc/AGENTS.md)
+- [ViaggiaTreno API notes](doc/blog-viaggiatreno-api.md)
+- [Swiss Open Data integration guide](doc/swiss-open-data-integration-guide.md)
+- [Swiss Open Data API guide, Chinese](doc/swiss-open-data-api-guide.zh-CN.md)
 
-## Scripts
+VPS-side service notes are in [rfi-proxy/README.md](rfi-proxy/README.md).
+
+## Local Development
 
 ```bash
-npm run dev      # Start Astro dev server
-npm run build    # Build static site
-npm run preview  # Preview the built site
+npm install
+npm run dev
+npm run build
 ```
 
-## Deployment
-
-The production frontend is intended for Cloudflare Pages. A typical Pages setup is:
-
-- Build command: `npm run build`
-- Build output directory: `dist`
-- Node.js version: 18 or newer
-- Required secret: `SWISS_TRAIN_FORMATION_API_KEY`
-
-The separate ViaggiaTreno backend proxy and Cloudflare Workers used by the live deployment are not part of this repository.
+The frontend is an Astro static site. Production deployment is currently designed
+for Cloudflare Pages, with Pages Functions used for token-protected server-side
+API calls.
 
 ## Disclaimer
 
-This project is for personal research, railway enthusiast use, and educational purposes. It does not guarantee data accuracy, completeness, availability, or real-time correctness.
+BelloTreno is for personal research, railway enthusiast use, and educational
+purposes. It does not guarantee data accuracy, completeness, availability, or
+real-time correctness.
 
-Always rely on official railway channels, station displays, operator apps, and staff instructions for travel decisions.
+Always rely on official railway channels, station displays, operator apps, and
+staff instructions for travel decisions.
 
 ## License
 

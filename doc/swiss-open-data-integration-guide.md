@@ -1058,3 +1058,18 @@ GTFS-RT mismatch:
 - Formation short strings are not a user interface. Parse them, merge with vehicle details, and hide raw CUS strings in diagnostics.
 - GTFS-RT is best used after GTFS Static ingestion, not as a shortcut for route creation.
 
+## 14. BelloTreno implementation notes (May 2026)
+
+The production BelloTreno integration is intentionally narrower than a full Swiss journey planner:
+
+- It uses the Train Formation Service for same-day formation enrichment. OJP remains documented for future trip planning, but the live train-detail feature does not use OJP.
+- The Pages Function reads `SWISS_TRAIN_FORMATION_API_KEY` from Cloudflare Pages Secrets and calls `formation/v2/formations_full` server-side. The token is never exposed to frontend code.
+- Formation lookup is attempted only when the operation date is today's `Europe/Zurich` date and the train number can plausibly be checked in Swiss data. A failed lookup must silently fall back to ViaggiaTreno.
+- Vehicle identity is EVN-first. Multiple provider rows with the same EVN represent the same physical vehicle across different route segments and must be merged into one display vehicle.
+- `closed`, `vehicleWillBePutAway`, and `trolleyStatus` are segment properties. They must be evaluated against the selected stop or active route segment, not OR-merged globally.
+- `accessToPreviousVehicle=false` means no through passage to the previous vehicle. It is not a closed-car signal.
+- Coach display uses the normalized vehicle list for stable identity and details, while the selected stop provides the current track, sectors, and no-passage view.
+- Sector labels are normalized and displayed in station-facing order from A onward. For ETR 610 and RABe 501/Giruno coupled sets, the UI keeps each unit contiguous and avoids duplicate provider positions interleaving cars.
+- `formationShortString` is useful as a stop-level hint, but it is not the authoritative identity source. It should supplement vehicle details, not replace EVN-based normalization.
+- Station board enrichment is conservative. Swiss data may replace `Chiasso`, `Domodossola`, or empty endpoints when ViaggiaTreno is clearly truncated, but it must not replace a valid Italian origin or terminal.
+

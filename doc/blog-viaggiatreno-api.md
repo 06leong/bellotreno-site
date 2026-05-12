@@ -1642,6 +1642,19 @@ GET /statistiche/{timestamp}
 | `treniCircolanti` | 此刻在线上运行的列车数 |
 | `ultimoAggiornamento` | 数据最后更新时间戳 |
 
+### BelloTreno 统计服务的使用方式
+
+`/statistiche/0` 只提供全局计数，不能直接得到类别分布、准点率、取消/改线车次、最晚车次、车站排行或关系统计。
+
+BelloTreno 的 `/statistics` 页面因此不把它当作完整数据源，而是由 VPS 上的 `bellotreno-statistics` 服务定时采集并聚合：
+
+1. 从 `elencoStazioni/{regione}` 建立车站 registry。
+2. 扫描车站 `partenze`，按配置也可扫描 `arrivi`。
+3. 对发现的车次调用 `andamentoTreno`，取得延误、取消、改线、始发/终到和停站信息。
+4. 写入 SQLite，并生成前端查询用的 summary、timeseries、trains、stations、relations、ranking 等 JSON cache。
+
+因此 `/statistiche/0` 中的 `treniGiorno` 是官方全局参考值；BelloTreno 页面中的“已采集车次”是统计服务实际观测到并保存的去重车次，两者口径不同，不能直接相除当作覆盖率。
+
 ---
 
 #### 气象数据
