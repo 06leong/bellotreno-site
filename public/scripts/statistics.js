@@ -1,8 +1,8 @@
 (function () {
     const API_BASE = "/api/statistics";
     const PAGE_SIZE = 25;
-    const CATEGORY_ORDER = ["REG", "MET", "FR", "FA", "FB", "IC", "ICN", "EC", "EXP", "NCL"];
-    const CATEGORY_OPTIONS = [...CATEGORY_ORDER, "RV", "RE", "EN", "TS"];
+    const CATEGORY_ORDER = ["REG", "MET", "FR", "EC FR", "FA", "FB", "IC", "ICN", "EC", "EN", "EXP", "NCL", "TS"];
+    const CATEGORY_OPTIONS = [...CATEGORY_ORDER];
 
     const state = {
         date: "",
@@ -26,6 +26,7 @@
         MET: "#70a84a",
         NCL: "#d9dee7",
         FR: "#bc3433",
+        "EC FR": "#bc3433",
         FB: "#bc3433",
         FA: "#bc3433",
         IC: "#008ad8",
@@ -76,7 +77,16 @@
     }
 
     function categoryCode(value) {
-        return String(value || "").trim().toUpperCase();
+        const raw = String(value || "").trim().toUpperCase();
+        if (!raw) return "";
+        if (raw === "ECFR" || raw.replace(/[-_]+/g, " ") === "EC FR") return "EC FR";
+        return raw;
+    }
+
+    function chartCategoryCode(value) {
+        const cat = categoryCode(value);
+        if (cat === "RV" || cat === "RE") return "REG";
+        return cat;
     }
 
     function categoryColor(value) {
@@ -91,7 +101,8 @@
     function categoryBadgeHtml(value) {
         const cat = categoryCode(value);
         if (!cat || cat === "--") return "--";
-        const badgeClass = (window.getBadgeClass ? window.getBadgeClass(cat) : "") || "badge-statistics-fallback";
+        const badgeKey = cat === "EC FR" ? "FR" : cat;
+        const badgeClass = (window.getBadgeClass ? window.getBadgeClass(badgeKey) : "") || "badge-statistics-fallback";
         return `<span class="train-badge statistics-category-badge ${esc(badgeClass)}">${esc(cat)}</span>`;
     }
 
@@ -478,11 +489,93 @@
         `;
     }
 
+    function renderInteractiveDonut(segments, title) {
+        const filtered = segments.filter((segment) => asNumber(segment.value) > 0);
+        if (!filtered.length) return emptyChart();
+        const total = filtered.reduce((sum, item) => sum + asNumber(item.value), 0);
+        const radius = 72;
+        const circumference = 2 * Math.PI * radius;
+        let strokeOffset = 0;
+        return `
+            <div class="statistics-donut-wrap" data-donut-total="${esc(formatNumber(total))}">
+                <div class="statistics-donut-svg-wrap">
+                    <svg class="statistics-donut-svg" viewBox="0 0 180 180" role="img" aria-label="${esc(title)}">
+                        <circle class="statistics-donut-track" cx="90" cy="90" r="${radius}" />
+                        ${filtered.map((item, index) => {
+                            const value = asNumber(item.value);
+                            const percent = (value / total) * 100;
+                            const length = (value / total) * circumference;
+                            const dash = `${Math.max(0.01, length).toFixed(3)} ${Math.max(0, circumference - length).toFixed(3)}`;
+                            const offset = strokeOffset;
+                            strokeOffset += length;
+                            const color = item.color || palette[index % palette.length];
+                            return `
+                                <circle class="statistics-donut-segment" tabindex="0" role="button" cx="90" cy="90" r="${radius}"
+                                    stroke="${esc(color)}" stroke-dasharray="${dash}" stroke-dashoffset="${(-offset).toFixed(3)}"
+                                    data-label="${esc(item.label)}" data-value="${esc(formatNumber(value))}" data-percent="${esc(pct(percent))}"
+                                    transform="rotate(-90 90 90)">
+                                    <title>${esc(item.label)}: ${esc(formatNumber(value))} - ${esc(pct(percent))}</title>
+                                </circle>
+                            `;
+                        }).join("")}
+                    </svg>
+                    <div class="statistics-donut-center"><strong>${esc(formatNumber(total))}</strong><span>${esc(title)}</span></div>
+                </div>
+                <div class="statistics-legend">
+                    ${filtered.map((item, index) => `
+                        <button type="button" class="statistics-legend-row"
+                            data-label="${esc(item.label)}" data-value="${esc(formatNumber(item.value))}" data-percent="${esc(pct((asNumber(item.value) / total) * 100))}">
+                            <span style="background:${esc(item.color || palette[index % palette.length])}"></span>
+                            <b>${esc(item.label)}</b>
+                            <em>${esc(formatNumber(item.value))} - ${esc(pct((asNumber(item.value) / total) * 100))}</em>
+                        </button>
+                    `).join("")}
+                </div>
+                <div class="statistics-donut-selected" hidden></div>
+            </div>
+        `;
+    }
+
+    function bindDonutChartEvents() {
+        document.querySelectorAll(".statistics-chart-box").forEach((chart) => {
+            if (chart.dataset.donutBound === "1") return;
+            chart.dataset.donutBound = "1";
+            const showSegment = (target) => {
+                const wrap = target.closest(".statistics-donut-wrap");
+                const selected = wrap?.querySelector(".statistics-donut-selected");
+                if (!selected) return;
+                const label = target.dataset.label || "";
+                const value = target.dataset.value || "";
+                const percent = target.dataset.percent || "";
+                selected.hidden = false;
+                selected.innerHTML = `<b>${esc(label)}</b><strong>${esc(value)}</strong><span>${esc(percent)}</span>`;
+                wrap.querySelectorAll(".statistics-donut-segment, .statistics-legend-row").forEach((item) => {
+                    item.classList.toggle("active", item.dataset.label === label);
+                });
+            };
+            chart.addEventListener("click", (event) => {
+                const target = event.target.closest?.(".statistics-donut-segment, .statistics-legend-row");
+                if (target) showSegment(target);
+            });
+            chart.addEventListener("keydown", (event) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                const target = event.target.closest?.(".statistics-donut-segment, .statistics-legend-row");
+                if (!target) return;
+                event.preventDefault();
+                showSegment(target);
+            });
+        });
+    }
+
     function renderCategoryChart(categories) {
-        const data = asArray(categories).map((item) => ({
-            label: item.label || item.category || item.name || item.code || "--",
-            value: asNumber(item.value ?? item.count ?? item.total, 0)
-        })).filter((item) => item.value > 0)
+        const buckets = new Map();
+        asArray(categories).forEach((item) => {
+            const label = chartCategoryCode(item.label || item.category || item.name || item.code || "--");
+            const value = asNumber(item.value ?? item.count ?? item.total, 0);
+            if (!label || label === "--" || value <= 0) return;
+            buckets.set(label, (buckets.get(label) || 0) + value);
+        });
+        const data = Array.from(buckets, ([label, value]) => ({ label, value }))
             .sort((a, b) => {
                 const order = categorySortIndex(a.label) - categorySortIndex(b.label);
                 if (order !== 0) return order;
@@ -492,7 +585,7 @@
         const max = Math.max(...data.map((item) => item.value), 1);
         return `
             <div class="statistics-bars">
-                ${data.slice(0, 10).map((item) => `
+                ${data.map((item) => `
                     <div class="statistics-bar-row">
                         <span>${categoryBadgeHtml(item.label)}</span>
                         <div><i style="width:${Math.max(2, (item.value / max) * 100)}%;background:${esc(categoryColor(item.label))}"></i></div>
@@ -510,7 +603,7 @@
         const runningPoints = asArray(series.points || series.running || series.trains || series.treniCircolanti);
         if ($("statisticsRunningChart")) $("statisticsRunningChart").innerHTML = renderLineChart(runningPoints);
         if ($("statisticsRegularityChart")) {
-            $("statisticsRegularityChart").innerHTML = renderDonut([
+            $("statisticsRegularityChart").innerHTML = renderInteractiveDonut([
                 { label: tr("statistics_regular", "Regular"), value: values.regular, color: "#65bfc0" },
                 { label: tr("statistics_status_delayed", "Delayed"), value: values.delayed, color: "#5b9ee4" },
                 { label: tr("statistics_rescheduled", "Rescheduled"), value: values.rescheduled, color: "#f4b35d" },
@@ -522,14 +615,14 @@
                 <div class="statistics-dual-donut">
                     <div>
                         <h3>${esc(tr("statistics_departure_punctuality", "Departure punctuality"))}</h3>
-                        ${renderDonut([
+                        ${renderInteractiveDonut([
                             { label: tr("on_time", "On Time"), value: values.departureOnTime, color: "#65bfc0" },
                             { label: tr("statistics_status_delayed", "Delayed"), value: values.departureDelayed, color: "#ec6685" }
                         ], tr("departures", "Departures"))}
                     </div>
                     <div>
                         <h3>${esc(tr("statistics_arrival_punctuality", "Arrival punctuality"))}</h3>
-                        ${renderDonut([
+                        ${renderInteractiveDonut([
                             { label: tr("statistics_early", "Early"), value: values.arrivalEarly, color: "#5b9ee4" },
                             { label: tr("on_time", "On Time"), value: values.arrivalOnTime, color: "#65bfc0" },
                             { label: tr("statistics_status_delayed", "Delayed"), value: values.arrivalDelayed, color: "#ec6685" }
@@ -593,6 +686,9 @@
         } else if (state.activeView === "relations") {
             path = "/relations";
             params = { date: state.date, ...relationParams(q), page: state.page, pageSize: state.pageSize };
+        } else if (state.activeView === "ranking") {
+            path = "/ranking";
+            params = { date: state.date, metric: "delay", limit: state.pageSize };
         }
 
         try {
@@ -796,6 +892,7 @@
             loadTable();
         });
         bindRunningChartEvents();
+        bindDonutChartEvents();
     }
 
     function initStatisticsPage() {

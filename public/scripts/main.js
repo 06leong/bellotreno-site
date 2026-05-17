@@ -638,7 +638,7 @@ function render(data) {
 
 
     if (catCode === "TS") {
-        operator = "FondazioneFS";
+        operator = "Fondazione FS";
         operatorLink = "https://www.fondazionefs.it";
     }
 
