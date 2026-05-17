@@ -77,7 +77,7 @@ These Workers are **not in this repo**. Direct calls to `viaggiatreno.it` fail i
 - Closed state is segment-specific. Do not OR `closed` / `trolleyStatus` globally across all segments; the UI must resolve the active segment for the selected stop.
 - Coach display must keep a stable vehicle sequence while using the selected stop only for track/sector/no-passage display. Sector labels should be normalized and displayed from A onward in station-facing order.
 - Known EMU groups need conservative handling: ETR 610 usually groups in 7-car units, RABe 501/Giruno in 11-car units. Preserve unit order and avoid duplicate `position` values causing interleaved coach sequences.
-- Station board Swiss enrichment is protective: only replace a visible origin/destination when ViaggiaTreno is blank or clearly truncated at a border station such as Chiasso or Domodossola. Never downgrade a correct Italian terminal to a Swiss border station.
+- Station board Swiss enrichment is protective: only replace a visible origin/destination when ViaggiaTreno is blank or clearly truncated at a border station such as Chiasso, Domodossola, Luino, Tirano, or Stabio. Never downgrade a correct Italian terminal to a Swiss border station, and do not treat Porto Ceresio, Ponte Tresa, or Gaggiolo as automatic Swiss continuation anchors.
 
 ### Statistics
 

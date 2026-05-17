@@ -8,9 +8,7 @@
         "DOMODOSSOLA",
         "LUINO",
         "TIRANO",
-        "GAGGIOLO",
-        "PORTO CERESIO",
-        "PONTE TRESA"
+        "STABIO"
     ]);
 
     function tr(key, fallback) {
@@ -68,7 +66,7 @@
     function isSwissBoundaryName(name) {
         const key = normalizeStationName(name);
         if (!key) return false;
-        return Array.from(SWISS_BORDER_HINTS).some((hint) => key === hint || key.includes(hint));
+        return SWISS_BORDER_HINTS.has(key);
     }
 
     function hasSwissHint(data) {
