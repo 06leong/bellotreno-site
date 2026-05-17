@@ -17,15 +17,18 @@ STATISTICS_SECURITY_TOKEN=replace-with-new-statistics-token
 
 # Optional collector tuning
 STATISTICS_COLLECTOR_ENABLED=true
-STATISTICS_COLLECTOR_INTERVAL_MINUTES=60
+STATISTICS_COLLECTOR_INTERVAL_MINUTES=30
 STATISTICS_COLLECTOR_MAX_RUNTIME_SECONDS=2400
-STATISTICS_COLLECTOR_CONCURRENCY=3
+STATISTICS_COLLECTOR_CONCURRENCY=4
 STATISTICS_DETAIL_LIMIT_PER_RUN=0
 STATISTICS_RETENTION_DAYS=30
 STATISTICS_STATION_REGISTRY_REFRESH_DAYS=7
 STATISTICS_REGION_CODES=1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22
-STATISTICS_BOARD_TYPES=partenze
+STATISTICS_BOARD_TYPES=partenze,arrivi
 STATISTICS_STATION_CSV_PATH=/data/stations.csv
+STATISTICS_SCHEDULE_OFFSET_MINUTES=5
+STATISTICS_FINALIZE_TIME=23:55
+STATISTICS_CATCHUP_GRACE_MINUTES=20
 ```
 
 Do not commit `.env`. Use `.env.example` as the template.
@@ -39,6 +42,9 @@ The statistics service follows the same broad model as `railway-opendata`:
 - it scans every discovered station board, not a small seed list;
 - it discovers trains from station boards and calls `andamentoTreno` with `(origin station, train number, departure-day midnight)`;
 - it stores one row per train and one row per stop in SQLite, then rebuilds daily station/relation aggregates.
+- it uses aligned collection slots instead of sleeping after each run. With the default settings, it samples at `HH:05`, `HH:35`, and one final daily slot at `23:55` Europe/Rome time.
+- every station board in one run uses the same scheduled slot time, so a single snapshot is internally consistent even if the collection takes several minutes.
+- if the service is down or a previous run is still active, the collector records `missed`/`skipped` slots in `collector_runs` instead of starting overlapping work.
 
 Optional full station CSV support is available through `STATISTICS_STATION_CSV_PATH`. If the file exists in the data volume, rows are merged with live ViaggiaTreno stations. The built-in default does not require a CSV.
 
@@ -49,7 +55,7 @@ docker network create bellotreno-network 2>/dev/null || true
 docker compose up -d --build
 ```
 
-To collect arrivals as well as departures, set this in `.env`:
+To collect arrivals as well as departures, keep this in `.env`:
 
 ```env
 STATISTICS_BOARD_TYPES=partenze,arrivi
@@ -60,6 +66,8 @@ Then rebuild or restart the statistics service:
 ```bash
 docker compose up -d --build bellotreno-statistics
 ```
+
+After deployment, `GET /health` returns the last collector run and the next scheduled slot. This is useful for confirming the scheduler is no longer drifting from the configured cadence.
 
 ## NPM routing
 
@@ -105,4 +113,4 @@ docker compose exec bellotreno-statistics sh -lc \
   'curl -X POST -H "X-Bello-Stats-Token: $STATISTICS_SECURITY_TOKEN" http://127.0.0.1:8081/v1/collect'
 ```
 
-The collector also runs automatically every `STATISTICS_COLLECTOR_INTERVAL_MINUTES` minutes when `STATISTICS_COLLECTOR_ENABLED=true`.
+The collector runs automatically on aligned slots when `STATISTICS_COLLECTOR_ENABLED=true`. With the example above, that means every 30 minutes at `HH:05` and `HH:35`, plus the `23:55` final daily slot.

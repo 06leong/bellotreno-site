@@ -85,6 +85,7 @@ These Workers are **not in this repo**. Direct calls to `viaggiatreno.it` fail i
 - `functions/api/statistics/[[path]].js` proxies requests to `STATISTICS_API_BASE_URL` and injects `STATISTICS_API_TOKEN`. The browser must not know the VPS token.
 - The VPS statistics service lives in `rfi-proxy/statistics/` but deploys as a separate Docker service in the same compose project. It stores SQLite data in the mounted `statistics-data` volume.
 - `/statistiche/0` from ViaggiaTreno is only a global counter. Category, route, station, delay, cancellation, and relation statistics come from station registry + station boards + `andamentoTreno` sampling.
+- The collector uses fixed Europe/Rome slots (`HH:05`, `HH:35`, plus `23:55` by default). Keep every board request in one run pinned to that slot time; do not change it back to "collect, then sleep interval" scheduling.
 - Keep UI labels concrete. Avoid showing ratios such as "coverage" unless the numerator and denominator are clear to users.
 
 ### Cache and deployment

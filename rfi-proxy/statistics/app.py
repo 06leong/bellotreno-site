@@ -26,9 +26,12 @@ RFI_PROXY_BASE_URL = os.getenv("RFI_PROXY_BASE_URL", "http://rfi-proxy:8080").rs
 RFI_PROXY_SECURITY_TOKEN = os.getenv("RFI_PROXY_SECURITY_TOKEN", "")
 
 COLLECTOR_ENABLED = os.getenv("COLLECTOR_ENABLED", "true").lower() == "true"
-COLLECTOR_INTERVAL_MINUTES = int(os.getenv("COLLECTOR_INTERVAL_MINUTES", "60"))
+COLLECTOR_INTERVAL_MINUTES = max(1, int(os.getenv("COLLECTOR_INTERVAL_MINUTES", "30")))
 COLLECTOR_MAX_RUNTIME_SECONDS = int(os.getenv("COLLECTOR_MAX_RUNTIME_SECONDS", "2400"))
-COLLECTOR_CONCURRENCY = max(1, int(os.getenv("COLLECTOR_CONCURRENCY", "3")))
+COLLECTOR_CONCURRENCY = max(1, int(os.getenv("COLLECTOR_CONCURRENCY", "4")))
+COLLECTOR_SCHEDULE_OFFSET_MINUTES = min(59, max(0, int(os.getenv("COLLECTOR_SCHEDULE_OFFSET_MINUTES", "5"))))
+COLLECTOR_CATCHUP_GRACE_MINUTES = max(0, int(os.getenv("COLLECTOR_CATCHUP_GRACE_MINUTES", "20")))
+COLLECTOR_FINALIZE_TIME = os.getenv("COLLECTOR_FINALIZE_TIME", "23:55")
 DETAIL_LIMIT_PER_RUN = max(0, int(os.getenv("DETAIL_LIMIT_PER_RUN", "0")))
 RETENTION_DAYS = max(1, int(os.getenv("RETENTION_DAYS", "30")))
 STATION_REGISTRY_REFRESH_DAYS = max(1, int(os.getenv("STATION_REGISTRY_REFRESH_DAYS", "7")))
@@ -39,7 +42,7 @@ REGION_CODES = [
 ]
 BOARD_TYPES = [
     item.strip()
-    for item in os.getenv("BOARD_TYPES", "partenze").split(",")
+    for item in os.getenv("BOARD_TYPES", "partenze,arrivi").split(",")
     if item.strip() in {"partenze", "arrivi"}
 ]
 OPTIONAL_STATION_CSV = os.getenv("STATION_CSV_PATH", "/data/stations.csv")
@@ -88,6 +91,9 @@ def init_db() -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 date TEXT NOT NULL,
                 captured_at TEXT NOT NULL,
+                finished_at TEXT,
+                duration_seconds REAL DEFAULT 0,
+                status TEXT DEFAULT 'success',
                 treni_giorno INTEGER NOT NULL DEFAULT 0,
                 treni_circolanti INTEGER NOT NULL DEFAULT 0,
                 raw_json TEXT
@@ -95,6 +101,25 @@ def init_db() -> None:
 
             CREATE INDEX IF NOT EXISTS idx_snapshots_date_time
                 ON snapshots(date, captured_at);
+
+            CREATE TABLE IF NOT EXISTS collector_runs (
+                slot_at TEXT PRIMARY KEY,
+                date TEXT NOT NULL,
+                status TEXT NOT NULL,
+                trigger TEXT DEFAULT 'scheduler',
+                started_at TEXT,
+                finished_at TEXT,
+                duration_seconds REAL DEFAULT 0,
+                stations INTEGER DEFAULT 0,
+                board_rows INTEGER DEFAULT 0,
+                detail_queue INTEGER DEFAULT 0,
+                details INTEGER DEFAULT 0,
+                error TEXT,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_collector_runs_date_slot
+                ON collector_runs(date, slot_at);
 
             CREATE TABLE IF NOT EXISTS station_registry (
                 station_code TEXT PRIMARY KEY,
@@ -205,6 +230,9 @@ def init_db() -> None:
             );
             """
         )
+        ensure_column(conn, "snapshots", "finished_at", "TEXT")
+        ensure_column(conn, "snapshots", "duration_seconds", "REAL DEFAULT 0")
+        ensure_column(conn, "snapshots", "status", "TEXT DEFAULT 'success'")
         ensure_column(conn, "trains", "not_departed", "INTEGER DEFAULT 0")
 
 
@@ -218,6 +246,11 @@ def today_rome() -> str:
 
 def iso_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def to_utc_iso(dt: datetime) -> str:
+    current = dt if dt.tzinfo else dt.replace(tzinfo=APP_TZ)
+    return current.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def parse_iso_datetime(value: Any) -> datetime | None:
@@ -249,6 +282,153 @@ def js_date_string(dt: datetime | None = None) -> str:
 def midnight_epoch_ms(date_text: str | None = None) -> str:
     day = datetime.fromisoformat(date_text).date() if date_text else now_rome().date()
     return str(int(datetime.combine(day, datetime.min.time(), tzinfo=APP_TZ).timestamp() * 1000))
+
+
+def parse_time_of_day(value: str, fallback_hour: int = 23, fallback_minute: int = 55) -> tuple[int, int]:
+    try:
+        hour_text, minute_text = value.strip().split(":", 1)
+        hour = min(23, max(0, int(hour_text)))
+        minute = min(59, max(0, int(minute_text)))
+        return hour, minute
+    except (AttributeError, ValueError):
+        return fallback_hour, fallback_minute
+
+
+def scheduled_minutes() -> list[int]:
+    interval = max(1, COLLECTOR_INTERVAL_MINUTES)
+    minutes = set()
+    minute = COLLECTOR_SCHEDULE_OFFSET_MINUTES
+    while minute < 24 * 60:
+        minutes.add(minute)
+        minute += interval
+    final_hour, final_minute = parse_time_of_day(COLLECTOR_FINALIZE_TIME)
+    minutes.add(final_hour * 60 + final_minute)
+    return sorted(minutes)
+
+
+def slots_for_day(day, include_neighbors: bool = False) -> list[datetime]:
+    days = [day]
+    if include_neighbors:
+        days = [day - timedelta(days=1), day, day + timedelta(days=1)]
+    slots: list[datetime] = []
+    for current_day in days:
+        midnight = datetime.combine(current_day, datetime.min.time(), tzinfo=APP_TZ)
+        slots.extend(midnight + timedelta(minutes=minute) for minute in scheduled_minutes())
+    return sorted(slots)
+
+
+def previous_scheduled_slot(reference: datetime | None = None) -> datetime:
+    current = (reference or now_rome()).astimezone(APP_TZ)
+    previous = [slot for slot in slots_for_day(current.date(), include_neighbors=True) if slot <= current]
+    return previous[-1] if previous else slots_for_day(current.date() - timedelta(days=1))[-1]
+
+
+def next_scheduled_slot(reference: datetime | None = None) -> datetime:
+    current = (reference or now_rome()).astimezone(APP_TZ)
+    future = [slot for slot in slots_for_day(current.date(), include_neighbors=True) if slot > current]
+    return future[0] if future else slots_for_day(current.date() + timedelta(days=1))[0]
+
+
+def run_exists(slot_at: datetime) -> bool:
+    with db() as conn:
+        row = conn.execute("SELECT 1 FROM collector_runs WHERE slot_at=?", (to_utc_iso(slot_at),)).fetchone()
+    return bool(row)
+
+
+def due_scheduled_slot(reference: datetime | None = None) -> datetime | None:
+    current = (reference or now_rome()).astimezone(APP_TZ)
+    slot = previous_scheduled_slot(current)
+    age = current - slot
+    if age < timedelta(0) or age > timedelta(minutes=COLLECTOR_CATCHUP_GRACE_MINUTES):
+        return None
+    return None if run_exists(slot) else slot
+
+
+def collector_run_row() -> dict[str, Any] | None:
+    with db() as conn:
+        row = conn.execute("SELECT * FROM collector_runs ORDER BY slot_at DESC LIMIT 1").fetchone()
+    return dict(row) if row else None
+
+
+def record_collector_run(
+    slot_at: datetime,
+    status: str,
+    *,
+    trigger: str = "scheduler",
+    started_at: str | None = None,
+    finished_at: str | None = None,
+    duration_seconds: float = 0,
+    stations: int = 0,
+    board_rows: int = 0,
+    detail_queue: int = 0,
+    details: int = 0,
+    error: str | None = None,
+) -> None:
+    slot_iso = to_utc_iso(slot_at)
+    date = slot_at.astimezone(APP_TZ).date().isoformat()
+    with db() as conn:
+        conn.execute(
+            """
+            INSERT INTO collector_runs (
+                slot_at, date, status, trigger, started_at, finished_at, duration_seconds,
+                stations, board_rows, detail_queue, details, error, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(slot_at) DO UPDATE SET
+                date=excluded.date,
+                status=excluded.status,
+                trigger=excluded.trigger,
+                started_at=COALESCE(excluded.started_at, collector_runs.started_at),
+                finished_at=excluded.finished_at,
+                duration_seconds=excluded.duration_seconds,
+                stations=excluded.stations,
+                board_rows=excluded.board_rows,
+                detail_queue=excluded.detail_queue,
+                details=excluded.details,
+                error=excluded.error
+            """,
+            (
+                slot_iso,
+                date,
+                status,
+                trigger,
+                started_at,
+                finished_at,
+                duration_seconds,
+                stations,
+                board_rows,
+                detail_queue,
+                details,
+                error,
+                iso_now(),
+            ),
+        )
+
+
+def record_skipped_slots(started_slot: datetime, finished_at: datetime) -> None:
+    current = finished_at.astimezone(APP_TZ)
+    for slot in slots_for_day(current.date(), include_neighbors=True):
+        if started_slot < slot <= current and not run_exists(slot):
+            record_collector_run(
+                slot,
+                "skipped",
+                finished_at=to_utc_iso(current),
+                error="previous_run_active",
+            )
+
+
+def record_missed_slots(reference: datetime | None = None) -> None:
+    current = (reference or now_rome()).astimezone(APP_TZ)
+    grace_cutoff = current - timedelta(minutes=COLLECTOR_CATCHUP_GRACE_MINUTES)
+    lookback_minutes = max(COLLECTOR_INTERVAL_MINUTES * 3, 120)
+    earliest = current - timedelta(minutes=lookback_minutes)
+    for slot in slots_for_day(current.date(), include_neighbors=True):
+        if earliest <= slot < grace_cutoff and not run_exists(slot):
+            record_collector_run(
+                slot,
+                "missed",
+                finished_at=to_utc_iso(current),
+                error="outside_catchup_grace",
+            )
 
 
 def require_auth() -> Response | None:
@@ -530,8 +710,8 @@ def stations_for_collection() -> tuple[list[dict[str, Any]], bool]:
         raise
 
 
-def fetch_board(station_code: str, board_type: str) -> list[dict[str, Any]]:
-    date_string = quote(js_date_string(), safe="")
+def fetch_board(station_code: str, board_type: str, board_time: datetime) -> list[dict[str, Any]]:
+    date_string = quote(js_date_string(board_time), safe="")
     data = vt_get(f"{board_type}/{station_code}/{date_string}", timeout=25)
     return data if isinstance(data, list) else []
 
@@ -730,11 +910,11 @@ def update_station_board_stats(conn: sqlite3.Connection, date: str, station_code
     )
 
 
-def fetch_board_for_station(station: dict[str, Any]) -> dict[str, Any]:
+def fetch_board_for_station(station: dict[str, Any], board_time: datetime) -> dict[str, Any]:
     result = {"station": station, "boards": {}, "rows": []}
     for board_type in BOARD_TYPES:
         try:
-            rows = fetch_board(station["station_code"], board_type)
+            rows = fetch_board(station["station_code"], board_type, board_time)
         except Exception as exc:
             app.logger.warning("board fetch failed %s %s: %s", station["station_code"], board_type, exc)
             rows = []
@@ -872,115 +1052,167 @@ def rebuild_daily_aggregates(conn: sqlite3.Connection, date: str) -> None:
 
 def cleanup_old_rows(conn: sqlite3.Connection) -> None:
     cutoff = (now_rome().date() - timedelta(days=RETENTION_DAYS)).isoformat()
-    for table in ("snapshots", "trains", "train_stops", "station_stats", "station_board_stats", "relation_stats"):
+    for table in ("snapshots", "collector_runs", "trains", "train_stops", "station_stats", "station_board_stats", "relation_stats"):
         conn.execute(f"DELETE FROM {table} WHERE date < ?", (cutoff,))
 
 
-def collect_once() -> dict[str, Any]:
+def collect_once(slot_at: datetime | None = None, trigger: str = "manual") -> dict[str, Any]:
+    slot = (slot_at or previous_scheduled_slot()).astimezone(APP_TZ).replace(second=0, microsecond=0)
     started = time.monotonic()
-    date = today_rome()
-    seen_at = iso_now()
+    started_at = iso_now()
+    date = slot.date().isoformat()
+    seen_at = to_utc_iso(slot)
     summary = {}
+    record_collector_run(slot, "running", trigger=trigger, started_at=started_at)
 
     try:
-        summary = vt_get("statistiche/0")
-    except Exception as exc:
-        app.logger.warning("statistiche/0 failed: %s", exc)
-        summary = {}
+        try:
+            summary = vt_get("statistiche/0")
+        except Exception as exc:
+            app.logger.warning("statistiche/0 failed: %s", exc)
+            summary = {}
 
-    with db() as conn:
-        conn.execute(
-            "INSERT INTO snapshots (date, captured_at, treni_giorno, treni_circolanti, raw_json) VALUES (?, ?, ?, ?, ?)",
-            (
-                date,
-                seen_at,
-                as_int((summary or {}).get("treniGiorno")),
-                as_int((summary or {}).get("treniCircolanti")),
-                json.dumps(summary or {}, ensure_ascii=False, separators=(",", ":")),
-            ),
-        )
+        stations, station_registry_refreshed = stations_for_collection()
+        board_rows_count = 0
+        detail_candidates_by_key: dict[str, dict[str, str]] = {}
 
-    stations, station_registry_refreshed = stations_for_collection()
-    board_rows_count = 0
-    detail_candidates_by_key: dict[str, dict[str, str]] = {}
-
-    with ThreadPoolExecutor(max_workers=COLLECTOR_CONCURRENCY) as executor:
-        futures = [executor.submit(fetch_board_for_station, station) for station in stations]
-        for future in as_completed(futures):
-            if time.monotonic() - started > COLLECTOR_MAX_RUNTIME_SECONDS:
-                break
-            result = future.result()
-            station = result["station"]
-            with db() as conn:
-                for board_type, rows in result["boards"].items():
-                    board_rows_count += len(rows)
-                    update_station_board_stats(
-                        conn,
-                        date,
-                        station["station_code"],
-                        station["station_name"],
-                        board_type,
-                        rows,
-                        seen_at,
-                    )
-                    for item in rows:
-                        if not isinstance(item, dict):
-                            continue
-                        row = normalize_train(item, seen_at, has_details=False)
-                        upsert_train(conn, row)
-                        candidate = board_candidate(item)
-                        if candidate:
-                            detail_candidates_by_key[candidate["train_key"]] = candidate
-
-    queue = detail_queue(date, detail_candidates_by_key)
-    detail_rows = []
-    if queue:
         with ThreadPoolExecutor(max_workers=COLLECTOR_CONCURRENCY) as executor:
-            futures = [executor.submit(fetch_detail, candidate) for candidate in queue]
+            futures = [executor.submit(fetch_board_for_station, station, slot) for station in stations]
             for future in as_completed(futures):
                 if time.monotonic() - started > COLLECTOR_MAX_RUNTIME_SECONDS:
                     break
-                detail = future.result()
-                if detail:
-                    detail_rows.append(detail)
+                result = future.result()
+                station = result["station"]
+                with db() as conn:
+                    for board_type, rows in result["boards"].items():
+                        board_rows_count += len(rows)
+                        update_station_board_stats(
+                            conn,
+                            date,
+                            station["station_code"],
+                            station["station_name"],
+                            board_type,
+                            rows,
+                            seen_at,
+                        )
+                        for item in rows:
+                            if not isinstance(item, dict):
+                                continue
+                            row = normalize_train(item, seen_at, has_details=False)
+                            upsert_train(conn, row)
+                            candidate = board_candidate(item)
+                            if candidate:
+                                detail_candidates_by_key[candidate["train_key"]] = candidate
 
-    with db() as conn:
-        for detail in detail_rows:
-            row = normalize_train(detail, seen_at, has_details=True)
-            upsert_train(conn, row)
-            replace_train_stops(conn, detail, row)
-        rebuild_daily_aggregates(conn, date)
-        cleanup_old_rows(conn)
+        queue = detail_queue(date, detail_candidates_by_key)
+        detail_rows = []
+        if queue:
+            with ThreadPoolExecutor(max_workers=COLLECTOR_CONCURRENCY) as executor:
+                futures = [executor.submit(fetch_detail, candidate) for candidate in queue]
+                for future in as_completed(futures):
+                    if time.monotonic() - started > COLLECTOR_MAX_RUNTIME_SECONDS:
+                        break
+                    detail = future.result()
+                    if detail:
+                        detail_rows.append(detail)
 
-    return {
-        "available": True,
-        "date": date,
-        "lastUpdated": seen_at,
-        "stations": len(stations),
-        "stationRegistryRefreshed": station_registry_refreshed,
-        "stationRegistryRefreshDays": STATION_REGISTRY_REFRESH_DAYS,
-        "boardTypes": BOARD_TYPES,
-        "boardRows": board_rows_count,
-        "detailQueue": len(queue),
-        "details": len(detail_rows),
-        "summary": summary or {},
-    }
+        with db() as conn:
+            for detail in detail_rows:
+                row = normalize_train(detail, seen_at, has_details=True)
+                upsert_train(conn, row)
+                replace_train_stops(conn, detail, row)
+            rebuild_daily_aggregates(conn, date)
+            cleanup_old_rows(conn)
+            finished_at = iso_now()
+            duration_seconds = round(time.monotonic() - started, 2)
+            conn.execute("DELETE FROM snapshots WHERE date=? AND captured_at=?", (date, seen_at))
+            conn.execute(
+                """
+                INSERT INTO snapshots (
+                    date, captured_at, finished_at, duration_seconds, status,
+                    treni_giorno, treni_circolanti, raw_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    date,
+                    seen_at,
+                    finished_at,
+                    duration_seconds,
+                    "success",
+                    as_int((summary or {}).get("treniGiorno")),
+                    as_int((summary or {}).get("treniCircolanti")),
+                    json.dumps(summary or {}, ensure_ascii=False, separators=(",", ":")),
+                ),
+            )
+
+        record_collector_run(
+            slot,
+            "success",
+            trigger=trigger,
+            started_at=started_at,
+            finished_at=finished_at,
+            duration_seconds=duration_seconds,
+            stations=len(stations),
+            board_rows=board_rows_count,
+            detail_queue=len(queue),
+            details=len(detail_rows),
+        )
+
+        return {
+            "available": True,
+            "date": date,
+            "snapshotTime": seen_at,
+            "lastUpdated": finished_at,
+            "collectionCompletedAt": finished_at,
+            "collectionDurationSeconds": duration_seconds,
+            "collectionStatus": "success",
+            "nextScheduledAt": to_utc_iso(next_scheduled_slot()),
+            "stations": len(stations),
+            "stationRegistryRefreshed": station_registry_refreshed,
+            "stationRegistryRefreshDays": STATION_REGISTRY_REFRESH_DAYS,
+            "boardTypes": BOARD_TYPES,
+            "boardRows": board_rows_count,
+            "detailQueue": len(queue),
+            "details": len(detail_rows),
+            "summary": summary or {},
+        }
+    except Exception as exc:
+        finished_at = iso_now()
+        duration_seconds = round(time.monotonic() - started, 2)
+        record_collector_run(
+            slot,
+            "failed",
+            trigger=trigger,
+            started_at=started_at,
+            finished_at=finished_at,
+            duration_seconds=duration_seconds,
+            error=str(exc)[:500],
+        )
+        raise
 
 
 def collector_loop() -> None:
     while True:
+        record_missed_slots()
+        slot = due_scheduled_slot()
+        if not slot:
+            sleep_seconds = max(1, min(60, int((next_scheduled_slot() - now_rome()).total_seconds())))
+            time.sleep(sleep_seconds)
+            continue
+
         if collector_lock.acquire(blocking=False):
             try:
-                app.logger.info("statistics collector started")
-                collect_once()
-                app.logger.info("statistics collector finished")
+                app.logger.info("statistics collector started for slot %s", to_utc_iso(slot))
+                collect_once(slot_at=slot, trigger="scheduler")
+                record_skipped_slots(slot, now_rome())
+                app.logger.info("statistics collector finished for slot %s", to_utc_iso(slot))
             except Exception as exc:
-                app.logger.exception("statistics collector failed: %s", exc)
+                app.logger.exception("statistics collector failed for slot %s: %s", to_utc_iso(slot), exc)
             finally:
                 collector_lock.release()
         else:
-            app.logger.info("statistics collector skipped: previous run still active")
-        time.sleep(max(60, COLLECTOR_INTERVAL_MINUTES * 60))
+            record_collector_run(slot, "skipped", finished_at=iso_now(), error="collector_busy")
+            app.logger.info("statistics collector skipped for slot %s: previous run still active", to_utc_iso(slot))
 
 
 def summary_for_date(date: str) -> dict[str, Any]:
@@ -1031,14 +1263,38 @@ def summary_for_date(date: str) -> dict[str, Any]:
             (date,),
         ).fetchone()
         station_total = conn.execute("SELECT COUNT(*) AS total FROM station_registry").fetchone()
+        last_run = conn.execute(
+            "SELECT * FROM collector_runs WHERE date=? ORDER BY slot_at DESC LIMIT 1",
+            (date,),
+        ).fetchone()
 
     monitored = as_int(counts["monitored"] if counts else 0)
     treni_giorno = as_int(snapshot["treni_giorno"] if snapshot else 0)
     coverage_rate = (monitored / treni_giorno) if treni_giorno else 0
+    snapshot_time = snapshot["captured_at"] if snapshot else None
+    last_run_dict = dict(last_run) if last_run else None
+    completed_at = snapshot["finished_at"] if snapshot and "finished_at" in snapshot.keys() else None
+    completed_at = completed_at or (last_run_dict or {}).get("finished_at") or snapshot_time
+    duration_seconds = as_int(
+        snapshot["duration_seconds"]
+        if snapshot and "duration_seconds" in snapshot.keys()
+        else (last_run_dict or {}).get("duration_seconds", 0)
+    )
+    collection_status = (
+        (snapshot["status"] if snapshot and "status" in snapshot.keys() else None)
+        or (last_run_dict or {}).get("status")
+        or "unknown"
+    )
     return {
         "available": True,
         "date": date,
-        "lastUpdated": snapshot["captured_at"] if snapshot else None,
+        "lastUpdated": completed_at,
+        "snapshotTime": snapshot_time,
+        "collectionCompletedAt": completed_at,
+        "collectionDurationSeconds": duration_seconds,
+        "collectionStatus": collection_status,
+        "nextScheduledAt": to_utc_iso(next_scheduled_slot()) if date == today_rome() else None,
+        "lastCollectorRun": last_run_dict,
         "collectionCadenceMinutes": COLLECTOR_INTERVAL_MINUTES,
         "coverage": {"rate": coverage_rate, "percent": coverage_rate * 100, "stations": as_int(station_total["total"] if station_total else 0)},
         "counts": {
@@ -1079,7 +1335,15 @@ def summary_for_date(date: str) -> dict[str, Any]:
 
 @app.get("/health")
 def health() -> Response:
-    return jsonify({"ok": True, "collectorEnabled": COLLECTOR_ENABLED})
+    return jsonify({
+        "ok": True,
+        "collectorEnabled": COLLECTOR_ENABLED,
+        "cadenceMinutes": COLLECTOR_INTERVAL_MINUTES,
+        "scheduleOffsetMinutes": COLLECTOR_SCHEDULE_OFFSET_MINUTES,
+        "finalizeTime": COLLECTOR_FINALIZE_TIME,
+        "nextScheduledAt": to_utc_iso(next_scheduled_slot()),
+        "lastCollectorRun": collector_run_row(),
+    })
 
 
 @app.post("/v1/collect")
@@ -1087,7 +1351,13 @@ def collect_endpoint() -> Response:
     if not collector_lock.acquire(blocking=False):
         return jsonify({"available": False, "reason": "collector_busy"}), 409
     try:
-        return jsonify(collect_once())
+        slot_text = request.args.get("slotAt") or request.args.get("slot")
+        parsed_slot = parse_iso_datetime(slot_text)
+        slot = parsed_slot.astimezone(APP_TZ) if parsed_slot else previous_scheduled_slot()
+        return jsonify(collect_once(slot_at=slot, trigger="manual"))
+    except Exception as exc:
+        app.logger.exception("manual statistics collection failed: %s", exc)
+        return jsonify({"available": False, "reason": "collector_failed", "error": str(exc)}), 500
     finally:
         collector_lock.release()
 
@@ -1097,7 +1367,7 @@ def days_endpoint() -> Response:
     limit = min(max(as_int(request.args.get("limit"), 30), 1), 90)
     with db() as conn:
         rows = conn.execute(
-            "SELECT date, MAX(captured_at) AS lastUpdated FROM snapshots GROUP BY date ORDER BY date DESC LIMIT ?",
+            "SELECT date, MAX(COALESCE(finished_at, captured_at)) AS lastUpdated FROM snapshots GROUP BY date ORDER BY date DESC LIMIT ?",
             (limit,),
         ).fetchall()
     if not rows:
@@ -1116,7 +1386,18 @@ def timeseries_endpoint() -> Response:
     date = request.args.get("date") or today_rome()
     with db() as conn:
         rows = conn.execute(
-            "SELECT captured_at AS timestamp, treni_circolanti AS running, treni_giorno AS circulated FROM snapshots WHERE date=? ORDER BY captured_at",
+            """
+            SELECT
+                captured_at AS timestamp,
+                finished_at AS completedAt,
+                duration_seconds AS durationSeconds,
+                status,
+                treni_circolanti AS running,
+                treni_giorno AS circulated
+            FROM snapshots
+            WHERE date=?
+            ORDER BY captured_at
+            """,
             (date,),
         ).fetchall()
     return jsonify({"date": date, "points": [dict(row) for row in rows]})

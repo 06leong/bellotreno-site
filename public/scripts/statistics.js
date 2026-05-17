@@ -293,14 +293,29 @@
     function renderMeta() {
         const summary = state.summary || {};
         const values = summaryCounts();
-        const lastUpdated = getPath(summary, ["lastUpdated", "ultimoAggiornamento", "updatedAt"], null);
+        const completedAt = getPath(summary, ["collectionCompletedAt", "lastUpdated", "ultimoAggiornamento", "updatedAt"], null);
+        const snapshotAt = getPath(summary, ["snapshotTime", "capturedAt", "captured_at"], null);
+        const nextScheduledAt = getPath(summary, ["nextScheduledAt"], null);
         const cadence = getPath(summary, ["collectionCadenceMinutes", "cadenceMinutes", "samplingMinutes"], null);
         const stationValue = values.indexedStations !== null
             ? formatNumber(values.indexedStations)
             : "--";
-        if ($("statisticsLastUpdated")) $("statisticsLastUpdated").textContent = formatDateTime(lastUpdated);
-        if ($("statisticsCadence")) $("statisticsCadence").textContent = cadence ? `${cadence} ${tr("minutes", "min")}` : "--";
-        if ($("statisticsCoverage")) $("statisticsCoverage").textContent = stationValue;
+        const lastUpdatedEl = $("statisticsLastUpdated");
+        if (lastUpdatedEl) {
+            lastUpdatedEl.textContent = formatDateTime(completedAt);
+            lastUpdatedEl.title = snapshotAt
+                ? `${tr("statistics_snapshot_time", "Snapshot time")}: ${formatDateTime(snapshotAt)}`
+                : "";
+        }
+        const cadenceEl = $("statisticsCadence");
+        if (cadenceEl) {
+            cadenceEl.textContent = cadence ? `${cadence} ${tr("minutes", "min")} - ${tr("statistics_fixed_schedule", "fixed slots")}` : "--";
+            cadenceEl.title = nextScheduledAt
+                ? `${tr("statistics_next_run", "Next scheduled run")}: ${formatDateTime(nextScheduledAt)}`
+                : "";
+        }
+        const coverageEl = $("statisticsCoverage");
+        if (coverageEl) coverageEl.textContent = stationValue;
     }
 
     function renderMetrics() {
