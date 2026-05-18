@@ -1,7 +1,7 @@
 (function () {
     const API_BASE = "/api/statistics";
     const PAGE_SIZE = 25;
-    const CATEGORY_ORDER = ["REG", "MET", "FR", "EC FR", "FA", "FB", "IC", "ICN", "EC", "EN", "EXP", "NCL", "TS"];
+    const CATEGORY_ORDER = ["REG", "MET", "FR", "EC FR", "FA", "FB", "IC", "ICN", "EC", "EN", "EXP", "NCL", "IR", "TS"];
     const CATEGORY_OPTIONS = [...CATEGORY_ORDER];
 
     const state = {
@@ -34,7 +34,8 @@
         EC: "#3c8149",
         EN: "#3c8149",
         TS: "#827654",
-        EXP: "#35556b"
+        EXP: "#35556b",
+        IR: "#69737f"
     };
 
     function tr(key, fallback) {
