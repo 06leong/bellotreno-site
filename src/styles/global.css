@@ -703,6 +703,10 @@ a:visited {
     background: var(--train-green);
 }
 
+.station-item.line-cancelled .station-dot-wrapper::after {
+    background: var(--train-red);
+}
+
 .station-dot {
     position: relative;
     z-index: 2;
@@ -730,6 +734,52 @@ a:visited {
 
 .station-item.dot-future .station-dot {
     background: var(--train-grey);
+}
+
+.station-item.dot-cancelled .station-dot {
+    background: var(--train-red);
+}
+
+.station-item.station-cancelled .station-card {
+    border-color: color-mix(in oklch, var(--train-red) 38%, transparent);
+    background: color-mix(in oklch, var(--train-red) 9%, var(--color-base-100) 64%);
+}
+
+.station-item.station-cancelled .station-name,
+.station-item.station-cancelled .station-link,
+.station-item.station-cancelled .station-name-static {
+    color: var(--train-red);
+}
+
+.station-item.station-partial-boundary .station-dot {
+    background-color: var(--color-base-100, #ffffff);
+    border: 3px solid var(--train-green);
+    width: 18px;
+    height: 18px;
+    margin-top: 10px;
+}
+
+.partial-stop-badge {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 8px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-family: var(--font-sans);
+    font-size: 0.65rem;
+    line-height: 1.2;
+    font-weight: 800;
+    letter-spacing: 0;
+    color: var(--train-green);
+    background: color-mix(in oklch, var(--train-green) 14%, transparent);
+    border: 1px solid color-mix(in oklch, var(--train-green) 24%, transparent);
+    white-space: nowrap;
+}
+
+.partial-stop-badge.partial-stop-cancelled {
+    color: var(--train-red);
+    background: color-mix(in oklch, var(--train-red) 14%, transparent);
+    border-color: color-mix(in oklch, var(--train-red) 28%, transparent);
 }
 
 .station-card {
