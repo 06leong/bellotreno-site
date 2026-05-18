@@ -213,19 +213,19 @@ function partialStopLabel(kind) {
     const lang = window.currentLang || 'en';
     const labels = {
         zh: {
-            cancelled: '取消区间',
+            cancelled: '取消停站',
             actualStart: '实际始发',
             actualEnd: '实际终到',
             replacementStart: '换乘后运行'
         },
         it: {
-            cancelled: 'Tratta cancellata',
+            cancelled: 'Fermata cancellata',
             actualStart: 'Parte da qui',
             actualEnd: 'Termina qui',
             replacementStart: 'Prosegue con cambio'
         },
         en: {
-            cancelled: 'Cancelled section',
+            cancelled: 'Cancelled stop',
             actualStart: 'Starts here',
             actualEnd: 'Ends here',
             replacementStart: 'Replacement leg'
