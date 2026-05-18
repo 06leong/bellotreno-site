@@ -166,6 +166,134 @@ function renderTimeHtml(label, schedMs, realMs, delayMin) {
     return `<div class="time-item"><span class="time-label">${label}</span><span class="time-val-real tabular-nums ${colorClass}">${timeToShow}</span></div>`;
 }
 
+function normalizeStationMatchName(value) {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[’'`´]/g, '')
+        .replace(/[.\-_/(),]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toUpperCase();
+}
+
+function findStopIndexByName(stops, name) {
+    const target = normalizeStationMatchName(name);
+    if (!target) return -1;
+
+    let index = stops.findIndex((stop) => normalizeStationMatchName(stop?.stazione) === target);
+    if (index >= 0) return index;
+
+    index = stops.findIndex((stop) => {
+        const current = normalizeStationMatchName(stop?.stazione);
+        return current && (current.includes(target) || target.includes(current));
+    });
+    return index;
+}
+
+function collectSuppressedStopNames(value, names = []) {
+    if (!value) return names;
+    if (typeof value === 'string') {
+        names.push(value);
+        return names;
+    }
+    if (Array.isArray(value)) {
+        value.forEach((item) => collectSuppressedStopNames(item, names));
+        return names;
+    }
+    if (typeof value === 'object') {
+        ['stazione', 'nome', 'name', 'descrizione', 'denominazione'].forEach((key) => {
+            if (typeof value[key] === 'string') names.push(value[key]);
+        });
+    }
+    return names;
+}
+
+function partialStopLabel(kind) {
+    const lang = window.currentLang || 'en';
+    const labels = {
+        zh: {
+            cancelled: '取消区间',
+            actualStart: '实际始发',
+            actualEnd: '实际终到',
+            replacementStart: '换乘后运行'
+        },
+        it: {
+            cancelled: 'Tratta cancellata',
+            actualStart: 'Parte da qui',
+            actualEnd: 'Termina qui',
+            replacementStart: 'Prosegue con cambio'
+        },
+        en: {
+            cancelled: 'Cancelled section',
+            actualStart: 'Starts here',
+            actualEnd: 'Ends here',
+            replacementStart: 'Replacement leg'
+        }
+    };
+    return (labels[lang] || labels.en)[kind] || kind;
+}
+
+function buildPartialCancellationState(data, stops) {
+    const states = (Array.isArray(stops) ? stops : []).map((stop) => ({
+        cancelled: Number(stop?.actualFermataType) === 3,
+        boundary: ''
+    }));
+    if (!states.length) return states;
+
+    collectSuppressedStopNames(data?.fermateSoppresse).forEach((name) => {
+        const index = findStopIndexByName(stops, name);
+        if (index >= 0) states[index].cancelled = true;
+    });
+
+    const title = String(data?.subTitle || '').trim();
+    const cancelledRange = title.match(/treno\s+cancellato\s+da\s+(.+?)\s+a\s+(.+?)(?:\.|$)/i);
+    if (!cancelledRange) return states;
+
+    const fromName = cancelledRange[1].trim();
+    const toName = cancelledRange[2].trim();
+    const startsFrom = title.match(/parte\s+da\s+(.+?)(?:\.|$)/i);
+    const arrivesAt = title.match(/arriva\s+a\s+(.+?)(?:\.|$)/i);
+    const hasTrainChange = /viaggio\s+con\s+cambio\s+di\s+treno/i.test(title);
+
+    if (startsFrom) {
+        const anchorIndex = findStopIndexByName(stops, startsFrom[1]) >= 0
+            ? findStopIndexByName(stops, startsFrom[1])
+            : findStopIndexByName(stops, toName);
+        if (anchorIndex >= 0) {
+            for (let i = 0; i < anchorIndex; i += 1) states[i].cancelled = true;
+            states[anchorIndex].boundary = 'actualStart';
+        }
+        return states;
+    }
+
+    if (arrivesAt) {
+        const anchorIndex = findStopIndexByName(stops, arrivesAt[1]) >= 0
+            ? findStopIndexByName(stops, arrivesAt[1])
+            : findStopIndexByName(stops, fromName);
+        if (anchorIndex >= 0) {
+            for (let i = anchorIndex + 1; i < states.length; i += 1) states[i].cancelled = true;
+            states[anchorIndex].boundary = 'actualEnd';
+        }
+        return states;
+    }
+
+    if (hasTrainChange) {
+        const fromIndex = findStopIndexByName(stops, fromName);
+        const toIndex = findStopIndexByName(stops, toName);
+        if (fromIndex >= 0 && toIndex >= 0 && fromIndex < toIndex) {
+            for (let i = fromIndex; i < toIndex; i += 1) states[i].cancelled = true;
+            states[toIndex].boundary = 'replacementStart';
+        } else if (toIndex >= 0) {
+            states[toIndex].boundary = 'replacementStart';
+        } else if (states.length && normalizeStationMatchName(stops[0]?.stazione) === normalizeStationMatchName(toName)) {
+            states[0].boundary = 'replacementStart';
+        }
+    }
+
+    return states;
+}
+
 
 
 
@@ -727,16 +855,21 @@ function render(data) {
 
     const totalStations = timelineStops.length;
     const timelineFragments = [];
+    const partialCancellationStates = buildPartialCancellationState(data, timelineStops);
 
     timelineStops.forEach((f, i) => {
         const isLast = i === totalStations - 1;
         const isFirst = i === 0;
         const isSwissStop = f.source === 'swiss';
+        const partialState = partialCancellationStates[i] || {};
+        const nextPartialState = partialCancellationStates[i + 1] || {};
 
         let dotClass = 'dot-future';
         let lineClass = 'line-future';
 
-        if (lastReachedIdx >= 0) {
+        if (partialState.cancelled) {
+            dotClass = 'dot-cancelled';
+        } else if (lastReachedIdx >= 0) {
             if (i < lastReachedIdx) {
                 dotClass = 'dot-passed';
                 lineClass = 'line-passed';
@@ -746,8 +879,14 @@ function render(data) {
             }
         }
 
+        if (!isLast && (partialState.cancelled || nextPartialState.cancelled)) {
+            lineClass = 'line-cancelled';
+        }
+
         const stationItemClasses = ['station-item', dotClass, lineClass];
         if (isSwissStop) stationItemClasses.push('station-source-swiss');
+        if (partialState.cancelled) stationItemClasses.push('station-cancelled');
+        if (partialState.boundary) stationItemClasses.push('station-partial-boundary');
 
         const pPlat = f.binarioProgrammatoPartenzaDescrizione || f.binarioProgrammatoArrivoDescrizione;
         const ePlat = f.binarioEffettivoPartenzaDescrizione || f.binarioEffettivoArrivoDescrizione;
@@ -777,6 +916,11 @@ function render(data) {
         const stationNameHTML = isSwissStop
             ? `<span class="station-name-static">${escapeHtml(f.stazione)}</span>`
             : `<span class="station-link" data-station-id="${f.id}" data-station-name="${escapeHtml(f.stazione)}">${escapeHtml(f.stazione)}</span>`;
+        const partialBadge = partialState.cancelled
+            ? `<span class="partial-stop-badge partial-stop-cancelled">${escapeHtml(partialStopLabel('cancelled'))}</span>`
+            : partialState.boundary
+                ? `<span class="partial-stop-badge">${escapeHtml(partialStopLabel(partialState.boundary))}</span>`
+                : '';
         const progressivoHTML = isSwissStop
             ? `<div class="text-[0.65rem] font-mono opacity-40 mt-2" title="opentransportdata.swiss">CH</div>`
             : `<div class="text-[0.65rem] font-mono opacity-30 mt-2" title="Progressivo">P:${f.progressivo || '--'}</div>`;
@@ -791,6 +935,7 @@ function render(data) {
                         <div class="station-name group-hover:text-primary transition-colors flex items-center flex-wrap">
                             ${stationNameHTML}
                             ${sourceBadge}
+                            ${partialBadge}
                             ${(!isFirst && !isLast && stayTime !== "N/A") ? `<span class="hidden sm:flex opacity-50 text-[0.85rem] font-medium items-center gap-0.5 ml-2 tracking-normal" style="font-family: var(--font-sans)"><span class="material-symbols-outlined icon-hourglass-desktop">hourglass_empty</span> ${stayTime}</span>` : ''}
                         </div>
                         ${directionBadge ? `<div class="flex items-center gap-2 mt-1 flex-wrap">${directionBadge}</div>` : ''}
