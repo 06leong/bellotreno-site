@@ -20,6 +20,10 @@ const BUILD_ID = (
     || Date.now().toString(36)
 ).slice(0, 16);
 const withBuildVersion = (src: string) => `${src}${src.includes('?') ? '&' : '?'}v=${BUILD_ID}`;
+const UMAMI_SCRIPT_URL = import.meta.env.PUBLIC_UMAMI_SCRIPT_URL;
+const UMAMI_WEBSITE_ID = import.meta.env.PUBLIC_UMAMI_WEBSITE_ID;
+const UMAMI_DOMAINS = import.meta.env.PUBLIC_UMAMI_DOMAINS || 'real.bellotreno.org';
+const ENABLE_UMAMI = Boolean(UMAMI_SCRIPT_URL && UMAMI_WEBSITE_ID);
 
 const {
     title,
@@ -113,6 +117,17 @@ const canonicalURL = new URL(Astro.url.pathname, SITE_URL).href;
     <noscript><link href="https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined&display=swap" rel="stylesheet"></noscript>
 
     <script is:inline src={withBuildVersion("/scripts/theme-init.js")}></script>
+    {ENABLE_UMAMI && (
+        <script
+            is:inline
+            defer
+            src={UMAMI_SCRIPT_URL}
+            data-website-id={UMAMI_WEBSITE_ID}
+            data-domains={UMAMI_DOMAINS}
+            data-do-not-track="true"
+            data-exclude-search="true"
+        ></script>
+    )}
     <ClientRouter />
     <slot name="head" />
 </head>
