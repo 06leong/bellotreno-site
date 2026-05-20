@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  baseline:
+    name: Baseline checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Check frontend and Pages Function JavaScript syntax
+        run: |
+          find public/scripts functions -type f -name '*.js' -print0 \
+            | xargs -0 -r -n 1 node --check
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Check Python syntax
+        run: python -m py_compile rfi-proxy/app.py rfi-proxy/statistics/app.py
+
+      - name: Validate Docker Compose config
+        working-directory: rfi-proxy
+        env:
+          RFI_PROXY_SECURITY_TOKEN: ci-rfi-proxy-token
+          STATISTICS_SECURITY_TOKEN: ci-statistics-token
+        run: docker compose config
