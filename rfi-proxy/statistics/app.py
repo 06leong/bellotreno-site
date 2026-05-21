@@ -25,16 +25,27 @@ SECURITY_TOKEN = os.getenv("STATISTICS_SECURITY_TOKEN", "")
 RFI_PROXY_BASE_URL = os.getenv("RFI_PROXY_BASE_URL", "http://rfi-proxy:8080").rstrip("/")
 RFI_PROXY_SECURITY_TOKEN = os.getenv("RFI_PROXY_SECURITY_TOKEN", "")
 
+
+def env_int(name: str, default: int, minimum: int = 1) -> int:
+    try:
+        return max(minimum, int(os.getenv(name, str(default))))
+    except (TypeError, ValueError):
+        return max(minimum, default)
+
+
 COLLECTOR_ENABLED = os.getenv("COLLECTOR_ENABLED", "true").lower() == "true"
-COLLECTOR_INTERVAL_MINUTES = max(1, int(os.getenv("COLLECTOR_INTERVAL_MINUTES", "30")))
-COLLECTOR_MAX_RUNTIME_SECONDS = int(os.getenv("COLLECTOR_MAX_RUNTIME_SECONDS", "2400"))
-COLLECTOR_CONCURRENCY = max(1, int(os.getenv("COLLECTOR_CONCURRENCY", "4")))
-COLLECTOR_SCHEDULE_OFFSET_MINUTES = min(59, max(0, int(os.getenv("COLLECTOR_SCHEDULE_OFFSET_MINUTES", "5"))))
-COLLECTOR_CATCHUP_GRACE_MINUTES = max(0, int(os.getenv("COLLECTOR_CATCHUP_GRACE_MINUTES", "20")))
+COLLECTOR_INTERVAL_MINUTES = env_int("COLLECTOR_INTERVAL_MINUTES", 30)
+COLLECTOR_MAX_RUNTIME_SECONDS = env_int("COLLECTOR_MAX_RUNTIME_SECONDS", 2400)
+COLLECTOR_CONCURRENCY = env_int("COLLECTOR_CONCURRENCY", 4)
+COLLECTOR_BOARD_CONCURRENCY = env_int("COLLECTOR_BOARD_CONCURRENCY", 10)
+COLLECTOR_DETAIL_CONCURRENCY = env_int("COLLECTOR_DETAIL_CONCURRENCY", 8)
+COLLECTOR_REGION_CONCURRENCY = env_int("COLLECTOR_REGION_CONCURRENCY", 6)
+COLLECTOR_SCHEDULE_OFFSET_MINUTES = min(59, max(0, env_int("COLLECTOR_SCHEDULE_OFFSET_MINUTES", 5, minimum=0)))
+COLLECTOR_CATCHUP_GRACE_MINUTES = env_int("COLLECTOR_CATCHUP_GRACE_MINUTES", 20, minimum=0)
 COLLECTOR_FINALIZE_TIME = os.getenv("COLLECTOR_FINALIZE_TIME", "23:55")
-DETAIL_LIMIT_PER_RUN = max(0, int(os.getenv("DETAIL_LIMIT_PER_RUN", "0")))
-RETENTION_DAYS = max(1, int(os.getenv("RETENTION_DAYS", "30")))
-STATION_REGISTRY_REFRESH_DAYS = max(1, int(os.getenv("STATION_REGISTRY_REFRESH_DAYS", "7")))
+DETAIL_LIMIT_PER_RUN = env_int("DETAIL_LIMIT_PER_RUN", 0, minimum=0)
+RETENTION_DAYS = env_int("RETENTION_DAYS", 30)
+STATION_REGISTRY_REFRESH_DAYS = env_int("STATION_REGISTRY_REFRESH_DAYS", 7)
 REGION_CODES = [
     int(item.strip())
     for item in os.getenv("REGION_CODES", "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22").split(",")
@@ -49,6 +60,7 @@ OPTIONAL_STATION_CSV = os.getenv("STATION_CSV_PATH", "/data/stations.csv")
 
 app = Flask(__name__)
 collector_lock = threading.Lock()
+thread_local = threading.local()
 
 
 def db() -> sqlite3.Connection:
@@ -444,12 +456,20 @@ def require_auth() -> Response | None:
 app.before_request(require_auth)
 
 
+def vt_session() -> requests.Session:
+    session = getattr(thread_local, "vt_session", None)
+    if session is None:
+        session = requests.Session()
+        thread_local.vt_session = session
+    return session
+
+
 def vt_get(path: str, timeout: int = 25) -> Any:
     if not RFI_PROXY_SECURITY_TOKEN:
         raise RuntimeError("RFI_PROXY_SECURITY_TOKEN is not configured")
     target = f"{VT_BASE_URL}/{path.lstrip('/')}"
     proxy_url = f"{RFI_PROXY_BASE_URL}/?{urlencode({'url': target})}"
-    response = requests.get(
+    response = vt_session().get(
         proxy_url,
         headers={"X-Bello-Token": RFI_PROXY_SECURITY_TOKEN, "Accept": "application/json,text/plain,*/*"},
         timeout=timeout,
@@ -504,22 +524,23 @@ def clean_station_name(value: Any) -> str:
     return str(value or "").strip()
 
 
-def train_key_from_parts(number: Any, origin_code: Any, departure_epoch_ms: Any) -> str:
+def train_key_from_parts(number: Any, origin_code: Any, departure_epoch_ms: Any, fallback_date: str | None = None) -> str:
     number_text = str(number or "").strip()
     origin_text = str(origin_code or "").strip()
     epoch_text = str(departure_epoch_ms or "").strip()
     if number_text and origin_text and epoch_text:
         return f"{number_text}-{origin_text}-{epoch_text}"
     if number_text and origin_text:
-        return f"{number_text}-{origin_text}-{today_rome()}"
+        return f"{number_text}-{origin_text}-{fallback_date or today_rome()}"
     return f"unknown-{hash((number_text, origin_text, epoch_text))}"
 
 
-def train_key(item: dict[str, Any]) -> str:
+def train_key(item: dict[str, Any], fallback_date: str | None = None) -> str:
     return train_key_from_parts(
         pick(item, "numeroTreno", "trainNumber", "compNumeroTreno", default=""),
         pick(item, "codLocOrig", "idOrigine", "codOrigine", default=""),
-        pick(item, "dataPartenzaTreno", "dataPartenza", default=midnight_epoch_ms()),
+        pick(item, "dataPartenzaTreno", "dataPartenza", default=midnight_epoch_ms(fallback_date)),
+        fallback_date=fallback_date,
     )
 
 
@@ -530,6 +551,16 @@ def timestamp_to_iso(value: Any) -> str | None:
         return datetime.fromtimestamp(int(value) / 1000, tz=APP_TZ).isoformat()
     except (TypeError, ValueError, OSError):
         return None
+
+
+def service_date_from_item(item: dict[str, Any], fallback_date: str) -> str:
+    epoch = pick(item, "dataPartenzaTreno", "dataPartenza", default=None)
+    if epoch is None or epoch == "":
+        return fallback_date
+    try:
+        return datetime.fromtimestamp(int(epoch) / 1000, tz=APP_TZ).date().isoformat()
+    except (TypeError, ValueError, OSError):
+        return fallback_date
 
 
 def status_from_item(item: dict[str, Any]) -> str:
@@ -657,7 +688,7 @@ def station_registry_refresh_due() -> bool:
 def refresh_station_registry(require_complete: bool = False) -> list[dict[str, Any]]:
     stations_by_code: dict[str, dict[str, Any]] = {}
     failed_regions = 0
-    with ThreadPoolExecutor(max_workers=min(COLLECTOR_CONCURRENCY, 4)) as executor:
+    with ThreadPoolExecutor(max_workers=COLLECTOR_REGION_CONCURRENCY) as executor:
         futures = [executor.submit(fetch_region_stations, region_code) for region_code in REGION_CODES]
         for future in as_completed(futures):
             try:
@@ -716,21 +747,22 @@ def fetch_board(station_code: str, board_type: str, board_time: datetime) -> lis
     return data if isinstance(data, list) else []
 
 
-def board_candidate(item: dict[str, Any]) -> dict[str, str] | None:
+def board_candidate(item: dict[str, Any], fallback_date: str) -> dict[str, str] | None:
     number = str(pick(item, "numeroTreno", "compNumeroTreno", default="")).strip()
     origin_code = str(pick(item, "codLocOrig", "idOrigine", "codOrigine", default="")).strip()
-    departure_epoch = str(pick(item, "dataPartenzaTreno", "dataPartenza", default=midnight_epoch_ms())).strip()
+    departure_epoch = str(pick(item, "dataPartenzaTreno", "dataPartenza", default=midnight_epoch_ms(fallback_date))).strip()
     if not number or not origin_code:
         return None
     return {
         "number": number,
         "origin_code": origin_code,
         "departure_epoch_ms": departure_epoch,
-        "train_key": train_key_from_parts(number, origin_code, departure_epoch),
+        "train_key": train_key_from_parts(number, origin_code, departure_epoch, fallback_date=fallback_date),
     }
 
 
-def normalize_train(item: dict[str, Any], seen_at: str, has_details: bool = False) -> dict[str, Any]:
+def normalize_train(item: dict[str, Any], seen_at: str, has_details: bool = False, fallback_date: str | None = None) -> dict[str, Any]:
+    service_date = service_date_from_item(item, fallback_date or today_rome())
     stops = item.get("fermate") if isinstance(item.get("fermate"), list) else []
     first_stop = stops[0] if stops else {}
     last_stop = stops[-1] if stops else {}
@@ -740,7 +772,7 @@ def normalize_train(item: dict[str, Any], seen_at: str, has_details: bool = Fals
     destination = clean_station_name(pick(item, "destinazione", "stazioneDestinazione", default="") or last_stop.get("stazione"))
     origin_code = str(pick(item, "idOrigine", "codLocOrig", "codOrigine", default="") or first_stop.get("id") or "").strip()
     destination_code = str(pick(item, "idDestinazione", "codDestinazione", default="") or last_stop.get("id") or "").strip()
-    departure_epoch = str(pick(item, "dataPartenzaTreno", "dataPartenza", default=midnight_epoch_ms())).strip()
+    departure_epoch = str(pick(item, "dataPartenzaTreno", "dataPartenza", default=midnight_epoch_ms(service_date))).strip()
     delay = as_int(pick(item, "ritardo", "delay", default=0))
     departure_delay = as_int(pick(first_stop, "ritardoPartenza", default=pick(item, "ritardoPartenza", default=delay)))
     arrival_delay = as_int(pick(last_stop, "ritardoArrivo", default=pick(item, "ritardoArrivo", default=delay)))
@@ -760,8 +792,8 @@ def normalize_train(item: dict[str, Any], seen_at: str, has_details: bool = Fals
         pick(item, "compOrarioArrivo", "orarioArrivo", default="")
     ).strip()
     return {
-        "date": today_rome(),
-        "train_key": train_key_from_parts(number, origin_code, departure_epoch),
+        "date": service_date,
+        "train_key": train_key_from_parts(number, origin_code, departure_epoch, fallback_date=service_date),
         "train_number": number,
         "departure_epoch_ms": departure_epoch,
         "category": category,
@@ -935,6 +967,29 @@ def fetch_detail(candidate: dict[str, str]) -> dict[str, Any] | None:
         return None
 
 
+def bounded_futures(items: list[Any], worker: Any, max_workers: int):
+    max_workers = max(1, max_workers)
+    max_pending = max_workers * 2
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        iterator = iter(items)
+        pending = set()
+
+        def submit_more() -> None:
+            while len(pending) < max_pending:
+                try:
+                    item = next(iterator)
+                except StopIteration:
+                    break
+                pending.add(executor.submit(worker, item))
+
+        submit_more()
+        while pending:
+            future = next(as_completed(pending))
+            pending.remove(future)
+            yield future
+            submit_more()
+
+
 def detail_queue(date: str, board_candidates: dict[str, dict[str, str]]) -> list[dict[str, str]]:
     queue: list[dict[str, str]] = []
     with db() as conn:
@@ -1076,49 +1131,57 @@ def collect_once(slot_at: datetime | None = None, trigger: str = "manual") -> di
         board_rows_count = 0
         detail_candidates_by_key: dict[str, dict[str, str]] = {}
 
-        with ThreadPoolExecutor(max_workers=COLLECTOR_CONCURRENCY) as executor:
-            futures = [executor.submit(fetch_board_for_station, station, slot) for station in stations]
-            for future in as_completed(futures):
+        def board_worker(station: dict[str, Any]) -> dict[str, Any]:
+            return fetch_board_for_station(station, slot)
+
+        with db() as conn:
+            processed_stations = 0
+            for future in bounded_futures(stations, board_worker, COLLECTOR_BOARD_CONCURRENCY):
                 if time.monotonic() - started > COLLECTOR_MAX_RUNTIME_SECONDS:
                     break
                 result = future.result()
                 station = result["station"]
-                with db() as conn:
-                    for board_type, rows in result["boards"].items():
-                        board_rows_count += len(rows)
-                        update_station_board_stats(
-                            conn,
-                            date,
-                            station["station_code"],
-                            station["station_name"],
-                            board_type,
-                            rows,
-                            seen_at,
-                        )
-                        for item in rows:
-                            if not isinstance(item, dict):
-                                continue
-                            row = normalize_train(item, seen_at, has_details=False)
-                            upsert_train(conn, row)
-                            candidate = board_candidate(item)
-                            if candidate:
-                                detail_candidates_by_key[candidate["train_key"]] = candidate
+                for board_type, rows in result["boards"].items():
+                    same_day_rows = [
+                        item
+                        for item in rows
+                        if isinstance(item, dict) and service_date_from_item(item, date) == date
+                    ]
+                    board_rows_count += len(same_day_rows)
+                    update_station_board_stats(
+                        conn,
+                        date,
+                        station["station_code"],
+                        station["station_name"],
+                        board_type,
+                        same_day_rows,
+                        seen_at,
+                    )
+                    for item in same_day_rows:
+                        row = normalize_train(item, seen_at, has_details=False, fallback_date=date)
+                        upsert_train(conn, row)
+                        candidate = board_candidate(item, date)
+                        if candidate:
+                            detail_candidates_by_key[candidate["train_key"]] = candidate
+                processed_stations += 1
+                if processed_stations % 250 == 0:
+                    conn.commit()
 
         queue = detail_queue(date, detail_candidates_by_key)
         detail_rows = []
         if queue:
-            with ThreadPoolExecutor(max_workers=COLLECTOR_CONCURRENCY) as executor:
-                futures = [executor.submit(fetch_detail, candidate) for candidate in queue]
-                for future in as_completed(futures):
-                    if time.monotonic() - started > COLLECTOR_MAX_RUNTIME_SECONDS:
-                        break
-                    detail = future.result()
-                    if detail:
-                        detail_rows.append(detail)
+            for future in bounded_futures(queue, fetch_detail, COLLECTOR_DETAIL_CONCURRENCY):
+                if time.monotonic() - started > COLLECTOR_MAX_RUNTIME_SECONDS:
+                    break
+                detail = future.result()
+                if detail and service_date_from_item(detail, date) == date:
+                    detail_rows.append(detail)
 
         with db() as conn:
             for detail in detail_rows:
-                row = normalize_train(detail, seen_at, has_details=True)
+                row = normalize_train(detail, seen_at, has_details=True, fallback_date=date)
+                if row["date"] != date:
+                    continue
                 upsert_train(conn, row)
                 replace_train_stops(conn, detail, row)
             rebuild_daily_aggregates(conn, date)
@@ -1341,6 +1404,9 @@ def health() -> Response:
         "cadenceMinutes": COLLECTOR_INTERVAL_MINUTES,
         "scheduleOffsetMinutes": COLLECTOR_SCHEDULE_OFFSET_MINUTES,
         "finalizeTime": COLLECTOR_FINALIZE_TIME,
+        "boardConcurrency": COLLECTOR_BOARD_CONCURRENCY,
+        "detailConcurrency": COLLECTOR_DETAIL_CONCURRENCY,
+        "regionConcurrency": COLLECTOR_REGION_CONCURRENCY,
         "nextScheduledAt": to_utc_iso(next_scheduled_slot()),
         "lastCollectorRun": collector_run_row(),
     })

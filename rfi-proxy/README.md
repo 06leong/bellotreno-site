@@ -6,6 +6,12 @@ This folder contains the VPS-side services used by BelloTreno:
 - `bellotreno-statistics`: the statistics collector/API on port `8081`.
 
 Both services are started by the same `docker-compose.yml` and share the external Docker network `bellotreno-network`.
+The production compose file pulls prebuilt GHCR images:
+
+- `ghcr.io/06leong/bellotreno-rfi-proxy:latest`
+- `ghcr.io/06leong/bellotreno-statistics:latest`
+
+Each image is also published with a `sha-<commit>` tag for rollback.
 
 ## Required files on the VPS
 
@@ -20,6 +26,9 @@ STATISTICS_COLLECTOR_ENABLED=true
 STATISTICS_COLLECTOR_INTERVAL_MINUTES=30
 STATISTICS_COLLECTOR_MAX_RUNTIME_SECONDS=2400
 STATISTICS_COLLECTOR_CONCURRENCY=4
+STATISTICS_BOARD_CONCURRENCY=10
+STATISTICS_DETAIL_CONCURRENCY=8
+STATISTICS_REGION_CONCURRENCY=6
 STATISTICS_DETAIL_LIMIT_PER_RUN=0
 STATISTICS_RETENTION_DAYS=30
 STATISTICS_STATION_REGISTRY_REFRESH_DAYS=7
@@ -44,6 +53,8 @@ The statistics service follows the same broad model as `railway-opendata`:
 - it stores one row per train and one row per stop in SQLite, then rebuilds daily station/relation aggregates.
 - it uses aligned collection slots instead of sleeping after each run. With the default settings, it samples at `HH:05`, `HH:35`, and one final daily slot at `23:55` Europe/Rome time.
 - every station board in one run uses the same scheduled slot time, so a single snapshot is internally consistent even if the collection takes several minutes.
+- every collected train is assigned to the service date derived from `dataPartenzaTreno`/`dataPartenza`; trains whose service date differs from the scheduled slot date are ignored for that snapshot, so late-night collection does not mix next-day trains into the previous day.
+- board, train-detail, and station-registry lookups have separate concurrency controls. The current default is `10` board workers, `8` detail workers, and `6` region workers under a `680m` memory limit.
 - if the service is down or a previous run is still active, the collector records `missed`/`skipped` slots in `collector_runs` instead of starting overlapping work.
 
 Optional full station CSV support is available through `STATISTICS_STATION_CSV_PATH`. If the file exists in the data volume, rows are merged with live ViaggiaTreno stations. The built-in default does not require a CSV.
@@ -52,7 +63,8 @@ Optional full station CSV support is available through `STATISTICS_STATION_CSV_P
 
 ```bash
 docker network create bellotreno-network 2>/dev/null || true
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
 To collect arrivals as well as departures, keep this in `.env`:
@@ -64,7 +76,8 @@ STATISTICS_BOARD_TYPES=partenze,arrivi
 Then rebuild or restart the statistics service:
 
 ```bash
-docker compose up -d --build bellotreno-statistics
+docker compose pull bellotreno-statistics
+docker compose up -d bellotreno-statistics
 ```
 
 After deployment, `GET /health` returns the last collector run and the next scheduled slot. This is useful for confirming the scheduler is no longer drifting from the configured cadence.
