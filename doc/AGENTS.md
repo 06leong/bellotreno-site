@@ -9,10 +9,11 @@ Personal learning project: real-time Italian railway timetable viewer, built wit
 ```bash
 npm run dev        # start Astro dev server
 npm run build      # production build → dist/  (also generates sitemap-index.xml)
+npm run check      # syntax, i18n, normalizer fixtures, Python compile/unit checks
 npm run preview    # serve built output
 ```
 
-No lint, typecheck, or test scripts exist. TypeScript is checked implicitly by Astro (strict mode via `astro/tsconfigs/strict`).
+TypeScript is checked implicitly by Astro (strict mode via `astro/tsconfigs/strict`). `npm run check` is the baseline quality gate and is also run in CI.
 
 ---
 
@@ -33,6 +34,8 @@ No lint, typecheck, or test scripts exist. TypeScript is checked implicitly by A
   - `statistics.js` — railway statistics dashboard, charts, query table, and links into train/station pages
   - `swiss.js` — Swiss OpenTransportData formation fetch, timeline merge, coach strip, vehicle details, TILO/EC/REG cross-border enrichment
   - `theme-init.js` — inlined in `<head>` to prevent flash
+
+New pure normalizer/helper code should go under `src/lib/normalizers/` first, with fixture coverage in `tests/js/`. Keep the existing `public/scripts/` entry points as compatibility layers until each behavior is safely migrated.
 
 **Script load order in BaseLayout matters**: `config.js → i18n.js → common.js → [page-specific scripts]`. Page scripts passed via `pageScripts` prop are appended last.
 
@@ -68,6 +71,17 @@ These Workers are **not in this repo**. Direct calls to `viaggiatreno.it` fail i
 ---
 
 ## Current feature notes
+
+### Quality gates
+
+- `scripts/check-js-syntax.mjs` runs `node --check` for `public/scripts/**/*.js` and `functions/**/*.js`.
+- `npm run check:types` runs TypeScript's `checkJs` mode over `src/lib/normalizers/` so JSDoc data contracts are enforced without migrating the whole app to TypeScript yet.
+- `scripts/check-i18n.mjs` requires `zh`, `en`, and `it` translation keys to stay identical.
+- `scripts/audit-innerhtml.mjs` lists current `innerHTML` use sites for manual review; it is intentionally non-blocking for now.
+- `tests/js/` covers high-risk normalizer behavior for statistics categories, Swiss formation gatekeeping, and partial cancellation.
+- `tests/python/` covers pure statistics helpers such as service-date filtering.
+- `doc/innerhtml-audit.md` tracks the current `innerHTML` risk areas and migration priority.
+- `doc/priority-2-maintenance-map.md` tracks the remaining maintainability work, suggested PR sequence, and Cloudflare Pages preview checklist.
 
 ### Swiss formation
 
