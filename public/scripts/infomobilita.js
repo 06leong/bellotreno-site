@@ -90,6 +90,76 @@ function toggleLoading(show) {
     }
 }
 
+function replaceContent(element, children = []) {
+    if (!element) return;
+    element.replaceChildren(...children);
+}
+
+function createInfoMessage(text, color = 'var(--text-grey)') {
+    const message = document.createElement('div');
+    message.style.cssText = `text-align:center;padding:40px;color:${color}`;
+    message.textContent = text;
+    return message;
+}
+
+function createMaterialIcon(name, className = 'material-symbols-outlined text-[16px]') {
+    const icon = document.createElement('span');
+    icon.className = className;
+    icon.textContent = name;
+    return icon;
+}
+
+function createRSSCard({ title, safeLink, formattedDate, region }) {
+    const rssCard = document.createElement('div');
+    rssCard.className = 'card bg-base-100/65 backdrop-blur-3xl shadow-glass border border-base-content/10 hover:bg-base-100/75 hover:shadow-lg transition-all mb-4';
+
+    const body = document.createElement('div');
+    body.className = 'card-body p-6';
+
+    const heading = document.createElement('h3');
+    heading.className = 'card-title text-lg text-base-content leading-snug';
+    heading.textContent = title;
+
+    const metaRow = document.createElement('div');
+    metaRow.className = 'flex items-center justify-between gap-3 mt-4 flex-wrap';
+
+    const meta = document.createElement('div');
+    meta.className = 'flex items-center gap-2 text-sm text-base-content/60';
+
+    const time = document.createElement('span');
+    time.className = 'flex items-center gap-1';
+    time.append(createMaterialIcon('schedule'), document.createTextNode(` ${formattedDate}`));
+    meta.appendChild(time);
+
+    if (region) {
+        const badge = document.createElement('span');
+        badge.className = 'badge badge-sm badge-ghost custom-info-badge';
+        badge.textContent = region;
+        meta.appendChild(badge);
+    }
+
+    const actions = document.createElement('div');
+    actions.className = 'card-actions';
+
+    const anchor = document.createElement('a');
+    anchor.target = '_blank';
+    anchor.rel = 'noopener noreferrer';
+    anchor.className = 'btn btn-sm custom-readmore-btn rounded-full px-4 gap-1';
+    anchor.href = safeLink;
+
+    const readMore = document.createElement('span');
+    readMore.setAttribute('data-i18n', 'read_more');
+    readMore.textContent = getI18n('read_more');
+
+    anchor.append(readMore, createMaterialIcon('open_in_new'));
+    actions.appendChild(anchor);
+    metaRow.append(meta, actions);
+    body.append(heading, metaRow);
+    rssCard.appendChild(body);
+
+    return rssCard;
+}
+
 async function fetchRSS() {
     if (currentFetchController) {
         currentFetchController.abort();
@@ -116,7 +186,9 @@ async function fetchRSS() {
         const itemsArray = Array.from(xmlDoc.querySelectorAll("item"));
 
         if (itemsArray.length === 0) {
-            contentContainer.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--text-grey);" data-i18n="no_info_found">${getI18n('no_info_found')}</div>`;
+            const message = createInfoMessage(getI18n('no_info_found'));
+            message.setAttribute('data-i18n', 'no_info_found');
+            replaceContent(contentContainer, [message]);
             return;
         }
 
@@ -131,11 +203,7 @@ async function fetchRSS() {
     } catch (error) {
         if (error.name === 'AbortError') return;
         console.error('Error fetching RSS:', error);
-        const errDiv = document.createElement('div');
-        errDiv.style.cssText = 'text-align:center;padding:40px;color:var(--train-red)';
-        errDiv.textContent = `Error: ${error.message}`;
-        contentContainer.innerHTML = '';
-        contentContainer.appendChild(errDiv);
+        replaceContent(contentContainer, [createInfoMessage(`Error: ${error.message}`, 'var(--train-red)')]);
     } finally {
         currentFetchController = null;
         toggleLoading(false);
@@ -144,7 +212,7 @@ async function fetchRSS() {
 
 function renderRSS(items) {
     const contentContainer = document.getElementById('rssContent');
-    contentContainer.innerHTML = '';
+    replaceContent(contentContainer);
 
     items.forEach(item => {
         const title = item.querySelector("title")?.textContent || '';
@@ -172,31 +240,7 @@ function renderRSS(items) {
 
         const safeLink = /^https?:\/\//.test(link) ? link : '#';
 
-        const rssCard = document.createElement('div');
-        rssCard.className = 'card bg-base-100/65 backdrop-blur-3xl shadow-glass border border-base-content/10 hover:bg-base-100/75 hover:shadow-lg transition-all mb-4';
-        rssCard.innerHTML = `
-            <div class="card-body p-6">
-                <h3 class="card-title text-lg text-base-content leading-snug"></h3>
-                <div class="flex items-center justify-between gap-3 mt-4 flex-wrap">
-                    <div class="flex items-center gap-2 text-sm text-base-content/60">
-                        <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">schedule</span> ${formattedDate}</span>
-                        ${region ? `<span class="badge badge-sm badge-ghost custom-info-badge"></span>` : ''}
-                    </div>
-                    <div class="card-actions">
-                        <a target="_blank" rel="noopener noreferrer" class="btn btn-sm custom-readmore-btn rounded-full px-4 gap-1">
-                            <span data-i18n="read_more">${getI18n('read_more')}</span>
-                            <span class="material-symbols-outlined text-[16px]">open_in_new</span>
-                        </a>
-                    </div>
-                </div>
-            </div>
-        `;
-        rssCard.querySelector('h3').textContent = title;
-        if (region) {
-            rssCard.querySelector('.badge').textContent = region;
-        }
-        const anchor = rssCard.querySelector('a');
-        anchor.href = safeLink;
+        const rssCard = createRSSCard({ title, safeLink, formattedDate, region });
         contentContainer.appendChild(rssCard);
     });
 }
