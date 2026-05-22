@@ -5,6 +5,13 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
+    "check": "npm run check:js && npm run check:types && npm run test:js && npm run check:i18n && npm run check:python",
+    "check:js": "node scripts/check-js-syntax.mjs",
+    "check:types": "tsc --noEmit --allowJs --checkJs --module NodeNext --moduleResolution NodeNext --target ES2022 --skipLibCheck --strict src/lib/normalizers/statistics.js src/lib/normalizers/swiss.js src/lib/normalizers/viaggiatreno.js",
+    "check:i18n": "node scripts/check-i18n.mjs",
+    "check:python": "python -m py_compile rfi-proxy/app.py rfi-proxy/statistics/app.py && python -m unittest discover -s tests/python",
+    "test:js": "node --test tests/js/*.test.mjs",
+    "audit:innerhtml": "node scripts/audit-innerhtml.mjs",
     "preview": "astro preview",
     "astro": "astro"
   },

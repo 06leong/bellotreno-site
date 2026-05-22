@@ -15,6 +15,15 @@ from zoneinfo import ZoneInfo
 import requests
 from flask import Flask, Response, jsonify, request
 
+from statistics_core.normalizers import (
+    as_int as core_as_int,
+    midnight_epoch_ms as core_midnight_epoch_ms,
+    normalize_category as core_normalize_category,
+    pick as core_pick,
+    service_date_from_item as core_service_date_from_item,
+    train_key_from_parts as core_train_key_from_parts,
+)
+
 
 APP_TZ = ZoneInfo("Europe/Rome")
 VT_BASE_URL = "https://www.viaggiatreno.it/infomobilita/resteasy/viaggiatreno"
@@ -292,8 +301,7 @@ def js_date_string(dt: datetime | None = None) -> str:
 
 
 def midnight_epoch_ms(date_text: str | None = None) -> str:
-    day = datetime.fromisoformat(date_text).date() if date_text else now_rome().date()
-    return str(int(datetime.combine(day, datetime.min.time(), tzinfo=APP_TZ).timestamp() * 1000))
+    return core_midnight_epoch_ms(date_text)
 
 
 def parse_time_of_day(value: str, fallback_hour: int = 23, fallback_minute: int = 55) -> tuple[int, int]:
@@ -488,12 +496,7 @@ def vt_get(path: str, timeout: int = 25) -> Any:
 
 
 def as_int(value: Any, default: int = 0) -> int:
-    try:
-        if value is None or value == "":
-            return default
-        return int(float(value))
-    except (TypeError, ValueError):
-        return default
+    return core_as_int(value, default)
 
 
 def as_bool(value: Any) -> bool:
@@ -506,18 +509,11 @@ def as_bool(value: Any) -> bool:
 
 
 def pick(source: dict[str, Any], *keys: str, default: Any = None) -> Any:
-    for key in keys:
-        value = source.get(key)
-        if value is not None and value != "":
-            return value
-    return default
+    return core_pick(source, *keys, default=default)
 
 
 def normalize_category(value: Any) -> str:
-    text = str(value or "").strip().upper()
-    if not text:
-        return ""
-    return text.replace("EC FR", "EC").split()[0]
+    return core_normalize_category(value)
 
 
 def clean_station_name(value: Any) -> str:
@@ -525,14 +521,7 @@ def clean_station_name(value: Any) -> str:
 
 
 def train_key_from_parts(number: Any, origin_code: Any, departure_epoch_ms: Any, fallback_date: str | None = None) -> str:
-    number_text = str(number or "").strip()
-    origin_text = str(origin_code or "").strip()
-    epoch_text = str(departure_epoch_ms or "").strip()
-    if number_text and origin_text and epoch_text:
-        return f"{number_text}-{origin_text}-{epoch_text}"
-    if number_text and origin_text:
-        return f"{number_text}-{origin_text}-{fallback_date or today_rome()}"
-    return f"unknown-{hash((number_text, origin_text, epoch_text))}"
+    return core_train_key_from_parts(number, origin_code, departure_epoch_ms, fallback_date=fallback_date or today_rome())
 
 
 def train_key(item: dict[str, Any], fallback_date: str | None = None) -> str:
@@ -554,13 +543,7 @@ def timestamp_to_iso(value: Any) -> str | None:
 
 
 def service_date_from_item(item: dict[str, Any], fallback_date: str) -> str:
-    epoch = pick(item, "dataPartenzaTreno", "dataPartenza", default=None)
-    if epoch is None or epoch == "":
-        return fallback_date
-    try:
-        return datetime.fromtimestamp(int(epoch) / 1000, tz=APP_TZ).date().isoformat()
-    except (TypeError, ValueError, OSError):
-        return fallback_date
+    return core_service_date_from_item(item, fallback_date)
 
 
 def status_from_item(item: dict[str, Any]) -> str:
