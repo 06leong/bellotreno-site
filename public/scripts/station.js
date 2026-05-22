@@ -407,77 +407,193 @@ async function _stEnhanceBoardWithSwiss(trains, boardSeq) {
 
         const sourceText = translations[window.currentLang]?.swiss_source || 'CH';
         cell.classList.add('station-route-swiss');
-        cell.innerHTML = `
-            <span>${_stEsc(swissName)}</span>
-            <span class="source-badge source-badge-swiss station-source-badge">
-                ${_stEsc(sourceText)}
-            </span>
-        `;
+        _stReplaceChildren(cell, [
+            _stTextElement('span', swissName),
+            _stTextElement('span', sourceText, 'source-badge source-badge-swiss station-source-badge')
+        ]);
     }
+}
+
+function _stTextElement(tagName, text, className = '') {
+    const element = document.createElement(tagName);
+    if (className) element.className = className;
+    element.textContent = text ?? '';
+    return element;
+}
+
+function _stReplaceChildren(element, children) {
+    if (typeof element.replaceChildren === 'function') {
+        element.replaceChildren(...children);
+        return;
+    }
+    element.textContent = '';
+    children.forEach((child) => element.appendChild(child));
+}
+
+function _stCreateCell(tagName, text, className, width = '') {
+    const cell = document.createElement(tagName);
+    cell.className = className;
+    if (width) cell.style.width = width;
+    if (text !== undefined && text !== null) cell.textContent = text;
+    return cell;
+}
+
+function _stAppendTrainBadge(cell, trainNumberStr) {
+    const raw = String(trainNumberStr || '').trim();
+    if (!raw) {
+        cell.textContent = '--';
+        return;
+    }
+
+    const match = raw.match(/^([A-Z\s]+?)\s*(\d+)$/);
+    if (!match) {
+        cell.textContent = raw;
+        return;
+    }
+
+    let catCode = match[1].trim();
+    const num = match[2];
+    if (catCode.toUpperCase().includes('EC FR')) catCode = 'FR';
+    if (catCode.toUpperCase().includes('TS')) catCode = 'TS';
+
+    const badgeClass = window.getBadgeClass ? window.getBadgeClass(catCode) : '';
+    if (!badgeClass) {
+        const category = _stTextElement('span', catCode);
+        category.style.fontSize = '0.8rem';
+        category.style.fontWeight = '700';
+        category.style.opacity = '0.7';
+        cell.append(category, document.createElement('br'), document.createTextNode(num));
+        return;
+    }
+
+    const badge = document.createElement('span');
+    badge.classList.add('train-badge', 'station-badge');
+    String(badgeClass).split(/\s+/).filter(Boolean).forEach((className) => badge.classList.add(className));
+    badge.append(
+        _stTextElement('span', catCode, 'badge-cat'),
+        _stTextElement('span', num, 'badge-num')
+    );
+    cell.appendChild(badge);
+}
+
+function _stAppendPlatform(cell, train, type) {
+    const actualPlatform = type === 'arrivi'
+        ? train.binarioEffettivoArrivoDescrizione || ''
+        : train.binarioEffettivoPartenzaDescrizione || '';
+    const scheduledPlatform = type === 'arrivi'
+        ? train.binarioProgrammatoArrivoDescrizione || ''
+        : train.binarioProgrammatoPartenzaDescrizione || '';
+    const inStation = train.inStazione === true;
+
+    function platformSpan(text, changed = false) {
+        const span = _stTextElement('span', text);
+        if (inStation) span.classList.add('platform-pulse');
+        if (changed) {
+            span.style.color = 'red';
+            span.style.fontWeight = 'bold';
+        }
+        return span;
+    }
+
+    if (actualPlatform && scheduledPlatform && actualPlatform !== scheduledPlatform) {
+        const scheduled = _stTextElement('del', scheduledPlatform);
+        scheduled.style.color = 'grey';
+        cell.append(platformSpan(actualPlatform, true), document.createTextNode(' '), scheduled);
+        return;
+    }
+    if (actualPlatform || scheduledPlatform) {
+        cell.appendChild(platformSpan(actualPlatform || scheduledPlatform));
+        return;
+    }
+    cell.textContent = '--';
+}
+
+function _stRouteCell(text, index) {
+    const cell = _stCreateCell('td', text, "text-[0.65rem] sm:text-sm align-middle whitespace-normal leading-tight px-1 sm:px-4");
+    cell.dataset.routeCell = String(index);
+    cell.style.fontFamily = "'Outfit', 'Noto Sans SC', sans-serif";
+    cell.style.fontWeight = '700';
+    cell.style.letterSpacing = '0.01em';
+    return cell;
+}
+
+function _stBuildBoardHeader(columns) {
+    const thead = document.createElement('thead');
+    thead.className = 'bg-primary text-primary-content border-none';
+    const row = document.createElement('tr');
+    columns.forEach((column, index) => {
+        const classes = `${column.center ? 'text-center ' : ''}py-2 sm:py-3 font-semibold text-[0.65rem] sm:text-sm${index < columns.length - 1 ? ' border-r border-primary-content/20' : ''}`;
+        row.appendChild(_stCreateCell('th', column.label, classes, column.width));
+    });
+    thead.appendChild(row);
+    return thead;
+}
+
+function _stBuildTrainRow(train, index) {
+    const formatted = _stBoardType === 'partenze'
+        ? formatDepartureData(train, window.currentLang, _stName)
+        : formatArrivalData(train, window.currentLang, _stName);
+    const trainNumber = train.numeroTreno || '';
+    const row = document.createElement('tr');
+    row.className = 'train-row hover cursor-pointer transition-colors border-b border-base-200 last:border-0';
+    row.dataset.trainNumber = String(trainNumber);
+
+    row.appendChild(_stCreateCell('td', formatted.scheduledTime, 'text-center font-mono font-bold text-sm sm:text-xl align-middle whitespace-nowrap px-1 sm:px-4'));
+
+    const trainCell = _stCreateCell('td', null, 'text-center font-medium text-[0.65rem] sm:text-sm align-middle whitespace-normal px-1 sm:px-4');
+    _stAppendTrainBadge(trainCell, train.compNumeroTreno || '');
+    row.appendChild(trainCell);
+
+    row.appendChild(_stRouteCell(_stBoardType === 'partenze' ? formatted.destination : formatted.origin, index));
+
+    if (_stBoardType === 'arrivi') {
+        row.appendChild(_stCreateCell('td', formatted.actualTime, 'text-center font-mono font-bold text-sm sm:text-xl align-middle whitespace-nowrap px-1 sm:px-4'));
+    }
+
+    const statusCell = _stCreateCell('td', formatted.status, 'text-center font-medium text-[0.65rem] sm:text-sm align-middle px-1 sm:px-4 leading-tight');
+    statusCell.style.color = formatted.statusColor;
+    row.appendChild(statusCell);
+
+    const platformCell = _stCreateCell('td', null, 'text-center font-mono font-bold text-sm sm:text-lg align-middle px-1 sm:px-4');
+    _stAppendPlatform(platformCell, train, _stBoardType);
+    row.appendChild(platformCell);
+
+    return row;
 }
 
 function _stRenderBoard(trains) {
     const contentEl = document.getElementById('boardContent');
     const t = translations[window.currentLang];
+    if (!contentEl) return;
 
-    let tableHtml = '<div class="overflow-x-auto bg-base-100/65 backdrop-blur-3xl rounded-2xl shadow-glass border border-base-content/10"><table class="table table-zebra table-sm sm:table-md w-full">';
+    const wrapper = document.createElement('div');
+    wrapper.className = 'overflow-x-auto bg-base-100/65 backdrop-blur-3xl rounded-2xl shadow-glass border border-base-content/10';
 
-    if (_stBoardType === 'partenze') {
-        tableHtml += `
-                <thead class="bg-primary text-primary-content border-none">
-                    <tr>
-                        <th style="width:16%" class="text-center py-2 sm:py-3 font-semibold text-[0.65rem] sm:text-sm border-r border-primary-content/20">${t.scheduled_time}</th>
-                        <th style="width:14%" class="text-center py-2 sm:py-3 font-semibold text-[0.65rem] sm:text-sm border-r border-primary-content/20">${t.train}</th>
-                        <th style="width:32%" class="py-2 sm:py-3 font-semibold text-[0.65rem] sm:text-sm border-r border-primary-content/20">${t.destination}</th>
-                        <th style="width:22%" class="text-center py-2 sm:py-3 font-semibold text-[0.65rem] sm:text-sm border-r border-primary-content/20">${t.status}</th>
-                        <th style="width:16%" class="text-center py-2 sm:py-3 font-semibold text-[0.65rem] sm:text-sm">${t.platform}</th>
-                    </tr>
-                </thead>
-                <tbody>`;
+    const table = document.createElement('table');
+    table.className = 'table table-zebra table-sm sm:table-md w-full';
 
-        trains.forEach((train, index) => {
-            const formatted = formatDepartureData(train, window.currentLang, _stName);
-            const trainNumber = train.numeroTreno || '';
-            tableHtml += `
-                    <tr class="train-row hover cursor-pointer transition-colors border-b border-base-200 last:border-0" data-train-number="${trainNumber}">
-                        <td class="text-center font-mono font-bold text-sm sm:text-xl align-middle whitespace-nowrap px-1 sm:px-4">${formatted.scheduledTime}</td>
-                        <td class="text-center font-medium text-[0.65rem] sm:text-sm align-middle whitespace-normal px-1 sm:px-4">${formatted.trainNumber}</td>
-                        <td data-route-cell="${index}" class="text-[0.65rem] sm:text-sm align-middle whitespace-normal leading-tight px-1 sm:px-4" style="font-family: 'Outfit', 'Noto Sans SC', sans-serif; font-weight: 700; letter-spacing: 0.01em;">${formatted.destination}</td>
-                        <td class="text-center font-medium text-[0.65rem] sm:text-sm align-middle px-1 sm:px-4 leading-tight" style="color:${formatted.statusColor}">${formatted.status}</td>
-                        <td class="text-center font-mono font-bold text-sm sm:text-lg align-middle px-1 sm:px-4">${formatted.platformHtml}</td>
-                    </tr>`;
-        });
-    } else {
-        tableHtml += `
-                <thead class="bg-primary text-primary-content border-none">
-                    <tr>
-                        <th style="width:13%" class="text-center py-2 sm:py-3 font-semibold text-[0.65rem] sm:text-sm border-r border-primary-content/20">${t.scheduled_time}</th>
-                        <th style="width:12%" class="text-center py-2 sm:py-3 font-semibold text-[0.65rem] sm:text-sm border-r border-primary-content/20">${t.train}</th>
-                        <th style="width:22%" class="py-2 sm:py-3 font-semibold text-[0.65rem] sm:text-sm border-r border-primary-content/20">${t.origin}</th>
-                        <th style="width:15%" class="text-center py-2 sm:py-3 font-semibold text-[0.65rem] sm:text-sm border-r border-primary-content/20">${t.actual_time}</th>
-                        <th style="width:22%" class="text-center py-2 sm:py-3 font-semibold text-[0.65rem] sm:text-sm border-r border-primary-content/20">${t.status}</th>
-                        <th style="width:16%" class="text-center py-2 sm:py-3 font-semibold text-[0.65rem] sm:text-sm">${t.platform}</th>
-                    </tr>
-                </thead>
-                <tbody>`;
+    const columns = _stBoardType === 'partenze'
+        ? [
+            { width: '16%', label: t.scheduled_time, center: true },
+            { width: '14%', label: t.train, center: true },
+            { width: '32%', label: t.destination, center: false },
+            { width: '22%', label: t.status, center: true },
+            { width: '16%', label: t.platform, center: true }
+        ]
+        : [
+            { width: '13%', label: t.scheduled_time, center: true },
+            { width: '12%', label: t.train, center: true },
+            { width: '22%', label: t.origin, center: false },
+            { width: '15%', label: t.actual_time, center: true },
+            { width: '22%', label: t.status, center: true },
+            { width: '16%', label: t.platform, center: true }
+        ];
 
-        trains.forEach((train, index) => {
-            const formatted = formatArrivalData(train, window.currentLang, _stName);
-            const trainNumber = train.numeroTreno || '';
-            tableHtml += `
-                    <tr class="train-row hover cursor-pointer transition-colors border-b border-base-200 last:border-0" data-train-number="${trainNumber}">
-                        <td class="text-center font-mono font-bold text-sm sm:text-xl align-middle whitespace-nowrap px-1 sm:px-4">${formatted.scheduledTime}</td>
-                        <td class="text-center font-medium text-[0.65rem] sm:text-sm align-middle whitespace-normal px-1 sm:px-4">${formatted.trainNumber}</td>
-                        <td data-route-cell="${index}" class="text-[0.65rem] sm:text-sm align-middle whitespace-normal leading-tight px-1 sm:px-4" style="font-family: 'Outfit', 'Noto Sans SC', sans-serif; font-weight: 700; letter-spacing: 0.01em;">${formatted.origin}</td>
-                        <td class="text-center font-mono font-bold text-sm sm:text-xl align-middle whitespace-nowrap px-1 sm:px-4">${formatted.actualTime}</td>
-                        <td class="text-center font-medium text-[0.65rem] sm:text-sm align-middle px-1 sm:px-4 leading-tight" style="color:${formatted.statusColor}">${formatted.status}</td>
-                        <td class="text-center font-mono font-bold text-sm sm:text-lg align-middle px-1 sm:px-4">${formatted.platformHtml}</td>
-                    </tr>`;
-        });
-    }
-
-    tableHtml += '</tbody></table></div>';
-    contentEl.innerHTML = tableHtml;
+    const tbody = document.createElement('tbody');
+    trains.forEach((train, index) => tbody.appendChild(_stBuildTrainRow(train, index)));
+    table.append(_stBuildBoardHeader(columns), tbody);
+    wrapper.appendChild(table);
+    _stReplaceChildren(contentEl, [wrapper]);
 
     contentEl.querySelectorAll('.train-row').forEach(row => {
         row.addEventListener('click', function () {
