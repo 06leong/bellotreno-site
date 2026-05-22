@@ -7,7 +7,7 @@ This note tracks the current migration path away from unsafe HTML string output.
 - `public/scripts/main.js`: train details, timeline stops, service messages, partial-cancellation indicators.
 - `public/scripts/station.js`: station departure/arrival rows and Swiss route badges.
 - `public/scripts/swiss.js`: Swiss formation stop selector, coach strip, vehicle details.
-- `public/scripts/statistics.js`: summary cards, charts, query tables, ranking rows.
+- `public/scripts/statistics.js`: summary cards and charts. Query table rows now use DOM builders instead of HTML string templates.
 - `public/scripts/infomobilita.js`: RFI/Infomobilita news content.
 
 ## Current safe patterns
@@ -27,8 +27,8 @@ This note tracks the current migration path away from unsafe HTML string output.
 
 1. Train timeline and service-message rendering in `main.js`.
 2. Swiss vehicle details and coach strip in `swiss.js`.
-3. Statistics query tables and ranking rows in `statistics.js`.
-4. Station board rows in `station.js`.
-5. Infomobilita RSS cards.
+3. Station board rows in `station.js`.
+4. Infomobilita RSS cards.
+5. Remaining statistics chart/tooltips templates in `statistics.js`.
 
-The first Priority 2 baseline adds normalizer tests and quality gates. The next step should convert one high-risk rendering area at a time, with fixture coverage before each change.
+The first Priority 2 baseline adds normalizer tests and quality gates. The follow-up statistics rendering PR removes the table body/header `innerHTML` path, reducing the audit count from 36 to 32. Continue converting one high-risk rendering area at a time, with fixture coverage before each behavior change.

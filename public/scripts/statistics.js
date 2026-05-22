@@ -107,6 +107,18 @@
         return `<span class="train-badge statistics-category-badge ${esc(badgeClass)}">${esc(cat)}</span>`;
     }
 
+    function categoryBadgeElement(value) {
+        const cat = categoryCode(value);
+        if (!cat || cat === "--") return document.createTextNode("--");
+        const badgeKey = cat === "EC FR" ? "FR" : cat;
+        const badgeClass = (window.getBadgeClass ? window.getBadgeClass(badgeKey) : "") || "badge-statistics-fallback";
+        const badge = document.createElement("span");
+        badge.classList.add("train-badge", "statistics-category-badge");
+        String(badgeClass).split(/\s+/).filter(Boolean).forEach((className) => badge.classList.add(className));
+        badge.textContent = cat;
+        return badge;
+    }
+
     function operatorName(value) {
         const raw = String(value ?? "").trim();
         if (!raw) return "--";
@@ -759,18 +771,53 @@
         return item[column] ?? "--";
     }
 
-    function itemCellHtml(item, column, index) {
+    function appendItemCellContent(cell, item, column, index) {
         const value = itemValue(item, column, index);
         if (column === "train") {
             const href = buildTrainHref(item);
-            return href ? `<a class="statistics-table-link" href="${esc(href)}">${esc(value)}</a>` : esc(value);
+            if (href) {
+                const link = document.createElement("a");
+                link.className = "statistics-table-link";
+                link.href = href;
+                link.textContent = value;
+                cell.appendChild(link);
+                return;
+            }
         }
         if (column === "station") {
             const href = buildStationHref(item);
-            return href ? `<a class="statistics-table-link" href="${esc(href)}">${esc(value)}</a>` : esc(value);
+            if (href) {
+                const link = document.createElement("a");
+                link.className = "statistics-table-link";
+                link.href = href;
+                link.textContent = value;
+                cell.appendChild(link);
+                return;
+            }
         }
-        if (column === "category") return categoryBadgeHtml(value);
-        return esc(value);
+        if (column === "category") {
+            cell.appendChild(categoryBadgeElement(value));
+            return;
+        }
+        cell.textContent = value;
+    }
+
+    function replaceChildrenSafe(element, children) {
+        if (typeof element.replaceChildren === "function") {
+            element.replaceChildren(...children);
+            return;
+        }
+        element.textContent = "";
+        children.forEach((child) => element.appendChild(child));
+    }
+
+    function buildTableMessageRow(message, colspan) {
+        const row = document.createElement("tr");
+        const cell = document.createElement("td");
+        cell.colSpan = colspan;
+        cell.textContent = message;
+        row.appendChild(cell);
+        return row;
     }
 
     function statusLabel(status) {
@@ -787,16 +834,30 @@
         const body = $("statisticsTableBody");
         if (!head || !body) return;
         const columns = tableColumns();
-        head.innerHTML = `<tr>${columns.map(([, label]) => `<th>${esc(label)}</th>`).join("")}</tr>`;
+
+        const headerRow = document.createElement("tr");
+        columns.forEach(([, label]) => {
+            const cell = document.createElement("th");
+            cell.textContent = label;
+            headerRow.appendChild(cell);
+        });
+        replaceChildrenSafe(head, [headerRow]);
 
         if (state.tableLoading) {
-            body.innerHTML = `<tr><td colspan="${columns.length}">${esc(tr("loading", "Loading..."))}</td></tr>`;
+            replaceChildrenSafe(body, [buildTableMessageRow(tr("loading", "Loading..."), columns.length)]);
         } else if (!state.tableItems.length) {
-            body.innerHTML = `<tr><td colspan="${columns.length}">${esc(tr("statistics_no_rows", "No rows available"))}</td></tr>`;
+            replaceChildrenSafe(body, [buildTableMessageRow(tr("statistics_no_rows", "No rows available"), columns.length)]);
         } else {
-            body.innerHTML = state.tableItems.map((item, index) => `
-                <tr>${columns.map(([column]) => `<td>${itemCellHtml(item, column, index)}</td>`).join("")}</tr>
-            `).join("");
+            const rows = state.tableItems.map((item, index) => {
+                const row = document.createElement("tr");
+                columns.forEach(([column]) => {
+                    const cell = document.createElement("td");
+                    appendItemCellContent(cell, item, column, index);
+                    row.appendChild(cell);
+                });
+                return row;
+            });
+            replaceChildrenSafe(body, rows);
         }
 
         const pageInfo = $("statisticsPageInfo");
