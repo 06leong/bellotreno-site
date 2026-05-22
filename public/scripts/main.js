@@ -17,6 +17,47 @@ let swissRequestSeq = 0;
 const API_BASE = window.API_BASE;
 const NOTIFY_BASE = window.NOTIFY_BASE;
 
+function clearNode(node) {
+    if (node) node.replaceChildren();
+}
+
+function createNode(tagName, options = {}, children = []) {
+    const node = document.createElement(tagName);
+    if (options.className) node.className = options.className;
+    if (options.text !== undefined) node.textContent = String(options.text);
+    if (options.title) node.title = options.title;
+    if (options.type) node.type = options.type;
+    if (options.href) node.href = options.href;
+    if (options.target) node.target = options.target;
+    if (options.rel) node.rel = options.rel;
+    if (options.style) Object.assign(node.style, options.style);
+    if (options.attrs) {
+        Object.entries(options.attrs).forEach(([key, value]) => {
+            if (value !== undefined && value !== null) node.setAttribute(key, String(value));
+        });
+    }
+    if (options.dataset) {
+        Object.entries(options.dataset).forEach(([key, value]) => {
+            if (value !== undefined && value !== null) node.dataset[key] = String(value);
+        });
+    }
+    const childList = Array.isArray(children) ? children : [children];
+    childList.forEach((child) => {
+        if (child === undefined || child === null) return;
+        node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+    });
+    return node;
+}
+
+function createIcon(name, className = 'material-symbols-outlined', options = {}) {
+    return createNode('span', {
+        className,
+        text: name,
+        style: options.style,
+        attrs: options.attrs
+    });
+}
+
 async function fetchStatistiche() {
     try {
         const res = await fetch(API_BASE + '/statistiche/0');
@@ -164,6 +205,17 @@ function renderTimeHtml(label, schedMs, realMs, delayMin) {
     // Only colorize if we have a real time.
     const colorClass = real ? ((delayMin > 0) ? 'late' : 'early') : '';
     return `<div class="time-item"><span class="time-label">${label}</span><span class="time-val-real tabular-nums ${colorClass}">${timeToShow}</span></div>`;
+}
+
+function renderTimeNode(label, schedMs, realMs, delayMin) {
+    const sched = formatT(schedMs);
+    const real = formatT(realMs);
+    const timeToShow = real || sched || '--:--';
+    const colorClass = real ? ((delayMin > 0) ? 'late' : 'early') : '';
+    return createNode('div', { className: 'time-item' }, [
+        createNode('span', { className: 'time-label', text: label }),
+        createNode('span', { className: `time-val-real tabular-nums ${colorClass}`.trim(), text: timeToShow })
+    ]);
 }
 
 function normalizeStationMatchName(value) {
@@ -387,7 +439,7 @@ function renderRecentSearches() {
         }
 
         container.style.display = 'block';
-        chipsContainer.innerHTML = '';
+        clearNode(chipsContainer);
 
         recentSearches.forEach(item => {
             const chip = document.createElement('div');
@@ -396,14 +448,13 @@ function renderRecentSearches() {
 
             const icon = item.type === 'station' ? 'location_on' : 'train';
 
-            chip.innerHTML = `
-                <span class="material-symbols-outlined chip-icon">${icon}</span>
-                <span class="chip-label"></span>
-                <span class="chip-remove">
-                    <span class="material-symbols-outlined">close</span>
-                </span>
-            `;
-            chip.querySelector('.chip-label').textContent = item.name;
+            chip.append(
+                createIcon(icon, 'material-symbols-outlined chip-icon'),
+                createNode('span', { className: 'chip-label', text: item.name }),
+                createNode('span', { className: 'chip-remove' }, [
+                    createIcon('close')
+                ])
+            );
             chip.querySelector('.chip-remove').addEventListener('click', (e) => {
                 removeRecentSearch(item.id, item.type, e);
             });
@@ -525,7 +576,7 @@ function renderDisambiguation() {
 
     const list = document.getElementById('choicesList');
     const panel = document.getElementById('disambiguation');
-    list.innerHTML = '';
+    clearNode(list);
 
     disambiguationData.forEach(line => {
         const [label, triple] = line.split('|');
@@ -535,13 +586,24 @@ function renderDisambiguation() {
 
         const div = document.createElement('div');
         div.className = 'choice-item ripple';
-        div.innerHTML = `
-            <div style="font-size:1.1rem; font-weight:bold; color:var(--color-primary)">${label}</div>
-            <div style="font-size:0.9rem; color:var(--color-base-content); opacity:0.6; margin-top:4px">
-                <span class="material-symbols-outlined" style="font-size:14px; vertical-align:middle">calendar_month</span> ${translations[currentLang].depart_date}: ${dateStr} 
-                | <span class="material-symbols-outlined" style="font-size:14px; vertical-align:middle">location_on</span> ${translations[currentLang].origin_station}: ${sID}
-            </div>
-        `;
+        div.append(
+            createNode('div', {
+                text: label,
+                style: { fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--color-primary)' }
+            }),
+            createNode('div', {
+                style: { fontSize: '0.9rem', color: 'var(--color-base-content)', opacity: '0.6', marginTop: '4px' }
+            }, [
+                createIcon('calendar_month', 'material-symbols-outlined', {
+                    style: { fontSize: '14px', verticalAlign: 'middle' }
+                }),
+                ` ${translations[currentLang].depart_date}: ${dateStr} | `,
+                createIcon('location_on', 'material-symbols-outlined', {
+                    style: { fontSize: '14px', verticalAlign: 'middle' }
+                }),
+                ` ${translations[currentLang].origin_station}: ${sID}`
+            ])
+        );
         div.onclick = () => {
             panel.style.display = 'none';
             disambiguationData = null;
@@ -564,20 +626,28 @@ function showStationDisambiguation(stations) {
             'Select station:';
     panelTitle.textContent = titleText;
 
-    list.innerHTML = '';
+    clearNode(list);
 
     stations.forEach(station => {
         const div = document.createElement('div');
         div.className = 'choice-item ripple';
-        div.innerHTML = `
-            <div style="display:flex; align-items:center; gap:8px">
-                <span class="material-symbols-outlined" style="font-size:24px; color:var(--color-primary)">location_on</span>
-                <div>
-                    <div style="font-size:1.1rem; font-weight:bold; color:var(--color-primary)">${station.nomeLungo}</div>
-                    <div style="font-size:0.9rem; color:var(--color-base-content); opacity:0.6; margin-top:2px">ID: ${station.id}</div>
-                </div>
-            </div>
-        `;
+        div.append(createNode('div', {
+            style: { display: 'flex', alignItems: 'center', gap: '8px' }
+        }, [
+            createIcon('location_on', 'material-symbols-outlined', {
+                style: { fontSize: '24px', color: 'var(--color-primary)' }
+            }),
+            createNode('div', {}, [
+                createNode('div', {
+                    text: station.nomeLungo,
+                    style: { fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--color-primary)' }
+                }),
+                createNode('div', {
+                    text: `ID: ${station.id}`,
+                    style: { fontSize: '0.9rem', color: 'var(--color-base-content)', opacity: '0.6', marginTop: '2px' }
+                })
+            ])
+        ]));
         div.onclick = () => {
             panel.style.display = 'none';
             saveRecentStationSearch(station.id, station.nomeLungo);
@@ -772,8 +842,6 @@ function render(data) {
 
     const category = CAT_MAP[catCode] || data.categoriaDescrizione || catCode || "Treno";
 
-    const operatorHTML = operatorLink !== "#" ? `<a href="${operatorLink}" target="_blank" style="color: inherit; text-decoration: none;">${operator}</a>` : operator;
-
     const imageKey = `${data.codiceCliente}-${catCode}`;
     let categoryImage = CAT_IMAGE_MAP[imageKey];
 
@@ -785,8 +853,6 @@ function render(data) {
     if (operator === "Trenord" && currentSwissFormationData?.available && ['REG', 'RE', 'RV', 'S'].includes(catCode)) {
         categoryImage = "pic/Tilo.png";
     }
-
-    const categoryHTML = categoryImage ? `<img src="${categoryImage}" alt="${category}" style="height: 1.3rem; vertical-align: middle; margin-left: 8px;">` : category;
 
     const routeDisplay = resolveRouteDisplay(data, timelineStops);
     const displayOrigin = routeDisplay.origin;
@@ -803,47 +869,89 @@ function render(data) {
 
     const badgeClass = window.getBadgeClass ? window.getBadgeClass(catCode) : '';
 
-    const trainNumBadge = badgeClass
-        ? `<span class="train-badge ${badgeClass}">${data.compNumeroTreno}</span>`
-        : `<b>${data.compNumeroTreno}</b>`;
+    clearNode(card);
 
-    card.innerHTML = `
-        <div class="refresh-btn" onclick="refreshTrainData()" title="${currentLang === 'zh' ? '刷新' : currentLang === 'it' ? 'Aggiorna' : 'Refresh'}">
-            <span class="material-symbols-outlined">refresh</span>
-        </div>
-        <div class="op-cat-row" style="display: flex; align-items: center; gap: 8px;">${operatorHTML} <span class="opacity-50">·</span> ${categoryHTML}</div>
-        <div class="train-info-wrapper flex flex-col sm:flex-row items-start gap-3 mt-2">
-            <div class="flex-1 min-w-0">
-                <div class="train-route mb-2">${escapeHtml(displayOrigin)} <span class="opacity-40 font-normal material-symbols-outlined align-middle mx-1">arrow_forward</span> ${escapeHtml(displayDest)}</div>
-                <div class="train-meta flex items-center gap-3 flex-wrap">
-                    <span class="flex items-center gap-2 text-sm uppercase tracking-wider font-semibold opacity-80">${translations[currentLang].train_num}: ${trainNumBadge}</span>
-                    <span class="opacity-30">|</span>
-                    <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[16px] opacity-60">schedule</span> <b>${formattedDuration}</b></span>
-                </div>
-            </div>
-            <div class="train-status-section">
-                <div class="train-delay tabular-nums ${isEarly ? '' : 'late'}">${delayMsg}</div>
-                <div class="train-last-position flex items-start sm:items-center gap-1 justify-start sm:justify-end">
-                    <span class="material-symbols-outlined mt-[2px] sm:mt-0" style="font-size:12px">location_on</span>
-                    ${data.stazioneUltimoRilevamento} (${data.compOraUltimoRilevamento || '--:--'})
-                </div>
-            </div>
-        </div>
-    `;
+    const refreshBtn = createNode('button', {
+        className: 'refresh-btn',
+        title: currentLang === 'zh' ? '刷新' : currentLang === 'it' ? 'Aggiorna' : 'Refresh',
+        type: 'button'
+    }, [createIcon('refresh')]);
+    refreshBtn.addEventListener('click', refreshTrainData);
+
+    const operatorNode = operatorLink !== "#"
+        ? createNode('a', {
+            text: operator,
+            href: operatorLink,
+            target: '_blank',
+            rel: 'noopener noreferrer',
+            style: { color: 'inherit', textDecoration: 'none' }
+        })
+        : document.createTextNode(operator);
+    const categoryNode = categoryImage
+        ? createNode('img', {
+            attrs: { src: categoryImage, alt: category },
+            style: { height: '1.3rem', verticalAlign: 'middle', marginLeft: '8px' }
+        })
+        : document.createTextNode(category);
+
+    const opCatRow = createNode('div', {
+        className: 'op-cat-row',
+        style: { display: 'flex', alignItems: 'center', gap: '8px' }
+    }, [
+        operatorNode,
+        createNode('span', { className: 'opacity-50', text: '·' }),
+        categoryNode
+    ]);
+
+    const trainNumBadge = badgeClass
+        ? createNode('span', { className: `train-badge ${badgeClass}`, text: data.compNumeroTreno })
+        : createNode('b', { text: data.compNumeroTreno });
+
+    const trainMeta = createNode('div', { className: 'train-meta flex items-center gap-3 flex-wrap' }, [
+        createNode('span', { className: 'flex items-center gap-2 text-sm uppercase tracking-wider font-semibold opacity-80' }, [
+            `${translations[currentLang].train_num}: `,
+            trainNumBadge
+        ]),
+        createNode('span', { className: 'opacity-30', text: '|' }),
+        createNode('span', { className: 'flex items-center gap-1' }, [
+            createIcon('schedule', 'material-symbols-outlined text-[16px] opacity-60'),
+            createNode('b', { text: formattedDuration })
+        ])
+    ]);
+
+    const routeNode = createNode('div', { className: 'train-route mb-2' }, [
+        displayOrigin,
+        createIcon('arrow_forward', 'opacity-40 font-normal material-symbols-outlined align-middle mx-1'),
+        displayDest
+    ]);
+
+    const statusNode = createNode('div', { className: 'train-status-section' }, [
+        createNode('div', { className: `train-delay tabular-nums ${isEarly ? '' : 'late'}`.trim(), text: delayMsg }),
+        createNode('div', { className: 'train-last-position flex items-start sm:items-center gap-1 justify-start sm:justify-end' }, [
+            createIcon('location_on', 'material-symbols-outlined mt-[2px] sm:mt-0', {
+                style: { fontSize: '12px' }
+            }),
+            `${data.stazioneUltimoRilevamento || '--'} (${data.compOraUltimoRilevamento || '--:--'})`
+        ])
+    ]);
+
+    const infoWrapper = createNode('div', { className: 'train-info-wrapper flex flex-col sm:flex-row items-start gap-3 mt-2' }, [
+        createNode('div', { className: 'flex-1 min-w-0' }, [routeNode, trainMeta]),
+        statusNode
+    ]);
+
+    card.append(refreshBtn, opCatRow, infoWrapper);
 
 
     if (data.subTitle && data.subTitle.trim()) {
-        const esc = window.escapeHtml || (s => s);
-        card.innerHTML += `
-            <div class="alert-box">
-                <span class="material-symbols-outlined" style="font-size:20px">campaign</span>
-                <span>${esc(data.subTitle)}</span>
-            </div>
-        `;
+        card.append(createNode('div', { className: 'alert-box' }, [
+            createIcon('campaign', 'material-symbols-outlined', { style: { fontSize: '20px' } }),
+            createNode('span', { text: data.subTitle })
+        ]));
     }
 
 
-    timeline.innerHTML = '';
+    clearNode(timeline);
 
     let lastReachedIdx = -1;
 
@@ -854,7 +962,6 @@ function render(data) {
     }
 
     const totalStations = timelineStops.length;
-    const timelineFragments = [];
     const partialCancellationStates = buildPartialCancellationState(data, timelineStops);
 
     timelineStops.forEach((f, i) => {
@@ -890,12 +997,12 @@ function render(data) {
 
         const pPlat = f.binarioProgrammatoPartenzaDescrizione || f.binarioProgrammatoArrivoDescrizione;
         const ePlat = f.binarioEffettivoPartenzaDescrizione || f.binarioEffettivoArrivoDescrizione;
-        let platHTML = `<span class="plat-normal">${ePlat || pPlat || "--"}</span>`;
+        const platformNode = createNode('span', { className: 'plat-normal', text: ePlat || pPlat || "--" });
 
         const stayMinutes = (f.partenza_teorica && f.arrivo_teorico) ? Math.round((f.partenza_teorica - f.arrivo_teorico) / 60000) : null;
         const stayTime = stayMinutes ? `${stayMinutes} ${translations[currentLang].minutes}` : "N/A";
 
-        let directionBadge = '';
+        let directionBadge = null;
         if (f.orientamento) {
             let directionText = '';
             if (f.orientamento === 'A') {
@@ -905,58 +1012,93 @@ function render(data) {
             } else {
                 directionText = f.orientamento;
             }
-            directionBadge = `<span class="direction-badge">${directionText}</span>`;
+            directionBadge = createNode('span', { className: 'direction-badge', text: directionText });
         }
 
-        const timeHtmlArr = !isFirst ? renderTimeHtml(translations[currentLang].arrival, (f.arrivo_teorico || f.programmata), f.arrivoReale, f.ritardoArrivo) : '';
-        const timeHtmlDep = !isLast ? renderTimeHtml(translations[currentLang].departure, (f.partenza_teorica || f.programmata), f.partenzaReale, f.ritardoPartenza) : '';
         const sourceBadge = isSwissStop
-            ? `<span class="source-badge source-badge-swiss">${escapeHtml(translations[currentLang].swiss_source || 'CH')}</span>`
-            : '';
-        const stationNameHTML = isSwissStop
-            ? `<span class="station-name-static">${escapeHtml(f.stazione)}</span>`
-            : `<span class="station-link" data-station-id="${f.id}" data-station-name="${escapeHtml(f.stazione)}">${escapeHtml(f.stazione)}</span>`;
+            ? createNode('span', { className: 'source-badge source-badge-swiss', text: translations[currentLang].swiss_source || 'CH' })
+            : null;
+        const stationNameNode = isSwissStop
+            ? createNode('span', { className: 'station-name-static', text: f.stazione })
+            : createNode('span', {
+                className: 'station-link',
+                text: f.stazione,
+                dataset: { stationId: f.id || '', stationName: f.stazione || '' }
+            });
         const partialBadge = partialState.cancelled
-            ? `<span class="partial-stop-badge partial-stop-cancelled">${escapeHtml(partialStopLabel('cancelled'))}</span>`
+            ? createNode('span', { className: 'partial-stop-badge partial-stop-cancelled', text: partialStopLabel('cancelled') })
             : partialState.boundary
-                ? `<span class="partial-stop-badge">${escapeHtml(partialStopLabel(partialState.boundary))}</span>`
-                : '';
-        const progressivoHTML = isSwissStop
-            ? `<div class="text-[0.65rem] font-mono opacity-40 mt-2" title="opentransportdata.swiss">CH</div>`
-            : `<div class="text-[0.65rem] font-mono opacity-30 mt-2" title="Progressivo">P:${f.progressivo || '--'}</div>`;
+                ? createNode('span', { className: 'partial-stop-badge', text: partialStopLabel(partialState.boundary) })
+                : null;
 
-        timelineFragments.push(`
-            <div class="${stationItemClasses.join(' ')} stagger-item animate-fade-in" style="--stagger-idx: ${i}">
-                <div class="station-dot-wrapper">
-                    <div class="station-dot"></div>
-                </div>
-                <div class="station-card glass-border shadow-glass hover:bg-base-content/5 transition-colors group">
-                    <div class="station-name-col">
-                        <div class="station-name group-hover:text-primary transition-colors flex items-center flex-wrap">
-                            ${stationNameHTML}
-                            ${sourceBadge}
-                            ${partialBadge}
-                            ${(!isFirst && !isLast && stayTime !== "N/A") ? `<span class="hidden sm:flex opacity-50 text-[0.85rem] font-medium items-center gap-0.5 ml-2 tracking-normal" style="font-family: var(--font-sans)"><span class="material-symbols-outlined icon-hourglass-desktop">hourglass_empty</span> ${stayTime}</span>` : ''}
-                        </div>
-                        ${directionBadge ? `<div class="flex items-center gap-2 mt-1 flex-wrap">${directionBadge}</div>` : ''}
-                    </div>
-                    
-                    <div class="station-time-col tabular-nums">
-                        ${timeHtmlArr}
-                        ${timeHtmlDep}
-                    </div>
+        const stationNameRow = createNode('div', {
+            className: 'station-name group-hover:text-primary transition-colors flex items-center flex-wrap'
+        }, [stationNameNode, sourceBadge, partialBadge]);
 
-                    <div class="station-plat-col flex flex-col items-center justify-center">
-                        ${(!isFirst && !isLast && stayTime !== "N/A") ? `<div class="flex sm:hidden items-center justify-center gap-0.5 opacity-60 text-[0.8rem] font-medium tracking-normal mb-3" style="font-family: var(--font-sans)"><span class="material-symbols-outlined icon-hourglass-mobile">hourglass_empty</span> ${stayTime}</div>` : ''}
-                        <div class="text-[0.8rem] uppercase tracking-wider font-semibold opacity-60 mb-1.5">${translations[currentLang].platform}</div>
-                        <div class="text-2xl">${platHTML}</div>
-                        ${progressivoHTML}
-                    </div>
-                </div>
-            </div>
-        `);
+        if (!isFirst && !isLast && stayTime !== "N/A") {
+            stationNameRow.append(createNode('span', {
+                className: 'hidden sm:flex opacity-50 text-[0.85rem] font-medium items-center gap-0.5 ml-2 tracking-normal',
+                style: { fontFamily: 'var(--font-sans)' }
+            }, [
+                createIcon('hourglass_empty', 'material-symbols-outlined icon-hourglass-desktop'),
+                ` ${stayTime}`
+            ]));
+        }
+
+        const stationNameColChildren = [stationNameRow];
+        if (directionBadge) {
+            stationNameColChildren.push(createNode('div', { className: 'flex items-center gap-2 mt-1 flex-wrap' }, [directionBadge]));
+        }
+
+        const timeColChildren = [];
+        if (!isFirst) {
+            timeColChildren.push(renderTimeNode(translations[currentLang].arrival, (f.arrivo_teorico || f.programmata), f.arrivoReale, f.ritardoArrivo));
+        }
+        if (!isLast) {
+            timeColChildren.push(renderTimeNode(translations[currentLang].departure, (f.partenza_teorica || f.programmata), f.partenzaReale, f.ritardoPartenza));
+        }
+
+        const platformChildren = [];
+        if (!isFirst && !isLast && stayTime !== "N/A") {
+            platformChildren.push(createNode('div', {
+                className: 'flex sm:hidden items-center justify-center gap-0.5 opacity-60 text-[0.8rem] font-medium tracking-normal mb-3',
+                style: { fontFamily: 'var(--font-sans)' }
+            }, [
+                createIcon('hourglass_empty', 'material-symbols-outlined icon-hourglass-mobile'),
+                ` ${stayTime}`
+            ]));
+        }
+        platformChildren.push(
+            createNode('div', { className: 'text-[0.8rem] uppercase tracking-wider font-semibold opacity-60 mb-1.5', text: translations[currentLang].platform }),
+            createNode('div', { className: 'text-2xl' }, [platformNode]),
+            isSwissStop
+                ? createNode('div', {
+                    className: 'text-[0.65rem] font-mono opacity-40 mt-2',
+                    text: 'CH',
+                    title: 'opentransportdata.swiss'
+                })
+                : createNode('div', {
+                    className: 'text-[0.65rem] font-mono opacity-30 mt-2',
+                    text: `P:${f.progressivo || '--'}`,
+                    title: 'Progressivo'
+                })
+        );
+
+        const stationItem = createNode('div', {
+            className: `${stationItemClasses.join(' ')} stagger-item animate-fade-in`
+        }, [
+            createNode('div', { className: 'station-dot-wrapper' }, [
+                createNode('div', { className: 'station-dot' })
+            ]),
+            createNode('div', { className: 'station-card glass-border shadow-glass hover:bg-base-content/5 transition-colors group' }, [
+                createNode('div', { className: 'station-name-col' }, stationNameColChildren),
+                createNode('div', { className: 'station-time-col tabular-nums' }, timeColChildren),
+                createNode('div', { className: 'station-plat-col flex flex-col items-center justify-center' }, platformChildren)
+            ])
+        ]);
+        stationItem.style.setProperty('--stagger-idx', String(i));
+        timeline.appendChild(stationItem);
     });
-    timeline.innerHTML = timelineFragments.join('');
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -1003,7 +1145,11 @@ async function fetchSmartCaring(trainNumber) {
 
     card.style.display = 'block';
     const t = translations[currentLang];
-    card.innerHTML = `<div class="sc-loading"><span class="loading loading-spinner loading-sm text-primary"></span><span>${t.sc_loading}</span></div>`;
+    clearNode(card);
+    card.append(createNode('div', { className: 'sc-loading' }, [
+        createNode('span', { className: 'loading loading-spinner loading-sm text-primary' }),
+        createNode('span', { text: t.sc_loading })
+    ]));
 
     try {
         const res = await fetch(`${NOTIFY_BASE}?train=${trainNumber}`);
@@ -1041,33 +1187,43 @@ function renderSmartCaring(data) {
 
     const hasToday = data.today && data.today.length > 0;
     const hasRecent = data.recent && data.recent.length > 0;
-    let notifTitle = hasToday ? t.sc_today : t.sc_recent;
-    let notifHTML = '';
+    const notifTitle = hasToday ? t.sc_today : t.sc_recent;
+    let notificationBody = null;
 
     if (hasToday) {
-        const notes = data.today.map(n => {
+        notificationBody = createNode('div', { className: 'sc-notes-list' }, data.today.map(n => {
             const time = new Date(n.insertTimestamp).toLocaleTimeString('it-IT', {
                 hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome'
             });
-            return `<div class="sc-note"><span class="sc-note-time">${time}</span><span class="sc-note-text">${escapeHtml(n.infoNote)}</span></div>`;
-        }).join('');
-        notifHTML = `<div class="sc-notes-list">${notes}</div>`;
+            return createNode('div', { className: 'sc-note' }, [
+                createNode('span', { className: 'sc-note-time', text: time }),
+                createNode('span', { className: 'sc-note-text', text: n.infoNote })
+            ]);
+        }));
     } else if (hasRecent) {
-        const notes = data.recent.map(n => {
+        notificationBody = createNode('div', { className: 'sc-notes-list' }, data.recent.map(n => {
             const d = new Date(n.insertTimestamp);
             const monthStr = getShortMonth(d, currentLang);
             const dayNum = d.getDate();
             const dateStr = currentLang === 'zh' ? `${monthStr}${dayNum}号` : `${monthStr} ${dayNum}`;
             const time = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' });
-            return `<div class="sc-note"><span class="sc-note-date">${dateStr}</span><span class="sc-note-clock">${time}</span><span class="sc-note-text">${escapeHtml(n.infoNote)}</span></div>`;
-        }).join('');
-        notifHTML = `<div class="sc-notes-list">${notes}</div>`;
+            return createNode('div', { className: 'sc-note' }, [
+                createNode('span', { className: 'sc-note-date', text: dateStr }),
+                createNode('span', { className: 'sc-note-clock', text: time }),
+                createNode('span', { className: 'sc-note-text', text: n.infoNote })
+            ]);
+        }));
     } else {
-        notifHTML = `<div class="sc-empty"><span class="material-symbols-outlined" style="font-size:1.1rem;vertical-align:middle;margin-right:4px">check_circle</span>${t.sc_no_today}</div>`;
+        notificationBody = createNode('div', { className: 'sc-empty' }, [
+            createIcon('check_circle', 'material-symbols-outlined', {
+                style: { fontSize: '1.1rem', verticalAlign: 'middle', marginRight: '4px' }
+            }),
+            t.sc_no_today
+        ]);
     }
 
-    let chartSection = '';
-    let statsHTML = '';
+    let chartSection = null;
+    let statsNode = null;
 
     if (isFullMode) {
         const now = new Date();
@@ -1088,7 +1244,8 @@ function renderSmartCaring(data) {
 
         const maxDelay = Math.max(...days.map(d => d.delay), 1);
 
-        const chartHTML = days.map(d => {
+        const chart = createNode('div', { className: 'sc-chart' });
+        days.forEach(d => {
             const barHeight = d.delay > 0 ? Math.max(18, Math.round((d.delay / maxDelay) * 48) + 8) : 6;
             let colorClass = 'sc-level-0';
             if (d.delay > 30) colorClass = 'sc-level-3';
@@ -1100,23 +1257,57 @@ function renderSmartCaring(data) {
             const tipDelay = d.delay > 0 ? `+${d.delay}min` : 'OK';
             const tipReason = (d.delay > 0 && d.reasons.length) ? d.reasons[0] : '';
 
-            return `<div class="sc-bar-col" data-delay="${tipDelay}" data-reason="${escapeHtml(tipReason)}" onclick="toggleScTooltip(event,this)"><div class="sc-bar ${colorClass}" style="height:${barHeight}px"></div><span class="sc-bar-label">${dayNum}<br><span class="sc-bar-month">${monthAbbr}</span></span></div>`;
-        }).join('');
+            const monthLabel = createNode('span', { className: 'sc-bar-month', text: monthAbbr });
+            const label = createNode('span', { className: 'sc-bar-label' }, [
+                `${dayNum}`,
+                createNode('br'),
+                monthLabel
+            ]);
+            const col = createNode('button', {
+                className: 'sc-bar-col',
+                type: 'button',
+                dataset: { delay: tipDelay, reason: tipReason }
+            }, [
+                createNode('span', {
+                    className: `sc-bar ${colorClass}`,
+                    style: { height: `${barHeight}px` }
+                }),
+                label
+            ]);
+            col.addEventListener('click', (event) => toggleScTooltip(event, col));
+            chart.appendChild(col);
+        });
 
-        chartSection = `<div class="sc-history-section"><div class="sc-section-title">${t.sc_history}</div><div class="sc-chart">${chartHTML}</div></div>`;
+        chartSection = createNode('div', { className: 'sc-history-section' }, [
+            createNode('div', { className: 'sc-section-title', text: t.sc_history }),
+            chart
+        ]);
 
         const stats = data.stats || {};
         if ((stats.disruptedDays || 0) === 0) {
-            statsHTML = `<div class="sc-all-clear"><span class="material-symbols-outlined">verified</span><span>${t.sc_all_clear}</span></div>`;
+            statsNode = createNode('div', { className: 'sc-all-clear' }, [
+                createIcon('verified'),
+                createNode('span', { text: t.sc_all_clear })
+            ]);
         } else {
             const rateColor = stats.onTimeRate >= 70 ? 'var(--color-info)' : stats.onTimeRate >= 40 ? 'var(--color-warning)' : 'var(--color-error)';
-            statsHTML = `
-                <div class="sc-stats-row">
-                    <div class="sc-stat"><span class="sc-stat-value" style="color:${rateColor}">${stats.onTimeRate}%</span><span class="sc-stat-label">${t.sc_ontime_rate}</span></div>
-                    <div class="sc-stat"><span class="sc-stat-value">${stats.disruptedDays}/${stats.totalDays}</span><span class="sc-stat-label">${t.sc_disrupted}</span></div>
-                    <div class="sc-stat"><span class="sc-stat-value">${stats.avgDelay}<small>min</small></span><span class="sc-stat-label">${t.sc_avg_delay}</span></div>
-                    <div class="sc-stat"><span class="sc-stat-value">${stats.maxDelay}<small>min</small></span><span class="sc-stat-label">${t.sc_max_delay}</span></div>
-                </div>`;
+            const statValue = (value, suffix = '') => {
+                const valueNode = createNode('span', { className: 'sc-stat-value', text: value });
+                if (suffix) valueNode.append(createNode('small', { text: suffix }));
+                return valueNode;
+            };
+            const makeStat = (valueNode, label) => createNode('div', { className: 'sc-stat' }, [
+                valueNode,
+                createNode('span', { className: 'sc-stat-label', text: label })
+            ]);
+            const onTimeValue = statValue(`${stats.onTimeRate}%`);
+            onTimeValue.style.color = rateColor;
+            statsNode = createNode('div', { className: 'sc-stats-row' }, [
+                makeStat(onTimeValue, t.sc_ontime_rate),
+                makeStat(statValue(`${stats.disruptedDays}/${stats.totalDays}`), t.sc_disrupted),
+                makeStat(statValue(stats.avgDelay, 'min'), t.sc_avg_delay),
+                makeStat(statValue(stats.maxDelay, 'min'), t.sc_max_delay)
+            ]);
         }
     }
 
@@ -1124,19 +1315,29 @@ function renderSmartCaring(data) {
         ? true  // first render: default collapsed
         : card.querySelector('.sc-body-wrap.sc-collapsed') !== null;
 
-    card.innerHTML = `
-        <div class="sc-header" onclick="this.nextElementSibling.classList.toggle('sc-collapsed');this.querySelector('.sc-toggle').classList.toggle('sc-rotated');hideScTooltip()">
-            <span class="material-symbols-outlined">monitoring</span>
-            <span>${t.sc_title}</span>
-            <span class="material-symbols-outlined sc-toggle${wasCollapsed ? '' : ' sc-rotated'}">expand_more</span>
-        </div>
-        <div class="sc-body-wrap${wasCollapsed ? ' sc-collapsed' : ''}">
-            <div class="sc-body">
-                <div class="sc-today-section"><div class="sc-section-title">${notifTitle}</div>${notifHTML}</div>
-                ${chartSection}
-                ${statsHTML}
-            </div>
-        </div>`;
+    clearNode(card);
+    const toggle = createIcon('expand_more', `material-symbols-outlined sc-toggle${wasCollapsed ? '' : ' sc-rotated'}`);
+    const header = createNode('button', { className: 'sc-header', type: 'button' }, [
+        createIcon('monitoring'),
+        createNode('span', { text: t.sc_title }),
+        toggle
+    ]);
+    const bodyWrap = createNode('div', { className: `sc-body-wrap${wasCollapsed ? ' sc-collapsed' : ''}` }, [
+        createNode('div', { className: 'sc-body' }, [
+            createNode('div', { className: 'sc-today-section' }, [
+                createNode('div', { className: 'sc-section-title', text: notifTitle }),
+                notificationBody
+            ]),
+            chartSection,
+            statsNode
+        ])
+    ]);
+    header.addEventListener('click', () => {
+        bodyWrap.classList.toggle('sc-collapsed');
+        toggle.classList.toggle('sc-rotated');
+        hideScTooltip();
+    });
+    card.append(header, bodyWrap);
     card.style.display = 'block';
 }
 
@@ -1155,7 +1356,9 @@ function toggleScTooltip(e, col) {
 
     const delay = col.dataset.delay || 'OK';
     const reason = col.dataset.reason || '';
-    tooltip.innerHTML = `<span>${delay}</span>` + (reason ? `<span class="sc-tooltip-reason">${reason}</span>` : '');
+    clearNode(tooltip);
+    tooltip.append(createNode('span', { text: delay }));
+    if (reason) tooltip.append(createNode('span', { className: 'sc-tooltip-reason', text: reason }));
 
     const bar = col.querySelector('.sc-bar');
     const rect = bar.getBoundingClientRect();
