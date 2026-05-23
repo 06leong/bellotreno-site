@@ -5,7 +5,7 @@ import sitemap from '@astrojs/sitemap';
 
 export default defineConfig({
   output: 'static',
-  site: 'https://real.bellotreno.org',
+  site: 'https://bellotreno.org',
 
   vite: {
     plugins: [tailwindcss()],

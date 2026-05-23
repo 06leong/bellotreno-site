@@ -1,4 +1,5 @@
 const ALLOWED_HOSTS = new Set([
+    "bellotreno.org",
     "real.bellotreno.org",
     "bellotreno.pages.dev",
     "localhost",

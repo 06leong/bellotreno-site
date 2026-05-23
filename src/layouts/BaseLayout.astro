@@ -11,7 +11,7 @@ interface Props {
     pageScripts?: string[];
 }
 
-const SITE_URL = 'https://real.bellotreno.org';
+const SITE_URL = 'https://bellotreno.org';
 const OG_IMAGE  = `${SITE_URL}/og-image.png`;
 const BUILD_ID = (
     import.meta.env.PUBLIC_BUILD_ID
@@ -22,7 +22,7 @@ const BUILD_ID = (
 const withBuildVersion = (src: string) => `${src}${src.includes('?') ? '&' : '?'}v=${BUILD_ID}`;
 const UMAMI_SCRIPT_URL = import.meta.env.PUBLIC_UMAMI_SCRIPT_URL;
 const UMAMI_WEBSITE_ID = import.meta.env.PUBLIC_UMAMI_WEBSITE_ID;
-const UMAMI_DOMAINS = import.meta.env.PUBLIC_UMAMI_DOMAINS || 'real.bellotreno.org';
+const UMAMI_DOMAINS = import.meta.env.PUBLIC_UMAMI_DOMAINS || 'bellotreno.org,real.bellotreno.org';
 const ENABLE_UMAMI = Boolean(UMAMI_SCRIPT_URL && UMAMI_WEBSITE_ID);
 
 const {
@@ -91,7 +91,7 @@ const canonicalURL = new URL(Astro.url.pathname, SITE_URL).href;
       "@context": "https://schema.org",
       "@type": "WebApplication",
       "name": "BelloTreno",
-      "url": "https://real.bellotreno.org",
+      "url": "https://bellotreno.org",
       "description": "Orari e stato in tempo reale dei treni italiani: Frecciarossa, Intercity, Regionali. Dati tramite ViaggiaTreno.",
       "applicationCategory": "TravelApplication",
       "operatingSystem": "Web",

@@ -2,6 +2,7 @@ const DEFAULT_BASE_URL = "https://api.opentransportdata.swiss/formation";
 const DEFAULT_FULL_PATH = "/v2/formations_full";
 const DEFAULT_EVU = "SBBP";
 const ALLOWED_HOSTS = new Set([
+    "bellotreno.org",
     "real.bellotreno.org",
     "bellotreno.pages.dev",
     "localhost",

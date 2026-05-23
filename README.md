@@ -13,7 +13,7 @@ It brings together train running details, station departure and arrival boards,
 RFI travel notices, cross-border formation data, and daily operating statistics in
 a cleaner interface for railway enthusiasts and travelers.
 
-Live site: [real.bellotreno.org](https://real.bellotreno.org/)
+Live site: [bellotreno.org](https://bellotreno.org/)
 
 This is a personal railway data research project. It is not affiliated with
 Trenitalia, RFI, FS Italiane, SBB, Trenord, TILO, or OpenTransportData.swiss.

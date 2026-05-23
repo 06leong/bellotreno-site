@@ -20,7 +20,7 @@ TypeScript is checked implicitly by Astro (strict mode via `astro/tsconfigs/stri
 ## Architecture
 
 - **Static site** (`output: 'static'` in `astro.config.mjs`). No SSR.
-- **`site`** is set to `'https://real.bellotreno.org'` in `astro.config.mjs` — required for sitemap generation and canonical URLs.
+- **`site`** is set to `'https://bellotreno.org'` in `astro.config.mjs` — required for sitemap generation and canonical URLs. `real.bellotreno.org` is kept only as the legacy alias/redirect domain.
 - **Astro pages** live in `src/pages/`: `index.astro`, `station.astro`, `infomobilita.astro`, `statistics.astro`, `about.astro`.
 - **Layouts**: single `src/layouts/BaseLayout.astro` wraps all pages. Accepts `title`, `description`, and `pageScripts: string[]` props.
 - **Components**: `src/components/` — `Navbar.astro`, `Footer.astro`, `BackToTop.astro`.
@@ -178,7 +178,7 @@ Displayed as a collapsible card (`#smartCaringCard`) below the train detail card
 GET https://notify.bellotreno.workers.dev?train={numeroTreno}
 ```
 
-Allowed origins: `https://real.bellotreno.org`, `https://bellotreno.pages.dev`, `http://localhost:4321`, `http://127.0.0.1:4321`.
+Allowed origins: `https://bellotreno.org`, `https://real.bellotreno.org`, `https://bellotreno.pages.dev`, `http://localhost:4321`, `http://127.0.0.1:4321`.
 
 ### Response shape
 
