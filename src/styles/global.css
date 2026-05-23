@@ -9,9 +9,9 @@
     color-scheme: "light";
     --color-primary: #6a8a9f; /* Morandi Slate Blue */
     --color-primary-content: #ffffff;
-    --color-base-100: #e7eff4;
-    --color-base-200: #dbe6ee;
-    --color-base-300: #c3d1dc;
+    --color-base-100: #edf3f6;
+    --color-base-200: #e2ebf0;
+    --color-base-300: #cbd8e0;
     --color-base-content: #0f172a;
     --color-info: #0284c7;
     --color-warning: #d97706;
@@ -37,40 +37,30 @@
     --train-green: #2e7d32;
     --train-grey: #cfd8dc;
     --train-red: #d32f2f;
-    --rail-bg: #e8edf0;
-    --rail-bg-top: #f8fafb;
-    --rail-water: rgba(116, 190, 216, 0.20);
-    --rail-terrain: rgba(98, 114, 130, 0.10);
-    --rail-node-fill: #f9fbfc;
-    --rail-node-stroke: rgba(43, 56, 68, 0.62);
-    --rail-interchange-fill: #f9fbfc;
-    --rail-interchange-stroke: rgba(40, 53, 66, 0.68);
-    --rail-fr: #d59a9a;
-    --rail-reg: #9fbd89;
-    --rail-ic: #86afcd;
-    --rail-ec: #7ba77c;
-    --rail-urban: #88b8bd;
-    --rail-vignette: rgba(49, 65, 80, 0.24);
+    --page-bg-base: #dbe6ec;
+    --page-bg-rail: rgba(74, 104, 125, 0.10);
+    --page-bg-line: rgba(74, 104, 125, 0.14);
+    --page-bg-band: rgba(130, 164, 184, 0.28);
+    --page-bg-vignette: rgba(15, 23, 42, 0.14);
+    --page-bg-fr: rgba(188, 52, 51, 0.18);
+    --page-bg-reg: rgba(112, 168, 74, 0.18);
+    --page-bg-ic: rgba(0, 138, 216, 0.17);
+    --page-bg-ec: rgba(60, 129, 73, 0.18);
 }
 
 [data-theme="dark"] {
     --train-grey: #475569;
     --train-green: #4ade80; /* Brighter for dark mode legibility */
     --train-red: #f87171;
-    --rail-bg: #101821;
-    --rail-bg-top: #26323f;
-    --rail-water: rgba(90, 165, 190, 0.12);
-    --rail-terrain: rgba(210, 225, 235, 0.055);
-    --rail-node-fill: #111b27;
-    --rail-node-stroke: rgba(218, 233, 242, 0.56);
-    --rail-interchange-fill: #111b27;
-    --rail-interchange-stroke: rgba(226, 238, 246, 0.62);
-    --rail-fr: #743738;
-    --rail-reg: #526f42;
-    --rail-ic: #3d6388;
-    --rail-ec: #315c3c;
-    --rail-urban: #3f747a;
-    --rail-vignette: rgba(0, 0, 0, 0.54);
+    --page-bg-base: var(--color-base-100);
+    --page-bg-rail: rgba(130, 164, 184, 0.07);
+    --page-bg-line: rgba(130, 164, 184, 0.10);
+    --page-bg-band: rgba(56, 189, 248, 0.12);
+    --page-bg-vignette: rgba(0, 0, 0, 0.42);
+    --page-bg-fr: rgba(188, 52, 51, 0.24);
+    --page-bg-reg: rgba(112, 168, 74, 0.20);
+    --page-bg-ic: rgba(0, 138, 216, 0.24);
+    --page-bg-ec: rgba(60, 129, 73, 0.22);
 }
 
 /* Hide translatable text until correct language is applied (prevents Chinese flash) */
@@ -177,7 +167,9 @@ a:focus-visible {
     animation-timing-function: ease-out;
 }
 
-/* ===== Static Rail-Network Background ===== */
+/* ===== High Performance Background Enhancements ===== */
+
+/* ===== Static Rail-Layer Background ===== */
 .aurora-bg {
     position: fixed;
     inset: 0;
@@ -185,7 +177,12 @@ a:focus-visible {
     overflow: hidden;
     pointer-events: none;
     background:
-        linear-gradient(180deg, var(--rail-bg-top) 0%, var(--rail-bg) 44%, color-mix(in oklch, var(--rail-bg) 86%, #1f2937 14%) 100%);
+        linear-gradient(135deg, var(--page-bg-fr) 0%, transparent 24%),
+        linear-gradient(45deg, var(--page-bg-ic) 0%, transparent 24%),
+        linear-gradient(225deg, var(--page-bg-reg) 0%, transparent 24%),
+        linear-gradient(315deg, var(--page-bg-ec) 0%, transparent 24%),
+        linear-gradient(180deg, color-mix(in oklch, var(--page-bg-base) 88%, var(--color-primary) 12%) 0%, var(--page-bg-base) 52%, color-mix(in oklch, var(--page-bg-base) 82%, #0f172a 18%) 100%),
+        var(--color-base-100);
 }
 
 .aurora-bg::before,
@@ -196,99 +193,76 @@ a:focus-visible {
 }
 
 .aurora-bg::before {
+    opacity: 0.6;
     background:
-        linear-gradient(90deg, var(--rail-vignette) 0%, transparent 20%, transparent 80%, var(--rail-vignette) 100%);
+        repeating-linear-gradient(90deg, transparent 0 70px, var(--page-bg-line) 70px 72px, transparent 72px 144px),
+        repeating-linear-gradient(0deg, transparent 0 70px, var(--page-bg-rail) 70px 72px, transparent 72px 144px);
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 12%, #000 74%, transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0%, #000 12%, #000 74%, transparent 100%);
 }
 
 .aurora-bg::after {
     background:
-        linear-gradient(to bottom, transparent 0%, transparent 56%, var(--rail-vignette) 100%);
+        linear-gradient(to bottom, transparent 0%, var(--page-bg-vignette) 100%),
+        linear-gradient(90deg, color-mix(in oklch, var(--page-bg-base) 34%, transparent) 0%, transparent 18%, transparent 82%, color-mix(in oklch, var(--page-bg-base) 32%, transparent) 100%),
+        repeating-linear-gradient(0deg, transparent 0 218px, color-mix(in oklch, var(--color-base-content) 4%, transparent) 218px 219px, transparent 219px 436px);
 }
 
-.rail-network-map {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    opacity: 1;
+.hero-typewriter {
+    display: flex;
+    justify-content: center;
+    width: min(90vw, 34rem);
+    min-height: 1.65em;
+    margin: 0.35rem auto 1.45rem;
+    color: color-mix(in oklch, var(--color-base-content) 74%, transparent);
+    font-size: clamp(0.95rem, 2vw, 1.12rem);
+    font-weight: 650;
+    line-height: 1.45;
+    letter-spacing: 0;
 }
 
-.rail-terrain {
-    fill: var(--rail-terrain);
+.hero-typewriter span {
+    display: inline-block;
+    max-width: 100%;
+    overflow: visible;
+    white-space: nowrap;
+    clip-path: inset(0 100% 0 0);
+    border-right: 2px solid color-mix(in oklch, var(--color-primary) 78%, transparent);
+    animation:
+        heroTypewriter 1.65s steps(38, end) 0.18s forwards,
+        heroTypewriterCaret 0.72s step-end 0.18s 4,
+        heroTypewriterDone 0s linear 3.08s forwards;
 }
 
-.rail-water {
-    fill: var(--rail-water);
-}
-
-.rail-line {
-    fill: none;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    stroke-width: 16;
-    vector-effect: non-scaling-stroke;
-}
-
-.rail-fr {
-    stroke: var(--rail-fr);
-}
-
-.rail-reg {
-    stroke: var(--rail-reg);
-}
-
-.rail-ic {
-    stroke: var(--rail-ic);
-}
-
-.rail-ec {
-    stroke: var(--rail-ec);
-}
-
-.rail-urban {
-    stroke: var(--rail-urban);
-    stroke-width: 12;
-}
-
-.rail-node {
-    fill: var(--rail-node-fill);
-    stroke: var(--rail-node-stroke);
-    vector-effect: non-scaling-stroke;
-}
-
-.rail-node-normal {
-    stroke-width: 2.5;
-}
-
-.rail-node-secondary {
-    stroke-width: 3;
-}
-
-.rail-node-major {
-    stroke-width: 3.4;
-}
-
-.rail-node-hub {
-    stroke-width: 4;
-}
-
-.rail-interchange {
-    fill: var(--rail-interchange-fill);
-    stroke: var(--rail-interchange-stroke);
-    stroke-width: 4;
-    vector-effect: non-scaling-stroke;
-}
-
-@media (max-width: 768px) {
-    .aurora-bg {
-        background: var(--rail-bg);
+@keyframes heroTypewriter {
+    to {
+        clip-path: inset(0 0 0 0);
     }
+}
 
-    .rail-network-map {
-        opacity: 0.78;
-        transform: scale(1.16);
-        transform-origin: center;
+@keyframes heroTypewriterCaret {
+    50% {
+        border-color: transparent;
     }
+}
+
+@keyframes heroTypewriterDone {
+    to {
+        border-color: transparent;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .hero-typewriter span {
+        clip-path: inset(0 0 0 0);
+        border-right: 0;
+        animation: none;
+    }
+}
+
+html[data-lang-loading] .hero-typewriter span {
+    clip-path: inset(0 100% 0 0);
+    animation: none;
 }
 
 
