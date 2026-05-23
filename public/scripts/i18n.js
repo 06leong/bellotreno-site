@@ -545,7 +545,7 @@ const translations = {
         about_technical: "Riferimenti tecnici",
         about_official: "Info ferroviarie ufficiali",
         about_disclaimer: "Disclaimer e Copyright",
-        home_typewriter_tagline: "Un sito per consultare le ferrovie italiane :)",
+        home_typewriter_tagline: "Un sito di informazioni ferroviarie italiane :)",
         stats_running: "treni in circolazione",
         stats_today_prefix: "Oggi",
         stats_today_suffix: "treni operati",
