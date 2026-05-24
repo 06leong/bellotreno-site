@@ -161,6 +161,37 @@ a:focus-visible {
     outline-offset: 3px;
 }
 
+/* About page body links need to stand out from prose without becoming loud. */
+.about-card {
+    --about-link-color: color-mix(in oklch, var(--color-primary) 68%, #0f766e 32%);
+    --about-link-hover-color: color-mix(in oklch, var(--about-link-color) 72%, var(--color-base-content) 28%);
+    --about-link-decoration: color-mix(in oklch, var(--about-link-color) 48%, transparent);
+}
+
+[data-theme="dark"] .about-card {
+    --about-link-color: color-mix(in oklch, var(--color-primary) 78%, #7dd3c7 22%);
+    --about-link-hover-color: color-mix(in oklch, var(--about-link-color) 84%, #ffffff 16%);
+    --about-link-decoration: color-mix(in oklch, var(--about-link-color) 58%, transparent);
+}
+
+.about-card a,
+.about-card a:any-link,
+.about-card a:visited {
+    color: var(--about-link-color);
+    font-weight: 650;
+    text-decoration-line: underline;
+    text-decoration-color: var(--about-link-decoration);
+    text-decoration-thickness: 0.075em;
+    text-underline-offset: 0.18em;
+    transition: color 0.18s ease, text-decoration-color 0.18s ease;
+}
+
+.about-card a:hover,
+.about-card a:focus-visible {
+    color: var(--about-link-hover-color);
+    text-decoration-color: currentColor;
+}
+
 ::view-transition-old(root),
 ::view-transition-new(root) {
     animation-duration: 120ms;
