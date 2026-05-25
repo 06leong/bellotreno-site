@@ -93,20 +93,63 @@ function hasDirettrice(train) {
 }
 
 /**
+ * @param {Record<string, unknown>} record
+ * @returns {boolean}
+ */
+function isTrainLikeRecord(record) {
+  return Boolean(
+    asString(record.train_id)
+    || asString(record.trainId)
+    || asString(record.train_category)
+    || asString(record.trainCategory)
+    || asString(record.line)
+    || asString(record.direction)
+  );
+}
+
+/**
+ * @param {unknown} value
+ * @param {Record<string, unknown>[]} candidates
+ * @param {WeakSet<object>} seen
+ * @param {number} depth
+ * @returns {Record<string, unknown>[]}
+ */
+function collectTrainCandidates(value, candidates = [], seen = new WeakSet(), depth = 0) {
+  if (value === null || value === undefined || depth > 8) return candidates;
+
+  if (Array.isArray(value)) {
+    for (const item of value) collectTrainCandidates(item, candidates, seen, depth + 1);
+    return candidates;
+  }
+
+  if (typeof value !== "object") return candidates;
+  if (seen.has(value)) return candidates;
+  seen.add(value);
+
+  const record = /** @type {Record<string, unknown>} */ (value);
+  if (hasDirettrice(record) || isTrainLikeRecord(record)) {
+    candidates.push(record);
+  }
+
+  if (record.train && typeof record.train === "object") {
+    collectTrainCandidates(record.train, candidates, seen, depth + 1);
+  }
+
+  for (const child of Object.values(record)) {
+    if (child && typeof child === "object" && child !== record.train) {
+      collectTrainCandidates(child, candidates, seen, depth + 1);
+    }
+  }
+
+  return candidates;
+}
+
+/**
  * @param {unknown} payload
  * @returns {Record<string, unknown>}
  */
 export function getTrenordTrainRecord(payload) {
-  const root = asRecord(payload);
-  const candidates = [];
-  const rootTrain = asRecord(root.train);
-  if (Object.keys(rootTrain).length) candidates.push(rootTrain);
-
-  const journeyList = Array.isArray(root.journey_list) ? root.journey_list : [];
-  for (const journey of journeyList) {
-    const train = asRecord(asRecord(journey).train);
-    if (Object.keys(train).length) candidates.push(train);
-  }
+  const candidates = collectTrainCandidates(payload);
 
   return candidates.find(hasDirettrice) || candidates[0] || {};
 }

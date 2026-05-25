@@ -234,6 +234,39 @@ test("Trenord traffic information prefers train record with direttrice", () => {
   assert.equal(result.direttriceDescription, "VERONA-BRESCIA-TREVIGLIO-MILANO");
 });
 
+test("Trenord traffic information finds direttrice in nested payload wrappers", () => {
+  const result = normalizeTrenordTrafficInformation("24946", "2026-05-25", [{
+    payload: {
+      result: {
+        journey_list: [{
+          train: {
+            train_id: "24946",
+            train_category: "S9",
+            line: "S9",
+            direttrice: "D038",
+            direttrice_security: "D002",
+          },
+        }],
+      },
+    },
+  }], [
+    {
+      nome: "D038",
+      descrizione: "SARONNO-SEREGNO-MILANO-ALBAIRATE",
+      news: [{
+        description: "Nested payload notice",
+        date: "2026-05-25T12:00:00.000Z",
+        severity_description: "info",
+      }],
+    },
+  ]);
+
+  assert.equal(result.available, true);
+  assert.equal(result.line, "S9");
+  assert.equal(result.direttrice, "D038");
+  assert.equal(result.direttriceDescription, "SARONNO-SEREGNO-MILANO-ALBAIRATE");
+});
+
 test("Trenord notice display keeps today first or recent 14-day notices", () => {
   const notices = [
     { id: "old", source: "trenord-direttrici", direttriceCode: "D014", direttriceDescription: "Line", description: "old", date: "2026-04-10T12:00:00.000Z", severityLevel: "info", urls: [] },
