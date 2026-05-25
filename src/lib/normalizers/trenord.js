@@ -52,6 +52,7 @@
  * @property {string|null|undefined} direttriceDescription
  * @property {string|null|undefined} direttriceSecurity
  * @property {TrenordMatchSource} matchSource
+ * @property {string=} reason
  * @property {TrenordNotice[]} notices
  */
 
@@ -260,7 +261,10 @@ export function normalizeTrenordTrafficInformation(trainNumber, date, trainPaylo
     return buildResult(trainNumber, date, info, security, "security-direttrice-fallback", []);
   }
 
-  return buildResult(trainNumber, date, info, null, "none", []);
+  const reason = info.direttrice || info.direttriceSecurity
+    ? "direttrice_not_found"
+    : "no_direttrice_in_train_payload";
+  return buildResult(trainNumber, date, info, null, "none", [], reason);
 }
 
 /**
@@ -270,10 +274,12 @@ export function normalizeTrenordTrafficInformation(trainNumber, date, trainPaylo
  * @param {TrenordDirettrice|null} direttrice
  * @param {TrenordMatchSource} matchSource
  * @param {TrenordNotice[]} notices
+ * @param {string=} reason
  * @returns {TrenordTrafficInformationResult}
  */
-function buildResult(trainNumber, date, info, direttrice, matchSource, notices) {
-  return {
+function buildResult(trainNumber, date, info, direttrice, matchSource, notices, reason = undefined) {
+  /** @type {TrenordTrafficInformationResult} */
+  const result = {
     available: Boolean(direttrice),
     trainNumber,
     date,
@@ -286,4 +292,6 @@ function buildResult(trainNumber, date, info, direttrice, matchSource, notices) 
     matchSource,
     notices,
   };
+  if (reason) result.reason = reason;
+  return result;
 }

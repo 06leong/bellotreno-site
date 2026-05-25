@@ -283,3 +283,19 @@ test("Trenord traffic information preserves matched line with empty notices", ()
   assert.equal(result.matchSource, "primary-direttrice");
   assert.equal(result.notices.length, 0);
 });
+
+test("Trenord traffic information reports why no direttrice matched", () => {
+  const noDirettrice = normalizeTrenordTrafficInformation("2237", "2026-05-25", {
+    journey_list: [{ train: { train_id: "2237" } }],
+  }, []);
+  assert.equal(noDirettrice.available, false);
+  assert.equal(noDirettrice.matchSource, "none");
+  assert.equal(noDirettrice.reason, "no_direttrice_in_train_payload");
+
+  const missingDirettrice = normalizeTrenordTrafficInformation("2237", "2026-05-25", {
+    journey_list: [{ train: { train_id: "2237", direttrice: "D999" } }],
+  }, []);
+  assert.equal(missingDirettrice.available, false);
+  assert.equal(missingDirettrice.matchSource, "none");
+  assert.equal(missingDirettrice.reason, "direttrice_not_found");
+});
