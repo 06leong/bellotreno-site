@@ -16,6 +16,7 @@ let swissRequestSeq = 0;
 
 const API_BASE = window.API_BASE;
 const NOTIFY_BASE = window.NOTIFY_BASE;
+const TRENORD_TRAFFIC_BASE = window.TRENORD_TRAFFIC_BASE || "/api/trenord/traffic";
 
 function clearNode(node) {
     if (node) node.replaceChildren();
@@ -129,7 +130,9 @@ window.onLanguageChanged = function () {
     if (currentTrainData) {
         render(currentTrainData);
     }
-    if (currentSmartCaringData) {
+    if (currentSmartCaringData?.provider === 'trenord-traffic') {
+        renderTrenordTrafficInformation(currentSmartCaringData);
+    } else if (currentSmartCaringData) {
         renderSmartCaring(currentSmartCaringData);
     }
 };
@@ -683,7 +686,7 @@ async function fetchDetails(triple) {
         currentTrainData = data;
         currentTrainCategory = resolveTrainCategory(data);
         render(data);
-        fetchSmartCaring(data.numeroTreno);
+        fetchTrafficInformation(data);
         loadSwissFormation(data, triple, requestSeq);
 
 
@@ -1133,6 +1136,78 @@ function resolveTrainCategory(data) {
     return '';
 }
 
+function isTrenordTrain(data) {
+    if (Number(data?.codiceCliente) === 63) return true;
+    const clientMap = window.CLIENT_MAP || {};
+    const operator = clientMap[data?.codiceCliente] || clientMap[Number(data?.codiceCliente)];
+    return String(operator || '').toUpperCase() === 'TRENORD';
+}
+
+function todayInRome() {
+    return new Intl.DateTimeFormat('sv-SE', {
+        timeZone: 'Europe/Rome',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).format(new Date());
+}
+
+function getTrainOperationDate(data) {
+    if (data?.dataPartenzaTrenoAsDate && /^\d{4}-\d{2}-\d{2}$/.test(data.dataPartenzaTrenoAsDate)) {
+        return data.dataPartenzaTrenoAsDate;
+    }
+
+    const timestamp = Number(data?.dataPartenzaTreno || data?.dataPartenza);
+    if (Number.isFinite(timestamp) && timestamp > 0) {
+        return new Date(timestamp).toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
+    }
+
+    return todayInRome();
+}
+
+function fetchTrafficInformation(data) {
+    if (isTrenordTrain(data)) {
+        fetchTrenordTrafficInformation(data);
+        return;
+    }
+    fetchSmartCaring(data.numeroTreno);
+}
+
+async function fetchTrenordTrafficInformation(trainData) {
+    const card = document.getElementById('smartCaringCard');
+    const trainNumber = String(trainData?.numeroTreno || '').replace(/\D+/g, '');
+    const date = getTrainOperationDate(trainData);
+    if (!card || !TRENORD_TRAFFIC_BASE || !trainNumber || !date) return;
+
+    card.style.display = 'block';
+    const t = translations[currentLang];
+    clearNode(card);
+    card.append(createNode('div', { className: 'sc-loading' }, [
+        createNode('span', { className: 'loading loading-spinner loading-sm text-primary' }),
+        createNode('span', { text: t.trenord_traffic_loading })
+    ]));
+
+    try {
+        const requestUrl = `${TRENORD_TRAFFIC_BASE}?train=${encodeURIComponent(trainNumber)}&date=${encodeURIComponent(date)}`;
+        const res = await fetch(requestUrl, { headers: { accept: 'application/json' } });
+        const data = await res.json();
+        if (!res.ok || data?.available === false) throw new Error(data?.reason || 'trenord_traffic_unavailable');
+
+        if (!data.direttriceDescription && !(data.notices || []).length) {
+            card.style.display = 'none';
+            currentSmartCaringData = null;
+            return;
+        }
+
+        currentSmartCaringData = { ...data, provider: 'trenord-traffic' };
+        renderTrenordTrafficInformation(currentSmartCaringData);
+    } catch (e) {
+        console.error('Trenord traffic information fetch failed:', e);
+        card.style.display = 'none';
+        currentSmartCaringData = null;
+    }
+}
+
 async function fetchSmartCaring(trainNumber) {
     const card = document.getElementById('smartCaringCard');
     if (!card || !NOTIFY_BASE) return;
@@ -1176,6 +1251,107 @@ function getShortMonth(date, lang) {
     const en = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     const it = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
     return lang === 'it' ? it[m] : en[m];
+}
+
+function formatTrenordTrafficTitle(data) {
+    const t = translations[currentLang];
+    const line = data?.direttriceDescription || data?.direttrice || 'Trenord';
+    return String(t.trenord_traffic_title || '{line} line notices').replace('{line}', line);
+}
+
+function formatTrenordNoticeDate(value) {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    const locale = currentLang === 'zh' ? 'zh-CN' : currentLang === 'it' ? 'it-IT' : 'en-GB';
+    return new Intl.DateTimeFormat(locale, {
+        timeZone: 'Europe/Rome',
+        year: 'numeric',
+        month: 'short',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+    }).format(date);
+}
+
+function createTrenordNoticeLink(url, index, total) {
+    const safeUrl = /^https?:\/\//i.test(String(url || '')) ? url : '';
+    if (!safeUrl) return null;
+    const t = translations[currentLang];
+    const label = total > 1 ? `${t.trenord_notice_link} ${index + 1}` : t.trenord_notice_link;
+    return createNode('a', {
+        className: 'trenord-notice-link',
+        text: label,
+        href: safeUrl,
+        target: '_blank',
+        rel: 'noopener noreferrer'
+    });
+}
+
+function renderTrenordTrafficInformation(data) {
+    const card = document.getElementById('smartCaringCard');
+    if (!card || !data) return;
+
+    const t = translations[currentLang];
+    const notices = Array.isArray(data.notices) ? data.notices : [];
+    const wasCollapsed = card.querySelector('.sc-body-wrap') === null
+        ? true
+        : card.querySelector('.sc-body-wrap.sc-collapsed') !== null;
+
+    clearNode(card);
+
+    const toggle = createIcon('expand_more', `material-symbols-outlined sc-toggle${wasCollapsed ? '' : ' sc-rotated'}`);
+    const header = createNode('button', { className: 'sc-header trenord-traffic-header', type: 'button' }, [
+        createIcon('campaign'),
+        createNode('span', { text: formatTrenordTrafficTitle(data) }),
+        toggle
+    ]);
+
+    const bodyChildren = [];
+    if (notices.length) {
+        const list = createNode('div', { className: 'trenord-notices-list' }, notices.map((notice) => {
+            const severityLevel = notice.severityLevel || 'info';
+            const severityText = notice.severityDescription || t.trenord_severity_info;
+            const dateText = formatTrenordNoticeDate(notice.date);
+            const urls = Array.isArray(notice.urls) ? notice.urls : [];
+            const links = urls
+                .map((url, index) => createTrenordNoticeLink(url, index, urls.length))
+                .filter(Boolean);
+
+            return createNode('div', { className: 'trenord-notice' }, [
+                createNode('div', { className: 'trenord-notice-meta' }, [
+                    createNode('span', {
+                        className: `trenord-severity trenord-severity-${severityLevel}`,
+                        text: severityText
+                    }),
+                    dateText ? createNode('span', { className: 'trenord-notice-date', text: dateText }) : null
+                ]),
+                createNode('div', { className: 'trenord-notice-description', text: notice.description }),
+                links.length ? createNode('div', { className: 'trenord-notice-actions' }, links) : null
+            ]);
+        }));
+        bodyChildren.push(list);
+    } else {
+        bodyChildren.push(createNode('div', { className: 'sc-empty trenord-empty' }, [
+            createIcon('info', 'material-symbols-outlined', {
+                style: { fontSize: '1.1rem', verticalAlign: 'middle', marginRight: '4px' }
+            }),
+            t.trenord_no_notices
+        ]));
+    }
+
+    const bodyWrap = createNode('div', { className: `sc-body-wrap${wasCollapsed ? ' sc-collapsed' : ''}` }, [
+        createNode('div', { className: 'sc-body trenord-traffic-body' }, bodyChildren)
+    ]);
+
+    header.addEventListener('click', () => {
+        bodyWrap.classList.toggle('sc-collapsed');
+        toggle.classList.toggle('sc-rotated');
+        hideScTooltip();
+    });
+
+    card.append(header, bodyWrap);
+    card.style.display = 'block';
 }
 
 function renderSmartCaring(data) {

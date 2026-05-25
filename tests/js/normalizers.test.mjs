@@ -19,6 +19,10 @@ import {
   normalizeSwissStationName,
   shouldQuerySwissFormation,
 } from "../../src/lib/normalizers/swiss.js";
+import {
+  extractTrenordNoticeUrls,
+  normalizeTrenordTrafficInformation,
+} from "../../src/lib/normalizers/trenord.js";
 
 test("statistics category helpers preserve special categories and regional aliases", () => {
   assert.equal(categoryCode("ECFR"), "EC FR");
@@ -140,4 +144,142 @@ test("Swiss vehicle records merge by EVN without global closed pollution", () =>
   assert.equal(merged.length, 1);
   assert.equal(merged[0].closed, false);
   assert.equal(merged[0].segments.length, 2);
+});
+
+test("Trenord traffic information resolves S9 primary direttrice", () => {
+  const result = normalizeTrenordTrafficInformation("24946", "2026-05-25", {
+    journey_list: [{
+      train: {
+        train_id: "24946",
+        train_category: "S9",
+        line: "S9",
+        train_operator: "Trenord",
+        direttrice: "D038",
+        direttrice_security: "D002",
+      },
+    }],
+  }, [
+    {
+      nome: "D038",
+      descrizione: "SARONNO-SEREGNO-MILANO-ALBAIRATE",
+      news: [{
+        description: "Si informa la Gentile Clientela che il servizio e regolare.",
+        date: "2026-05-25T08:00:00.000Z",
+        severity_code: 1,
+        severity_description: "info",
+      }],
+    },
+  ]);
+
+  assert.equal(result.available, true);
+  assert.equal(result.direttrice, "D038");
+  assert.equal(result.direttriceDescription, "SARONNO-SEREGNO-MILANO-ALBAIRATE");
+  assert.equal(result.matchSource, "primary-direttrice");
+  assert.equal(result.notices.length, 1);
+  assert.equal(result.notices[0].severityLevel, "info");
+});
+
+test("Trenord traffic information resolves RE primary direttrice", () => {
+  const result = normalizeTrenordTrafficInformation("2634", "2026-05-25", {
+    journey_list: [{
+      train: {
+        train_id: "2634",
+        train_category: "RE",
+        line: "RE",
+        train_operator: "Trenord",
+        direttrice: "D014",
+        direttrice_security: "D014",
+      },
+    }],
+  }, [
+    {
+      nome: "D014",
+      descrizione: "VERONA-BRESCIA-TREVIGLIO-MILANO",
+      news: [{
+        description: "Avviso linea Verona - Milano https://www.trenord.it/example.pdf",
+        date: "2026-05-25T09:00:00.000Z",
+        severity_code: 2,
+        severity_description: "warning",
+      }],
+    },
+  ]);
+
+  assert.equal(result.direttrice, "D014");
+  assert.equal(result.direttriceDescription, "VERONA-BRESCIA-TREVIGLIO-MILANO");
+  assert.equal(result.notices[0].severityLevel, "warning");
+  assert.deepEqual(result.notices[0].urls, ["https://www.trenord.it/example.pdf"]);
+});
+
+test("Trenord traffic information uses security direttrice only as fallback", () => {
+  const result = normalizeTrenordTrafficInformation("24946", "2026-05-25", {
+    journey_list: [{
+      train: {
+        train_id: "24946",
+        line: "S9",
+        direttrice: "D038",
+        direttrice_security: "D002",
+      },
+    }],
+  }, [
+    {
+      nome: "D038",
+      descrizione: "SARONNO-SEREGNO-MILANO-ALBAIRATE",
+      news: [],
+    },
+    {
+      nome: "D002",
+      descrizione: "MILANO-NOVARA",
+      news: [{
+        description: "Fallback notice",
+        date: "2026-05-25T10:00:00.000Z",
+        severity_description: "critical",
+      }],
+    },
+  ]);
+
+  assert.equal(result.matchSource, "security-direttrice-fallback");
+  assert.equal(result.direttrice, "D002");
+  assert.equal(result.direttriceDescription, "MILANO-NOVARA");
+  assert.equal(result.notices[0].severityLevel, "disruption");
+});
+
+test("Trenord notices extract URLs, keep stable ids, and sort by date", () => {
+  const direttrici = [{
+    nome: "D038",
+    descrizione: "SARONNO-SEREGNO-MILANO-ALBAIRATE",
+    news: [
+      {
+        description: "Older notice https://a.mktgcdn.com/old.pdf.",
+        date: "2026-04-10T14:31:55.000Z",
+        severity_description: "info",
+      },
+      {
+        description: "Newer notice https://www.trenord.it/new.pdf, short https://t.co/abc",
+        date: "2026-05-25T14:31:55.000Z",
+        severity_description: "warning",
+      },
+    ],
+  }];
+  const payload = { journey_list: [{ train: { direttrice: "D038" } }] };
+  const left = normalizeTrenordTrafficInformation("24946", "2026-05-25", payload, direttrici);
+  const right = normalizeTrenordTrafficInformation("24946", "2026-05-25", payload, direttrici);
+
+  assert.equal(left.notices[0].description.startsWith("Newer notice"), true);
+  assert.deepEqual(left.notices[0].urls, ["https://www.trenord.it/new.pdf", "https://t.co/abc"]);
+  assert.deepEqual(extractTrenordNoticeUrls("See https://a.mktgcdn.com/file.pdf."), ["https://a.mktgcdn.com/file.pdf"]);
+  assert.equal(left.notices[0].id, right.notices[0].id);
+});
+
+test("Trenord traffic information preserves matched line with empty notices", () => {
+  const result = normalizeTrenordTrafficInformation("24946", "2026-05-25", {
+    journey_list: [{ train: { direttrice: "D038", direttrice_security: "D002" } }],
+  }, [{
+    nome: "D038",
+    descrizione: "SARONNO-SEREGNO-MILANO-ALBAIRATE",
+    news: [],
+  }]);
+
+  assert.equal(result.available, true);
+  assert.equal(result.matchSource, "primary-direttrice");
+  assert.equal(result.notices.length, 0);
 });

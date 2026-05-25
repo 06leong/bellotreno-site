@@ -5,6 +5,7 @@
 window.PROXY_BASE = "https://ah.bellotreno.workers.dev";
 window.API_BASE = window.PROXY_BASE + "/?url=https://www.viaggiatreno.it/infomobilita/resteasy/viaggiatreno";
 window.NOTIFY_BASE = "https://notify.bellotreno.workers.dev";
+window.TRENORD_TRAFFIC_BASE = "/api/trenord/traffic";
 window.COUNTER_URL = "https://site-counter.bellotreno.workers.dev/";
 
 const CLIENT_MAP = {

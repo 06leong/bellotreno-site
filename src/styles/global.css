@@ -1505,6 +1505,111 @@ footer span {
     margin-top: 2px;
 }
 
+.trenord-traffic-header {
+    color: var(--color-primary);
+}
+
+.trenord-traffic-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.trenord-notices-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 360px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.trenord-notice {
+    padding: 14px 16px;
+    background: color-mix(in oklch, var(--color-base-content) 4%, transparent);
+    border: 1px solid color-mix(in oklch, var(--color-base-content) 8%, transparent);
+    border-radius: 12px;
+    color: var(--color-base-content);
+}
+
+.trenord-notice-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+}
+
+.trenord-severity {
+    display: inline-flex;
+    align-items: center;
+    min-height: 22px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    line-height: 1.1;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0;
+    color: var(--color-primary);
+    background: color-mix(in oklch, var(--color-primary) 12%, transparent);
+    border: 1px solid color-mix(in oklch, var(--color-primary) 24%, transparent);
+}
+
+.trenord-severity-warning {
+    color: var(--color-warning);
+    background: color-mix(in oklch, var(--color-warning) 14%, transparent);
+    border-color: color-mix(in oklch, var(--color-warning) 28%, transparent);
+}
+
+.trenord-severity-disruption {
+    color: var(--train-red);
+    background: color-mix(in oklch, var(--train-red) 12%, transparent);
+    border-color: color-mix(in oklch, var(--train-red) 28%, transparent);
+}
+
+.trenord-notice-date {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--color-base-content);
+    opacity: 0.55;
+}
+
+.trenord-notice-description {
+    font-size: 0.9rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.trenord-notice-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.trenord-notice-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 30px;
+    padding: 6px 11px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--color-primary);
+    text-decoration: none;
+    background: color-mix(in oklch, var(--color-primary) 10%, transparent);
+    border: 1px solid color-mix(in oklch, var(--color-primary) 18%, transparent);
+    transition: background 0.2s, opacity 0.2s;
+}
+
+.trenord-notice-link:hover {
+    opacity: 0.85;
+    background: color-mix(in oklch, var(--color-primary) 16%, transparent);
+}
+
 /* ===== Swiss Formation Card ===== */
 
 .swiss-card {
