@@ -12,6 +12,7 @@ The production compose file pulls prebuilt GHCR images:
 - `ghcr.io/06leong/bellotreno-statistics:latest`
 
 Each image is also published with a `sha-<commit>` tag for rollback.
+On the VPS, deploy published changes by pulling the GHCR images and recreating the containers; the VPS does not build these images locally.
 
 ## Required files on the VPS
 
@@ -21,15 +22,24 @@ Create a local `.env` file next to `docker-compose.yml`:
 RFI_PROXY_SECURITY_TOKEN=replace-with-rotated-rfi-proxy-token
 STATISTICS_SECURITY_TOKEN=replace-with-new-statistics-token
 
+# Optional proxy tuning
+RFI_PROXY_WORKERS=2
+RFI_PROXY_THREADS=16
+RFI_PROXY_TIMEOUT_SECONDS=45
+RFI_PROXY_LOG_REQUESTS=false
+
 # Optional collector tuning
 STATISTICS_COLLECTOR_ENABLED=true
 STATISTICS_COLLECTOR_INTERVAL_MINUTES=30
 STATISTICS_COLLECTOR_MAX_RUNTIME_SECONDS=2400
 STATISTICS_COLLECTOR_CONCURRENCY=4
-STATISTICS_BOARD_CONCURRENCY=10
-STATISTICS_DETAIL_CONCURRENCY=8
+STATISTICS_BOARD_CONCURRENCY=24
+STATISTICS_DETAIL_CONCURRENCY=12
 STATISTICS_REGION_CONCURRENCY=6
+STATISTICS_GUNICORN_THREADS=4
+STATISTICS_GUNICORN_TIMEOUT_SECONDS=3600
 STATISTICS_DETAIL_LIMIT_PER_RUN=0
+STATISTICS_SERVICE_DATE_LOOKBACK_DAYS=1
 STATISTICS_RETENTION_DAYS=30
 STATISTICS_STATION_REGISTRY_REFRESH_DAYS=7
 STATISTICS_REGION_CODES=1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22
@@ -41,6 +51,7 @@ STATISTICS_CATCHUP_GRACE_MINUTES=20
 ```
 
 Do not commit `.env`. Use `.env.example` as the template.
+The Dockerfiles read the Gunicorn tuning variables at container start, while the collector reads the `STATISTICS_*` values inside the Flask app. Changing these values on the VPS only requires `docker compose up -d` after the updated image has been pulled.
 
 ## Statistics collection model
 
@@ -53,8 +64,9 @@ The statistics service follows the same broad model as `railway-opendata`:
 - it stores one row per train and one row per stop in SQLite, then rebuilds daily station/relation aggregates.
 - it uses aligned collection slots instead of sleeping after each run. With the default settings, it samples at `HH:05`, `HH:35`, and one final daily slot at `23:55` Europe/Rome time.
 - every station board in one run uses the same scheduled slot time, so a single snapshot is internally consistent even if the collection takes several minutes.
-- every collected train is assigned to the service date derived from `dataPartenzaTreno`/`dataPartenza`; trains whose service date differs from the scheduled slot date are ignored for that snapshot, so late-night collection does not mix next-day trains into the previous day.
-- board, train-detail, and station-registry lookups have separate concurrency controls. The current default is `10` board workers, `8` detail workers, and `6` region workers under a `680m` memory limit.
+- every collected train is stored under the scheduled slot date, with its original departure date preserved as `service_date`; by default, trains from the previous service date are included when they are still observable on the current day's station boards, while next-day service-date trains are still excluded from the previous day.
+- each configured station board type is fetched as its own concurrent task. With `STATISTICS_BOARD_TYPES=partenze,arrivi`, each station still fetches both departures and arrivals, but those two requests no longer wait on each other inside one station worker.
+- board, train-detail, and station-registry lookups have separate concurrency controls. The current default is `24` board requests, `12` detail workers, and `6` region workers under a `680m` memory limit.
 - if the service is down or a previous run is still active, the collector records `missed`/`skipped` slots in `collector_runs` instead of starting overlapping work.
 
 Optional full station CSV support is available through `STATISTICS_STATION_CSV_PATH`. If the file exists in the data volume, rows are merged with live ViaggiaTreno stations. The built-in default does not require a CSV.
@@ -73,7 +85,7 @@ To collect arrivals as well as departures, keep this in `.env`:
 STATISTICS_BOARD_TYPES=partenze,arrivi
 ```
 
-Then rebuild or restart the statistics service:
+Then pull the published image and restart the statistics service:
 
 ```bash
 docker compose pull bellotreno-statistics

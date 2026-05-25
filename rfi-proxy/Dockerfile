@@ -15,4 +15,4 @@ COPY app.py .
 EXPOSE 8080
 
 # 使用 Gunicorn 启动生产级服务器。1GB VPS 上 2 个 worker 更稳。
-CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:8080", "app:app"]
+CMD ["sh", "-c", "exec gunicorn -w ${RFI_PROXY_WORKERS:-2} --threads ${RFI_PROXY_THREADS:-16} --timeout ${RFI_PROXY_TIMEOUT_SECONDS:-45} -b 0.0.0.0:8080 app:app"]

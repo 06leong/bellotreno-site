@@ -12,6 +12,7 @@ CORS(app)
 
 # 1. 密钥配置（从环境变量读取，对应 docker-compose.yml 中的 SECURITY_TOKEN）
 SECURITY_TOKEN = os.getenv("SECURITY_TOKEN", "")
+LOG_REQUESTS = os.getenv("LOG_REQUESTS", "false").lower() == "true"
 
 # 2. 域名白名单校验函数
 def is_allowed(target_url):
@@ -51,7 +52,8 @@ def proxy():
     if target_url.startswith("http://"):
         target_url = target_url.replace("http://", "https://")
 
-    print(f"Fetching: {target_url}")
+    if LOG_REQUESTS:
+        print(f"Fetching: {target_url}")
 
     try:
         # 核心：使用 curl_cffi 模拟真实浏览器指纹，绕过防火墙

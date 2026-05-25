@@ -8,6 +8,7 @@ sys.path.insert(0, str(ROOT / "rfi-proxy" / "statistics"))
 
 from statistics_core.normalizers import (  # noqa: E402
     APP_TZ,
+    is_service_date_within_lookback,
     is_same_service_date,
     normalize_category,
     service_date_from_epoch_ms,
@@ -40,6 +41,16 @@ class StatisticsCoreTest(unittest.TestCase):
         item = {"dataPartenzaTreno": epoch_ms(datetime(2026, 5, 22, 0, 5, tzinfo=APP_TZ))}
         self.assertFalse(is_same_service_date(item, "2026-05-21"))
         self.assertTrue(is_same_service_date(item, "2026-05-22"))
+
+    def test_service_date_lookback_includes_previous_day(self):
+        previous_evening = {"dataPartenzaTreno": epoch_ms(datetime(2026, 5, 21, 22, 30, tzinfo=APP_TZ))}
+        current_day = {"dataPartenzaTreno": epoch_ms(datetime(2026, 5, 22, 6, 5, tzinfo=APP_TZ))}
+        next_day = {"dataPartenzaTreno": epoch_ms(datetime(2026, 5, 23, 0, 10, tzinfo=APP_TZ))}
+
+        self.assertTrue(is_service_date_within_lookback(previous_evening, "2026-05-22", lookback_days=1))
+        self.assertTrue(is_service_date_within_lookback(current_day, "2026-05-22", lookback_days=1))
+        self.assertFalse(is_service_date_within_lookback(next_day, "2026-05-22", lookback_days=1))
+        self.assertFalse(is_service_date_within_lookback(previous_evening, "2026-05-22", lookback_days=0))
 
     def test_train_key_uses_service_date(self):
         departure = epoch_ms(datetime(2026, 5, 21, 8, 0, tzinfo=APP_TZ))

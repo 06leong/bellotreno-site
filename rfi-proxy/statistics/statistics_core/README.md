@@ -6,7 +6,7 @@ The production entrypoint is still `app.py`; this package exists so high-risk he
 
 Good candidates:
 
-- service-date parsing and filtering
+- service-date parsing and reporting-date lookback filtering
 - category normalization
 - train-key construction
 - small row normalizers
