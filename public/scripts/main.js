@@ -12,11 +12,34 @@ let currentSmartCaringData = null;
 let currentTrainCategory = '';
 let currentSwissFormationData = null;
 let swissRequestSeq = 0;
+let currentTrenordLineInfo = null;
 
 
 const API_BASE = window.API_BASE;
 const NOTIFY_BASE = window.NOTIFY_BASE;
 const TRENORD_TRAFFIC_BASE = window.TRENORD_TRAFFIC_BASE || "/api/trenord/traffic";
+const TRENORD_LINE_COLORS = Object.freeze({
+    RE: "#c02e25",
+    RE80: "#205099",
+    MXP: "#c02826",
+    R: "#2a60a7",
+    S1: "#ea3932",
+    S2: "#43957b",
+    S3: "#991e3d",
+    S4: "#8eb943",
+    S5: "#ee843c",
+    S6: "#ead448",
+    S7: "#bc2890",
+    S8: "#f1a2c7",
+    S9: "#973b86",
+    S10: "#c02e25",
+    S11: "#939df8",
+    S12: "#000000",
+    S13: "#603d12",
+    S30: "#49a258",
+    S40: "#85bb7d",
+    S50: "#754917"
+});
 
 function clearNode(node) {
     if (node) node.replaceChildren();
@@ -108,6 +131,7 @@ function switchSearchMode(mode) {
     if (results) results.style.display = 'none';
     if (disambiguation) disambiguation.style.display = 'none';
     currentSmartCaringData = null;
+    currentTrenordLineInfo = null;
     currentSwissFormationData = null;
     swissRequestSeq++;
     const scCard = document.getElementById('smartCaringCard');
@@ -668,6 +692,7 @@ function showStationDisambiguation(stations) {
 async function fetchDetails(triple) {
     currentTriple = triple;
     currentSmartCaringData = null;
+    currentTrenordLineInfo = null;
     currentSwissFormationData = null;
     const requestSeq = ++swissRequestSeq;
     const scCard = document.getElementById('smartCaringCard');
@@ -910,11 +935,15 @@ function render(data) {
         ? createNode('span', { className: `train-badge ${badgeClass}`, text: data.compNumeroTreno })
         : createNode('b', { text: data.compNumeroTreno });
 
+    const trainNumberChildren = [
+        `${translations[currentLang].train_num}: `,
+        trainNumBadge
+    ];
+    const trenordLineBadge = createTrenordLineBadge(getCurrentTrenordLineForTrain(data));
+    if (trenordLineBadge) trainNumberChildren.push(trenordLineBadge);
+
     const trainMeta = createNode('div', { className: 'train-meta flex items-center gap-3 flex-wrap' }, [
-        createNode('span', { className: 'flex items-center gap-2 text-sm uppercase tracking-wider font-semibold opacity-80' }, [
-            `${translations[currentLang].train_num}: `,
-            trainNumBadge
-        ]),
+        createNode('span', { className: 'train-number-meta flex items-center gap-2 text-sm uppercase tracking-wider font-semibold opacity-80' }, trainNumberChildren),
         createNode('span', { className: 'opacity-30', text: '|' }),
         createNode('span', { className: 'flex items-center gap-1' }, [
             createIcon('schedule', 'material-symbols-outlined text-[16px] opacity-60'),
@@ -1143,6 +1172,90 @@ function isTrenordTrain(data) {
     return String(operator || '').toUpperCase() === 'TRENORD';
 }
 
+function getCurrentTrainNumber(data) {
+    return String(data?.numeroTreno || '').replace(/\D+/g, '');
+}
+
+function normalizeTrenordLineCode(line) {
+    return String(line || '').trim().toUpperCase().replace(/\s+/g, '').replace(/-/g, '_');
+}
+
+function resolveTrenordLineBadgeSpec(line) {
+    const rawCode = normalizeTrenordLineCode(line);
+    if (!rawCode) return null;
+
+    const compactCode = rawCode.replace(/_/g, '');
+    let color = TRENORD_LINE_COLORS[compactCode];
+
+    if (/^RE0*80$/.test(compactCode)) {
+        color = TRENORD_LINE_COLORS.RE80;
+    } else if (!color && compactCode.startsWith('MXP')) {
+        color = TRENORD_LINE_COLORS.MXP;
+    } else if (!color && compactCode.startsWith('RE')) {
+        color = TRENORD_LINE_COLORS.RE;
+    } else if (!color && /^R\d*$/.test(compactCode)) {
+        color = TRENORD_LINE_COLORS.R;
+    }
+
+    if (!color) color = '#69737f';
+    return {
+        label: compactCode,
+        color,
+        textColor: getReadableBadgeTextColor(color)
+    };
+}
+
+function getReadableBadgeTextColor(hexColor) {
+    const hex = String(hexColor || '').replace('#', '');
+    if (!/^[\da-f]{6}$/i.test(hex)) return '#ffffff';
+    const red = parseInt(hex.slice(0, 2), 16);
+    const green = parseInt(hex.slice(2, 4), 16);
+    const blue = parseInt(hex.slice(4, 6), 16);
+    const luminance = (0.299 * red) + (0.587 * green) + (0.114 * blue);
+    return luminance > 150 ? '#111827' : '#ffffff';
+}
+
+function createTrenordLineBadge(line) {
+    const spec = resolveTrenordLineBadgeSpec(line);
+    if (!spec) return null;
+    return createNode('span', {
+        className: 'trenord-line-badge',
+        text: spec.label,
+        title: `Trenord line ${spec.label}`,
+        style: {
+            backgroundColor: spec.color,
+            color: spec.textColor
+        },
+        attrs: { 'aria-label': `Trenord line ${spec.label}` }
+    });
+}
+
+function getCurrentTrenordLineForTrain(data) {
+    if (!isTrenordTrain(data)) return null;
+    const trainNumber = getCurrentTrainNumber(data);
+    if (!trainNumber || currentTrenordLineInfo?.trainNumber !== trainNumber) return null;
+    if (currentTrenordLineInfo?.date !== getTrainOperationDate(data)) return null;
+    return currentTrenordLineInfo.line || null;
+}
+
+function rememberTrenordLine(trainNumber, date, line) {
+    const lineCode = normalizeTrenordLineCode(line);
+    if (!trainNumber || !lineCode) return;
+    currentTrenordLineInfo = { trainNumber, date, line: lineCode };
+    upsertTrenordLineBadge(lineCode);
+}
+
+function upsertTrenordLineBadge(line) {
+    const meta = document.querySelector('.train-number-meta');
+    if (!meta) return;
+
+    meta.querySelector('.trenord-line-badge')?.remove();
+    if (!currentTrainData || !isTrenordTrain(currentTrainData)) return;
+
+    const badge = createTrenordLineBadge(line);
+    if (badge) meta.append(badge);
+}
+
 function todayInRome() {
     return new Intl.DateTimeFormat('sv-SE', {
         timeZone: 'Europe/Rome',
@@ -1175,7 +1288,7 @@ function fetchTrafficInformation(data) {
 
 async function fetchTrenordTrafficInformation(trainData) {
     const card = document.getElementById('smartCaringCard');
-    const trainNumber = String(trainData?.numeroTreno || '').replace(/\D+/g, '');
+    const trainNumber = getCurrentTrainNumber(trainData);
     const date = getTrainOperationDate(trainData);
     if (!card || !TRENORD_TRAFFIC_BASE || !trainNumber || !date) return;
 
@@ -1191,7 +1304,16 @@ async function fetchTrenordTrafficInformation(trainData) {
         const requestUrl = `${TRENORD_TRAFFIC_BASE}?train=${encodeURIComponent(trainNumber)}&date=${encodeURIComponent(date)}`;
         const res = await fetch(requestUrl, { headers: { accept: 'application/json' } });
         const data = await res.json();
-        if (!res.ok || data?.available === false) throw new Error(data?.reason || 'trenord_traffic_unavailable');
+
+        if (getCurrentTrainNumber(currentTrainData) !== trainNumber) return;
+        if (data?.line) rememberTrenordLine(trainNumber, date, data.line);
+
+        if (!res.ok) throw new Error(data?.reason || 'trenord_traffic_unavailable');
+        if (data?.available === false) {
+            card.style.display = 'none';
+            currentSmartCaringData = null;
+            return;
+        }
 
         if (!data.direttriceDescription && !(data.notices || []).length) {
             card.style.display = 'none';

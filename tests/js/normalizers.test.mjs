@@ -376,9 +376,10 @@ test("Trenord traffic information preserves matched line with empty notices", ()
 
 test("Trenord traffic information reports why no direttrice matched", () => {
   const noDirettrice = normalizeTrenordTrafficInformation("2237", "2026-05-25", {
-    journey_list: [{ train: { train_id: "2237" } }],
+    journey_list: [{ train: { train_id: "2237", line: "RE_6" } }],
   }, []);
   assert.equal(noDirettrice.available, false);
+  assert.equal(noDirettrice.line, "RE_6");
   assert.equal(noDirettrice.matchSource, "none");
   assert.equal(noDirettrice.reason, "no_direttrice_in_train_payload");
 
