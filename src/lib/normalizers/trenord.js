@@ -85,17 +85,30 @@ function asRecord(value) {
 }
 
 /**
+ * @param {Record<string, unknown>} train
+ * @returns {boolean}
+ */
+function hasDirettrice(train) {
+  return Boolean(asString(train.direttrice) || asString(train.direttrice_security));
+}
+
+/**
  * @param {unknown} payload
  * @returns {Record<string, unknown>}
  */
 export function getTrenordTrainRecord(payload) {
   const root = asRecord(payload);
+  const candidates = [];
+  const rootTrain = asRecord(root.train);
+  if (Object.keys(rootTrain).length) candidates.push(rootTrain);
+
   const journeyList = Array.isArray(root.journey_list) ? root.journey_list : [];
   for (const journey of journeyList) {
     const train = asRecord(asRecord(journey).train);
-    if (Object.keys(train).length) return train;
+    if (Object.keys(train).length) candidates.push(train);
   }
-  return asRecord(root.train);
+
+  return candidates.find(hasDirettrice) || candidates[0] || {};
 }
 
 /**
@@ -198,7 +211,7 @@ export function normalizeTrenordNotices(trainNumber, date, direttrice) {
   const direttriceDescription = asString(direttrice?.descrizione);
   if (!direttriceCode || !direttriceDescription || !Array.isArray(direttrice?.news)) return [];
 
-  return direttrice.news
+  const notices = direttrice.news
     .map((notice) => {
       const description = asString(notice?.description);
       if (!description) return null;
@@ -226,6 +239,8 @@ export function normalizeTrenordNotices(trainNumber, date, direttrice) {
       const safeRight = Number.isFinite(rightTime) ? rightTime : 0;
       return safeRight - safeLeft;
     });
+
+  return filterTrenordNoticesForDisplay(notices, date);
 }
 
 /**
@@ -239,12 +254,13 @@ export function normalizeTrenordTrafficInformation(trainNumber, date, trainPaylo
   const info = getTrenordTrainInfo(trainPayload);
   const primary = findTrenordDirettrice(direttrici, info.direttrice);
   const primaryNotices = normalizeTrenordNotices(trainNumber, date, primary);
+  const primaryHasNews = hasTrenordDirettriceNews(primary);
 
   if (primary && primaryNotices.length > 0) {
     return buildResult(trainNumber, date, info, primary, "primary-direttrice", primaryNotices);
   }
 
-  const security = info.direttriceSecurity !== info.direttrice
+  const security = (!primary || !primaryHasNews) && info.direttriceSecurity !== info.direttrice
     ? findTrenordDirettrice(direttrici, info.direttriceSecurity)
     : null;
   const securityNotices = normalizeTrenordNotices(trainNumber, date, security);
@@ -265,6 +281,56 @@ export function normalizeTrenordTrafficInformation(trainNumber, date, trainPaylo
     ? "direttrice_not_found"
     : "no_direttrice_in_train_payload";
   return buildResult(trainNumber, date, info, null, "none", [], reason);
+}
+
+/**
+ * @param {TrenordDirettrice|null} direttrice
+ * @returns {boolean}
+ */
+function hasTrenordDirettriceNews(direttrice) {
+  return Array.isArray(direttrice?.news)
+    && direttrice.news.some((notice) => Boolean(asString(notice?.description)));
+}
+
+/**
+ * @param {unknown} value
+ * @returns {string|null}
+ */
+function toRomeDateKey(value) {
+  if (!value) return null;
+  const timestamp = Date.parse(String(value));
+  if (!Number.isFinite(timestamp)) return null;
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Europe/Rome",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(timestamp));
+}
+
+/**
+ * SmartCaring-like compact display rule:
+ * show today's notices when present, otherwise show recent notices in the
+ * 14-day window ending on the requested operation date.
+ *
+ * @param {TrenordNotice[]} notices
+ * @param {string} operationDate
+ * @returns {TrenordNotice[]}
+ */
+export function filterTrenordNoticesForDisplay(notices, operationDate) {
+  if (!Array.isArray(notices) || !/^\d{4}-\d{2}-\d{2}$/.test(operationDate)) return [];
+
+  const today = notices.filter((notice) => toRomeDateKey(notice.date) === operationDate);
+  if (today.length) return today;
+
+  const operationEnd = Date.parse(`${operationDate}T23:59:59+01:00`);
+  if (!Number.isFinite(operationEnd)) return [];
+  const cutoff = operationEnd - 13 * 86400000;
+
+  return notices.filter((notice) => {
+    const timestamp = Date.parse(notice.date || "");
+    return Number.isFinite(timestamp) && timestamp >= cutoff && timestamp <= operationEnd;
+  });
 }
 
 /**

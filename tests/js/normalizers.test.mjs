@@ -21,6 +21,7 @@ import {
 } from "../../src/lib/normalizers/swiss.js";
 import {
   extractTrenordNoticeUrls,
+  filterTrenordNoticesForDisplay,
   normalizeTrenordTrafficInformation,
 } from "../../src/lib/normalizers/trenord.js";
 
@@ -208,6 +209,62 @@ test("Trenord traffic information resolves RE primary direttrice", () => {
   assert.equal(result.direttriceDescription, "VERONA-BRESCIA-TREVIGLIO-MILANO");
   assert.equal(result.notices[0].severityLevel, "warning");
   assert.deepEqual(result.notices[0].urls, ["https://www.trenord.it/example.pdf"]);
+});
+
+test("Trenord traffic information prefers train record with direttrice", () => {
+  const result = normalizeTrenordTrafficInformation("2237", "2026-05-25", {
+    journey_list: [
+      { train: { train_id: "2237", train_category: "RE" } },
+      { train: { train_id: "2237", train_category: "RE", direttrice: "D014" } },
+    ],
+  }, [
+    {
+      nome: "D014",
+      descrizione: "VERONA-BRESCIA-TREVIGLIO-MILANO",
+      news: [{
+        description: "RE line notice",
+        date: "2026-05-23T12:00:00.000Z",
+        severity_description: "info",
+      }],
+    },
+  ]);
+
+  assert.equal(result.available, true);
+  assert.equal(result.direttrice, "D014");
+  assert.equal(result.direttriceDescription, "VERONA-BRESCIA-TREVIGLIO-MILANO");
+});
+
+test("Trenord notice display keeps today first or recent 14-day notices", () => {
+  const notices = [
+    { id: "old", source: "trenord-direttrici", direttriceCode: "D014", direttriceDescription: "Line", description: "old", date: "2026-04-10T12:00:00.000Z", severityLevel: "info", urls: [] },
+    { id: "recent", source: "trenord-direttrici", direttriceCode: "D014", direttriceDescription: "Line", description: "recent", date: "2026-05-23T12:00:00.000Z", severityLevel: "info", urls: [] },
+    { id: "today", source: "trenord-direttrici", direttriceCode: "D014", direttriceDescription: "Line", description: "today", date: "2026-05-25T12:00:00.000Z", severityLevel: "info", urls: [] },
+  ];
+
+  assert.deepEqual(filterTrenordNoticesForDisplay(notices, "2026-05-25").map((notice) => notice.id), ["today"]);
+  assert.deepEqual(filterTrenordNoticesForDisplay(notices.slice(0, 2), "2026-05-25").map((notice) => notice.id), ["recent"]);
+});
+
+test("Trenord primary with only old notices does not fall back to security line", () => {
+  const result = normalizeTrenordTrafficInformation("2237", "2026-05-25", {
+    journey_list: [{ train: { train_id: "2237", direttrice: "D014", direttrice_security: "D002" } }],
+  }, [
+    {
+      nome: "D014",
+      descrizione: "VERONA-BRESCIA-TREVIGLIO-MILANO",
+      news: [{ description: "Old primary", date: "2026-04-01T12:00:00.000Z", severity_description: "info" }],
+    },
+    {
+      nome: "D002",
+      descrizione: "MILANO-NOVARA",
+      news: [{ description: "Recent security", date: "2026-05-23T12:00:00.000Z", severity_description: "warning" }],
+    },
+  ]);
+
+  assert.equal(result.available, true);
+  assert.equal(result.matchSource, "primary-direttrice");
+  assert.equal(result.direttrice, "D014");
+  assert.equal(result.notices.length, 0);
 });
 
 test("Trenord traffic information uses security direttrice only as fallback", () => {
