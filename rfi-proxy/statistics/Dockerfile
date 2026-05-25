@@ -10,4 +10,4 @@ COPY statistics_core ./statistics_core
 
 EXPOSE 8081
 
-CMD ["gunicorn", "-w", "1", "--threads", "4", "-b", "0.0.0.0:8081", "app:app"]
+CMD ["sh", "-c", "exec gunicorn -w 1 --threads ${STATISTICS_GUNICORN_THREADS:-4} --timeout ${STATISTICS_GUNICORN_TIMEOUT_SECONDS:-3600} -b 0.0.0.0:8081 app:app"]

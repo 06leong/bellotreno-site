@@ -77,3 +77,15 @@ def train_key_from_parts(
 
 def is_same_service_date(item: dict | None, date_text: str) -> bool:
     return service_date_from_item(item, date_text) == date_text
+
+
+def is_service_date_within_lookback(item: dict | None, date_text: str, lookback_days: int = 0) -> bool:
+    service_date = service_date_from_item(item, date_text)
+    try:
+        service_day = datetime.fromisoformat(service_date).date()
+        collection_day = datetime.fromisoformat(date_text).date()
+    except ValueError:
+        return service_date == date_text
+    if service_day > collection_day:
+        return False
+    return collection_day - service_day <= timedelta(days=max(0, lookback_days))

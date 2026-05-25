@@ -20,6 +20,7 @@ from statistics_core.normalizers import (
     midnight_epoch_ms as core_midnight_epoch_ms,
     normalize_category as core_normalize_category,
     pick as core_pick,
+    is_service_date_within_lookback as core_is_service_date_within_lookback,
     service_date_from_item as core_service_date_from_item,
     train_key_from_parts as core_train_key_from_parts,
 )
@@ -46,12 +47,13 @@ COLLECTOR_ENABLED = os.getenv("COLLECTOR_ENABLED", "true").lower() == "true"
 COLLECTOR_INTERVAL_MINUTES = env_int("COLLECTOR_INTERVAL_MINUTES", 30)
 COLLECTOR_MAX_RUNTIME_SECONDS = env_int("COLLECTOR_MAX_RUNTIME_SECONDS", 2400)
 COLLECTOR_CONCURRENCY = env_int("COLLECTOR_CONCURRENCY", 4)
-COLLECTOR_BOARD_CONCURRENCY = env_int("COLLECTOR_BOARD_CONCURRENCY", 10)
-COLLECTOR_DETAIL_CONCURRENCY = env_int("COLLECTOR_DETAIL_CONCURRENCY", 8)
+COLLECTOR_BOARD_CONCURRENCY = env_int("COLLECTOR_BOARD_CONCURRENCY", 24)
+COLLECTOR_DETAIL_CONCURRENCY = env_int("COLLECTOR_DETAIL_CONCURRENCY", 12)
 COLLECTOR_REGION_CONCURRENCY = env_int("COLLECTOR_REGION_CONCURRENCY", 6)
 COLLECTOR_SCHEDULE_OFFSET_MINUTES = min(59, max(0, env_int("COLLECTOR_SCHEDULE_OFFSET_MINUTES", 5, minimum=0)))
 COLLECTOR_CATCHUP_GRACE_MINUTES = env_int("COLLECTOR_CATCHUP_GRACE_MINUTES", 20, minimum=0)
 COLLECTOR_FINALIZE_TIME = os.getenv("COLLECTOR_FINALIZE_TIME", "23:55")
+COLLECTOR_SERVICE_DATE_LOOKBACK_DAYS = env_int("COLLECTOR_SERVICE_DATE_LOOKBACK_DAYS", 1, minimum=0)
 DETAIL_LIMIT_PER_RUN = env_int("DETAIL_LIMIT_PER_RUN", 0, minimum=0)
 RETENTION_DAYS = env_int("RETENTION_DAYS", 30)
 STATION_REGISTRY_REFRESH_DAYS = env_int("STATION_REGISTRY_REFRESH_DAYS", 7)
@@ -154,6 +156,7 @@ def init_db() -> None:
 
             CREATE TABLE IF NOT EXISTS trains (
                 date TEXT NOT NULL,
+                service_date TEXT,
                 train_key TEXT NOT NULL,
                 train_number TEXT,
                 departure_epoch_ms TEXT,
@@ -254,6 +257,7 @@ def init_db() -> None:
         ensure_column(conn, "snapshots", "finished_at", "TEXT")
         ensure_column(conn, "snapshots", "duration_seconds", "REAL DEFAULT 0")
         ensure_column(conn, "snapshots", "status", "TEXT DEFAULT 'success'")
+        ensure_column(conn, "trains", "service_date", "TEXT")
         ensure_column(conn, "trains", "not_departed", "INTEGER DEFAULT 0")
 
 
@@ -546,6 +550,14 @@ def service_date_from_item(item: dict[str, Any], fallback_date: str) -> str:
     return core_service_date_from_item(item, fallback_date)
 
 
+def is_collectable_service_date(item: dict[str, Any], collection_date: str) -> bool:
+    return core_is_service_date_within_lookback(
+        item,
+        collection_date,
+        lookback_days=COLLECTOR_SERVICE_DATE_LOOKBACK_DAYS,
+    )
+
+
 def status_from_item(item: dict[str, Any]) -> str:
     provvedimento = as_int(pick(item, "provvedimento", "codProvvedimento", default=0))
     tipo_treno = str(pick(item, "tipoTreno", default="")).upper()
@@ -744,8 +756,15 @@ def board_candidate(item: dict[str, Any], fallback_date: str) -> dict[str, str] 
     }
 
 
-def normalize_train(item: dict[str, Any], seen_at: str, has_details: bool = False, fallback_date: str | None = None) -> dict[str, Any]:
+def normalize_train(
+    item: dict[str, Any],
+    seen_at: str,
+    has_details: bool = False,
+    fallback_date: str | None = None,
+    stats_date: str | None = None,
+) -> dict[str, Any]:
     service_date = service_date_from_item(item, fallback_date or today_rome())
+    record_date = stats_date or service_date
     stops = item.get("fermate") if isinstance(item.get("fermate"), list) else []
     first_stop = stops[0] if stops else {}
     last_stop = stops[-1] if stops else {}
@@ -775,7 +794,8 @@ def normalize_train(item: dict[str, Any], seen_at: str, has_details: bool = Fals
         pick(item, "compOrarioArrivo", "orarioArrivo", default="")
     ).strip()
     return {
-        "date": service_date,
+        "date": record_date,
+        "service_date": service_date,
         "train_key": train_key_from_parts(number, origin_code, departure_epoch, fallback_date=service_date),
         "train_number": number,
         "departure_epoch_ms": departure_epoch,
@@ -807,17 +827,18 @@ def upsert_train(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
     conn.execute(
         """
         INSERT INTO trains (
-            date, train_key, train_number, departure_epoch_ms, category, operator, status, origin, destination,
+            date, service_date, train_key, train_number, departure_epoch_ms, category, operator, status, origin, destination,
             origin_code, destination_code, relation_key, departure_delay, arrival_delay, delay,
             cancelled, rescheduled, not_departed, scheduled_departure, scheduled_arrival, last_seen, detail_last_seen,
             has_details, completed, raw_json
         ) VALUES (
-            :date, :train_key, :train_number, :departure_epoch_ms, :category, :operator, :status, :origin, :destination,
+            :date, :service_date, :train_key, :train_number, :departure_epoch_ms, :category, :operator, :status, :origin, :destination,
             :origin_code, :destination_code, :relation_key, :departure_delay, :arrival_delay, :delay,
             :cancelled, :rescheduled, :not_departed, :scheduled_departure, :scheduled_arrival, :last_seen, :detail_last_seen,
             :has_details, :completed, :raw_json
         )
         ON CONFLICT(date, train_key) DO UPDATE SET
+            service_date=COALESCE(excluded.service_date, trains.service_date),
             train_number=COALESCE(NULLIF(excluded.train_number, ''), trains.train_number),
             departure_epoch_ms=COALESCE(NULLIF(excluded.departure_epoch_ms, ''), trains.departure_epoch_ms),
             category=COALESCE(NULLIF(excluded.category, ''), trains.category),
@@ -925,17 +946,14 @@ def update_station_board_stats(conn: sqlite3.Connection, date: str, station_code
     )
 
 
-def fetch_board_for_station(station: dict[str, Any], board_time: datetime) -> dict[str, Any]:
-    result = {"station": station, "boards": {}, "rows": []}
-    for board_type in BOARD_TYPES:
-        try:
-            rows = fetch_board(station["station_code"], board_type, board_time)
-        except Exception as exc:
-            app.logger.warning("board fetch failed %s %s: %s", station["station_code"], board_type, exc)
-            rows = []
-        result["boards"][board_type] = rows
-        result["rows"].extend(rows)
-    return result
+def fetch_board_task(task: tuple[dict[str, Any], str, datetime]) -> dict[str, Any]:
+    station, board_type, board_time = task
+    try:
+        rows = fetch_board(station["station_code"], board_type, board_time)
+    except Exception as exc:
+        app.logger.warning("board fetch failed %s %s: %s", station["station_code"], board_type, exc)
+        rows = []
+    return {"station": station, "board_type": board_type, "rows": rows}
 
 
 def fetch_detail(candidate: dict[str, str]) -> dict[str, Any] | None:
@@ -1113,41 +1131,40 @@ def collect_once(slot_at: datetime | None = None, trigger: str = "manual") -> di
         stations, station_registry_refreshed = stations_for_collection()
         board_rows_count = 0
         detail_candidates_by_key: dict[str, dict[str, str]] = {}
-
-        def board_worker(station: dict[str, Any]) -> dict[str, Any]:
-            return fetch_board_for_station(station, slot)
+        board_tasks = [(station, board_type, slot) for station in stations for board_type in BOARD_TYPES]
 
         with db() as conn:
-            processed_stations = 0
-            for future in bounded_futures(stations, board_worker, COLLECTOR_BOARD_CONCURRENCY):
+            processed_boards = 0
+            for future in bounded_futures(board_tasks, fetch_board_task, COLLECTOR_BOARD_CONCURRENCY):
                 if time.monotonic() - started > COLLECTOR_MAX_RUNTIME_SECONDS:
                     break
                 result = future.result()
                 station = result["station"]
-                for board_type, rows in result["boards"].items():
-                    same_day_rows = [
-                        item
-                        for item in rows
-                        if isinstance(item, dict) and service_date_from_item(item, date) == date
-                    ]
-                    board_rows_count += len(same_day_rows)
-                    update_station_board_stats(
-                        conn,
-                        date,
-                        station["station_code"],
-                        station["station_name"],
-                        board_type,
-                        same_day_rows,
-                        seen_at,
-                    )
-                    for item in same_day_rows:
-                        row = normalize_train(item, seen_at, has_details=False, fallback_date=date)
-                        upsert_train(conn, row)
-                        candidate = board_candidate(item, date)
-                        if candidate:
-                            detail_candidates_by_key[candidate["train_key"]] = candidate
-                processed_stations += 1
-                if processed_stations % 250 == 0:
+                board_type = result["board_type"]
+                rows = result["rows"]
+                collectable_rows = [
+                    item
+                    for item in rows
+                    if isinstance(item, dict) and is_collectable_service_date(item, date)
+                ]
+                board_rows_count += len(collectable_rows)
+                update_station_board_stats(
+                    conn,
+                    date,
+                    station["station_code"],
+                    station["station_name"],
+                    board_type,
+                    collectable_rows,
+                    seen_at,
+                )
+                for item in collectable_rows:
+                    row = normalize_train(item, seen_at, has_details=False, fallback_date=date, stats_date=date)
+                    upsert_train(conn, row)
+                    candidate = board_candidate(item, date)
+                    if candidate:
+                        detail_candidates_by_key[candidate["train_key"]] = candidate
+                processed_boards += 1
+                if processed_boards % 500 == 0:
                     conn.commit()
 
         queue = detail_queue(date, detail_candidates_by_key)
@@ -1157,14 +1174,12 @@ def collect_once(slot_at: datetime | None = None, trigger: str = "manual") -> di
                 if time.monotonic() - started > COLLECTOR_MAX_RUNTIME_SECONDS:
                     break
                 detail = future.result()
-                if detail and service_date_from_item(detail, date) == date:
+                if detail and is_collectable_service_date(detail, date):
                     detail_rows.append(detail)
 
         with db() as conn:
             for detail in detail_rows:
-                row = normalize_train(detail, seen_at, has_details=True, fallback_date=date)
-                if row["date"] != date:
-                    continue
+                row = normalize_train(detail, seen_at, has_details=True, fallback_date=date, stats_date=date)
                 upsert_train(conn, row)
                 replace_train_stops(conn, detail, row)
             rebuild_daily_aggregates(conn, date)
@@ -1390,6 +1405,7 @@ def health() -> Response:
         "boardConcurrency": COLLECTOR_BOARD_CONCURRENCY,
         "detailConcurrency": COLLECTOR_DETAIL_CONCURRENCY,
         "regionConcurrency": COLLECTOR_REGION_CONCURRENCY,
+        "serviceDateLookbackDays": COLLECTOR_SERVICE_DATE_LOOKBACK_DAYS,
         "nextScheduledAt": to_utc_iso(next_scheduled_slot()),
         "lastCollectorRun": collector_run_row(),
     })
@@ -1482,7 +1498,7 @@ def trains_endpoint() -> Response:
         params.append(status)
     sql = f"""
         SELECT train_key, train_number AS trainNumber, category, operator, status,
-               origin, destination, relation_key AS route, delay, departure_delay AS departureDelay,
+               service_date AS serviceDate, origin, destination, relation_key AS route, delay, departure_delay AS departureDelay,
                arrival_delay AS arrivalDelay, not_departed AS notDeparted,
                has_details AS hasDetails, completed, last_seen AS lastSeen
         FROM trains
@@ -1589,7 +1605,7 @@ def ranking_endpoint() -> Response:
         rows = conn.execute(
             f"""
             SELECT train_key, train_number AS trainNumber, category, origin, destination,
-                   relation_key AS route, status, {column} AS delay
+                   relation_key AS route, service_date AS serviceDate, status, {column} AS delay
             FROM trains
             WHERE date=?
             ORDER BY {column} DESC

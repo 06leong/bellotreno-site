@@ -100,6 +100,8 @@ These Workers are **not in this repo**. Direct calls to `viaggiatreno.it` fail i
 - The VPS statistics service lives in `rfi-proxy/statistics/` but deploys as a separate Docker service in the same compose project. It stores SQLite data in the mounted `statistics-data` volume.
 - `/statistiche/0` from ViaggiaTreno is only a global counter. Category, route, station, delay, cancellation, and relation statistics come from station registry + station boards + `andamentoTreno` sampling.
 - The collector uses fixed Europe/Rome slots (`HH:05`, `HH:35`, plus `23:55` by default). Keep every board request in one run pinned to that slot time; do not change it back to "collect, then sleep interval" scheduling.
+- Statistics rows use the scheduled slot date as the reporting date and preserve the original train departure date as `service_date`; keep previous-service-date trains when they are still visible on the current day's boards, but do not count next-service-date trains into the previous day.
+- `STATISTICS_BOARD_TYPES=partenze,arrivi` means both board types are fetched. Each station board type is a separate concurrent task, so do not reintroduce station-internal sequential board fetching.
 - Keep UI labels concrete. Avoid showing ratios such as "coverage" unless the numerator and denominator are clear to users.
 
 ### Cache and deployment
