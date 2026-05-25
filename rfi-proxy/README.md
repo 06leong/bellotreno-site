@@ -23,9 +23,6 @@ RFI_PROXY_SECURITY_TOKEN=replace-with-rotated-rfi-proxy-token
 STATISTICS_SECURITY_TOKEN=replace-with-new-statistics-token
 
 # Optional proxy tuning
-RFI_PROXY_WORKERS=2
-RFI_PROXY_THREADS=16
-RFI_PROXY_TIMEOUT_SECONDS=45
 RFI_PROXY_LOG_REQUESTS=false
 
 # Optional collector tuning
@@ -33,8 +30,8 @@ STATISTICS_COLLECTOR_ENABLED=true
 STATISTICS_COLLECTOR_INTERVAL_MINUTES=30
 STATISTICS_COLLECTOR_MAX_RUNTIME_SECONDS=2400
 STATISTICS_COLLECTOR_CONCURRENCY=4
-STATISTICS_BOARD_CONCURRENCY=24
-STATISTICS_DETAIL_CONCURRENCY=12
+STATISTICS_BOARD_CONCURRENCY=8
+STATISTICS_DETAIL_CONCURRENCY=4
 STATISTICS_REGION_CONCURRENCY=6
 STATISTICS_GUNICORN_THREADS=4
 STATISTICS_GUNICORN_TIMEOUT_SECONDS=3600
@@ -51,7 +48,7 @@ STATISTICS_CATCHUP_GRACE_MINUTES=20
 ```
 
 Do not commit `.env`. Use `.env.example` as the template.
-The Dockerfiles read the Gunicorn tuning variables at container start, while the collector reads the `STATISTICS_*` values inside the Flask app. Changing these values on the VPS only requires `docker compose up -d` after the updated image has been pulled.
+The statistics collector reads the `STATISTICS_*` values inside the Flask app. Changing these values on the VPS only requires `docker compose up -d` after the updated image has been pulled.
 
 ## Statistics collection model
 
@@ -66,7 +63,7 @@ The statistics service follows the same broad model as `railway-opendata`:
 - every station board in one run uses the same scheduled slot time, so a single snapshot is internally consistent even if the collection takes several minutes.
 - every collected train is stored under the scheduled slot date, with its original departure date preserved as `service_date`; by default, trains from the previous service date are included when they are still observable on the current day's station boards, while next-day service-date trains are still excluded from the previous day.
 - each configured station board type is fetched as its own concurrent task. With `STATISTICS_BOARD_TYPES=partenze,arrivi`, each station still fetches both departures and arrivals, but those two requests no longer wait on each other inside one station worker.
-- board, train-detail, and station-registry lookups have separate concurrency controls. The current default is `24` board requests, `12` detail workers, and `6` region workers under a `680m` memory limit.
+- board, train-detail, and station-registry lookups have separate concurrency controls. The current default is `8` board requests, `4` detail workers, and `6` region workers under a `680m` memory limit.
 - if the service is down or a previous run is still active, the collector records `missed`/`skipped` slots in `collector_runs` instead of starting overlapping work.
 
 Optional full station CSV support is available through `STATISTICS_STATION_CSV_PATH`. If the file exists in the data volume, rows are merged with live ViaggiaTreno stations. The built-in default does not require a CSV.
