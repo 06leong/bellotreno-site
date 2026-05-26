@@ -18,6 +18,13 @@ let currentTrenordLineInfo = null;
 const API_BASE = window.API_BASE;
 const NOTIFY_BASE = window.NOTIFY_BASE;
 const TRENORD_TRAFFIC_BASE = window.TRENORD_TRAFFIC_BASE || "/api/trenord/traffic";
+const DARK_MODE_CONTRAST_LOGOS = new Set([
+    'regn.png',
+    'rj.png',
+    'nj.png',
+    'en.png',
+    'espresso.png'
+]);
 const TRENORD_LINE_COLORS = Object.freeze({
     RE: "#c02e25",
     RE80: "#205099",
@@ -84,6 +91,13 @@ function createIcon(name, className = 'material-symbols-outlined', options = {})
         style: options.style,
         attrs: options.attrs
     });
+}
+
+function getCategoryLogoClass(src) {
+    const fileName = String(src || '').split('/').pop()?.toLowerCase() || '';
+    return DARK_MODE_CONTRAST_LOGOS.has(fileName)
+        ? 'category-logo category-logo-needs-contrast'
+        : 'category-logo';
 }
 
 async function fetchStatistiche() {
@@ -277,6 +291,27 @@ function resolveTimeStatus(delayMin, primaryMs, schedMs) {
     return '';
 }
 
+function getTimeLabelParts(kind) {
+    if (kind === 'arrival') {
+        return {
+            full: translations[currentLang].arrival,
+            short: translations[currentLang].arrival_short || translations[currentLang].arrival
+        };
+    }
+    return {
+        full: translations[currentLang].departure,
+        short: translations[currentLang].departure_short || translations[currentLang].departure
+    };
+}
+
+function createTimeLabelNode(kind) {
+    const label = getTimeLabelParts(kind);
+    return createNode('span', { className: 'time-label' }, [
+        createNode('span', { className: 'time-label-full', text: label.full }),
+        createNode('span', { className: 'time-label-short', text: label.short })
+    ]);
+}
+
 function renderTimeHtml(kind, schedMs, realMs, delayMin) {
     const sched = formatT(schedMs);
     const hasReal = hasTimestamp(realMs);
@@ -286,9 +321,7 @@ function renderTimeHtml(kind, schedMs, realMs, delayMin) {
     const primary = formatT(primaryMs) || '--:--';
     const status = resolveTimeStatus(delayMin, primaryMs, schedMs);
     const statusText = formatTimeStatusText(status, delayMin);
-    const label = kind === 'arrival'
-        ? (translations[currentLang].arrival_short || translations[currentLang].arrival)
-        : (translations[currentLang].departure_short || translations[currentLang].departure);
+    const label = getTimeLabelParts(kind);
     const scheduledLabel = translations[currentLang].scheduled_short || translations[currentLang].scheduled;
     const scheduledLine = sched
         ? `<span class="time-scheduled-row"><span class="time-scheduled-label">${scheduledLabel}</span><span class="time-scheduled-value tabular-nums">${sched}</span></span>`
@@ -296,7 +329,7 @@ function renderTimeHtml(kind, schedMs, realMs, delayMin) {
     const statusLine = statusText
         ? `<span class="time-status-badge time-status-${status}">${statusText}</span>`
         : '';
-    return `<div class="time-item time-item-${kind}"><span class="time-label">${label}</span><span class="time-stack"><span class="time-primary-row"><span class="time-primary-value tabular-nums ${status}">${primary}</span>${statusLine}</span>${scheduledLine}</span></div>`;
+    return `<div class="time-item time-item-${kind}"><span class="time-label"><span class="time-label-full">${label.full}</span><span class="time-label-short">${label.short}</span></span><span class="time-stack"><span class="time-primary-row"><span class="time-primary-value tabular-nums ${status}">${primary}</span>${statusLine}</span>${scheduledLine}</span></div>`;
 }
 
 function renderTimeNode(kind, schedMs, realMs, delayMin) {
@@ -308,9 +341,6 @@ function renderTimeNode(kind, schedMs, realMs, delayMin) {
     const primary = formatT(primaryMs) || '--:--';
     const status = resolveTimeStatus(delayMin, primaryMs, schedMs);
     const statusText = formatTimeStatusText(status, delayMin);
-    const label = kind === 'arrival'
-        ? (translations[currentLang].arrival_short || translations[currentLang].arrival)
-        : (translations[currentLang].departure_short || translations[currentLang].departure);
 
     const primaryChildren = [
         createNode('span', {
@@ -346,7 +376,7 @@ function renderTimeNode(kind, schedMs, realMs, delayMin) {
     }
 
     return createNode('div', { className: `time-item time-item-${kind}` }, [
-        createNode('span', { className: 'time-label', text: label }),
+        createTimeLabelNode(kind),
         createNode('span', { className: 'time-stack' }, stackChildren)
     ]);
 }
@@ -1023,6 +1053,7 @@ function render(data) {
         : document.createTextNode(operator);
     const categoryNode = categoryImage
         ? createNode('img', {
+            className: getCategoryLogoClass(categoryImage),
             attrs: { src: categoryImage, alt: category },
             style: { height: '1.3rem', verticalAlign: 'middle', marginLeft: '8px' }
         })
@@ -1742,7 +1773,7 @@ function renderSmartCaring(data) {
     clearNode(card);
     const toggle = createIcon('expand_more', `material-symbols-outlined sc-toggle${wasCollapsed ? '' : ' sc-rotated'}`);
     const header = createNode('button', { className: 'sc-header', type: 'button' }, [
-        createIcon('monitoring'),
+        createIcon('campaign'),
         createNode('span', { text: t.sc_title }),
         toggle
     ]);

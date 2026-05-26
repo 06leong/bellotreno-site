@@ -595,6 +595,15 @@ html[data-lang-loading] .hero-typewriter span {
     margin-left: 4px;
 }
 
+.category-logo {
+    transition: filter 0.2s ease, opacity 0.2s ease;
+}
+
+[data-theme="dark"] .category-logo-needs-contrast {
+    filter: invert(1) brightness(1.14) contrast(1.04);
+    opacity: 0.82;
+}
+
 .refresh-btn {
     appearance: none;
     font: inherit;
@@ -1036,7 +1045,7 @@ html[data-lang-loading] .hero-typewriter span {
 .time-item {
     color: inherit;
     display: grid;
-    grid-template-columns: minmax(2.6rem, max-content) minmax(0, 1fr);
+    grid-template-columns: minmax(4.9rem, max-content) minmax(0, 1fr);
     align-items: start;
     gap: 0 8px;
     min-width: 0;
@@ -1056,6 +1065,14 @@ html[data-lang-loading] .hero-typewriter span {
     font-weight: 500;
     line-height: 1.2;
     padding-top: 1px;
+}
+
+.time-label-full {
+    display: inline;
+}
+
+.time-label-short {
+    display: none;
 }
 
 .time-stack {
@@ -1169,6 +1186,14 @@ html[data-lang-loading] .hero-typewriter span {
         font-size: 0.82rem;
         opacity: 0.86;
         padding-top: 2px;
+    }
+
+    .time-label-full {
+        display: none;
+    }
+
+    .time-label-short {
+        display: inline;
     }
 
     .time-stack {
