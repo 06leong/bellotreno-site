@@ -659,9 +659,12 @@ html[data-lang-loading] .hero-typewriter span {
 .train-meta {
     font-size: 1rem;
     color: var(--color-base-content);
-    opacity: 0.8;
     margin-top: 10px;
     overflow-wrap: break-word;
+}
+
+.train-meta-label {
+    opacity: 0.78;
 }
 
 .train-number-meta {
@@ -896,8 +899,8 @@ html[data-lang-loading] .hero-typewriter span {
     color: var(--color-base-content);
     flex: 1;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(13.5rem, 16rem) 96px;
-    gap: 12px 24px;
+    grid-template-columns: minmax(0, 1fr) minmax(12.25rem, 13.5rem) 96px;
+    gap: 12px 22px;
     align-items: center;
     padding: 14px 18px;
     transition: background 0.2s;
@@ -911,7 +914,7 @@ html[data-lang-loading] .hero-typewriter span {
 /* Stack on small screens */
 @media (max-width: 640px) {
     .station-card {
-        grid-template-columns: minmax(0, 1fr) minmax(74px, auto);
+        grid-template-columns: minmax(0, 1fr) minmax(68px, auto);
         grid-template-rows: auto auto;
         gap: 10px 10px;
         align-items: start;
@@ -935,9 +938,9 @@ html[data-lang-loading] .hero-typewriter span {
         align-items: center;
         justify-content: center;
         border-left: 1px dashed color-mix(in oklch, var(--color-base-content) 15%, transparent);
-        padding: 0 2px 0 16px;
+        padding: 0 2px 0 12px;
         width: auto;
-        min-width: 74px;
+        min-width: 68px;
     }
 }
 
@@ -953,8 +956,8 @@ html[data-lang-loading] .hero-typewriter span {
     flex-direction: column;
     gap: 9px;
     font-size: 0.95rem;
-    width: min(100%, 16rem);
-    justify-self: end;
+    width: min(100%, 10.75rem);
+    justify-self: start;
     align-self: center;
     min-width: 0;
     max-width: 100%;
@@ -1041,9 +1044,9 @@ html[data-lang-loading] .hero-typewriter span {
 .time-item {
     color: inherit;
     display: grid;
-    grid-template-columns: minmax(4.6rem, max-content) minmax(0, 1fr);
+    grid-template-columns: minmax(4.25rem, max-content) minmax(0, 1fr);
     align-items: start;
-    gap: 10px;
+    gap: 7px;
     min-width: 0;
     width: 100%;
 }
@@ -1059,9 +1062,9 @@ html[data-lang-loading] .hero-typewriter span {
 
 .time-subrow {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 3.35rem;
+    grid-template-columns: minmax(0, 1fr) 3.1rem;
     align-items: baseline;
-    gap: 8px;
+    gap: 6px;
     line-height: 1.2;
     white-space: nowrap;
     min-width: 0;
@@ -1120,8 +1123,8 @@ html[data-lang-loading] .hero-typewriter span {
     }
 
     .time-item {
-        grid-template-columns: minmax(3.95rem, max-content) minmax(0, 1fr);
-        gap: 8px;
+        grid-template-columns: minmax(3.45rem, max-content) minmax(0, 1fr);
+        gap: 5px;
     }
 
     .time-label {
@@ -1132,8 +1135,8 @@ html[data-lang-loading] .hero-typewriter span {
     }
 
     .time-subrow {
-        grid-template-columns: minmax(0, 1fr) 3.05rem;
-        gap: 6px;
+        grid-template-columns: minmax(0, 1fr) 2.85rem;
+        gap: 5px;
     }
 
     .time-sub-label {
@@ -1617,7 +1620,63 @@ footer span {
 }
 
 .trenord-traffic-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
     color: var(--color-primary);
+}
+
+.trenord-traffic-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.trenord-traffic-title .material-symbols-outlined {
+    flex-shrink: 0;
+}
+
+.trenord-traffic-title-text {
+    display: inline-flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0 0.18em;
+    min-width: 0;
+    line-height: 1.22;
+}
+
+.trenord-traffic-title-main {
+    font-size: 1.05rem;
+}
+
+.trenord-traffic-line {
+    font-size: 0.9rem;
+    font-weight: 800;
+    overflow-wrap: anywhere;
+}
+
+.trenord-traffic-actions {
+    display: inline-flex;
+    align-items: center;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.trenord-traffic-toggle {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid color-mix(in oklch, var(--color-base-content) 10%, transparent);
+    background: color-mix(in oklch, var(--color-base-content) 6%, transparent);
+    color: var(--color-base-content);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 0;
+    font-size: 1.2rem !important;
 }
 
 .trenord-traffic-body {
@@ -2326,19 +2385,32 @@ button.swiss-section-title {
     }
 
     .swiss-header {
-        align-items: flex-start;
-        flex-direction: column;
-        gap: 8px;
+        align-items: center;
+        flex-direction: row;
+        gap: 10px;
+    }
+
+    .swiss-title {
+        min-width: 0;
+        flex: 1 1 auto;
+        flex-wrap: nowrap;
+    }
+
+    .swiss-title > span:last-child {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
     .swiss-header-actions {
-        width: 100%;
-        justify-content: space-between;
-        margin-left: 0;
+        width: auto;
+        justify-content: flex-end;
+        margin-left: auto;
+        flex-shrink: 0;
     }
 
     .swiss-provider {
-        white-space: normal;
+        white-space: nowrap;
     }
 
     .swiss-stop-tab {
@@ -2439,6 +2511,9 @@ button.swiss-section-title {
     letter-spacing: 0.04em;
     position: relative;
     top: 0;
+    z-index: 2;
+    isolation: isolate;
+    opacity: 1;
 }
 
 /* Responsive adjustments for mobile station badge */

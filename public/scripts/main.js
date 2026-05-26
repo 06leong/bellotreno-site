@@ -1018,14 +1018,14 @@ function render(data) {
         : createNode('b', { text: data.compNumeroTreno });
 
     const trainNumberChildren = [
-        `${translations[currentLang].train_num}: `,
+        createNode('span', { className: 'train-meta-label', text: `${translations[currentLang].train_num}: ` }),
         trainNumBadge
     ];
     const trenordLineBadge = createTrenordLineBadge(getCurrentTrenordLineForTrain(data));
     if (trenordLineBadge) trainNumberChildren.push(trenordLineBadge);
 
     const trainMeta = createNode('div', { className: 'train-meta flex items-center gap-3 flex-wrap' }, [
-        createNode('span', { className: 'train-number-meta flex items-center gap-2 text-sm uppercase tracking-wider font-semibold opacity-80' }, trainNumberChildren),
+        createNode('span', { className: 'train-number-meta flex items-center gap-2 text-sm uppercase tracking-wider font-semibold' }, trainNumberChildren),
         createNode('span', { className: 'opacity-30', text: '|' }),
         createNode('span', { className: 'flex items-center gap-1' }, [
             createIcon('schedule', 'material-symbols-outlined text-[16px] opacity-60'),
@@ -1464,6 +1464,23 @@ function formatTrenordTrafficTitle(data) {
     return String(t.trenord_traffic_title || '{line} line notices').replace('{line}', line);
 }
 
+function createTrenordTrafficTitleNodes(data) {
+    const t = translations[currentLang];
+    const line = data?.direttriceDescription || data?.direttrice || 'Trenord';
+    const template = String(t.trenord_traffic_title || 'Traffic information · {line}');
+    if (!template.includes('{line}')) {
+        return [createNode('span', { className: 'trenord-traffic-title-main', text: formatTrenordTrafficTitle(data) })];
+    }
+
+    const [before, ...afterParts] = template.split('{line}');
+    const after = afterParts.join('{line}');
+    const children = [];
+    if (before) children.push(createNode('span', { className: 'trenord-traffic-title-main', text: before }));
+    children.push(createNode('span', { className: 'trenord-traffic-line', text: line }));
+    if (after) children.push(createNode('span', { className: 'trenord-traffic-title-main', text: after }));
+    return children;
+}
+
 function formatTrenordNoticeDate(value) {
     if (!value) return '';
     const date = new Date(value);
@@ -1505,11 +1522,13 @@ function renderTrenordTrafficInformation(data) {
 
     clearNode(card);
 
-    const toggle = createIcon('expand_more', `material-symbols-outlined sc-toggle${wasCollapsed ? '' : ' sc-rotated'}`);
+    const toggle = createIcon('expand_more', `material-symbols-outlined sc-toggle trenord-traffic-toggle${wasCollapsed ? '' : ' sc-rotated'}`);
     const header = createNode('button', { className: 'sc-header trenord-traffic-header', type: 'button' }, [
-        createIcon('campaign'),
-        createNode('span', { text: formatTrenordTrafficTitle(data) }),
-        toggle
+        createNode('span', { className: 'trenord-traffic-title' }, [
+            createIcon('campaign'),
+            createNode('span', { className: 'trenord-traffic-title-text' }, createTrenordTrafficTitleNodes(data))
+        ]),
+        createNode('span', { className: 'trenord-traffic-actions' }, [toggle])
     ]);
 
     const bodyChildren = [];
