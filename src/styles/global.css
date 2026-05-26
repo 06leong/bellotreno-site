@@ -956,7 +956,7 @@ html[data-lang-loading] .hero-typewriter span {
     flex-direction: column;
     gap: 9px;
     font-size: 0.95rem;
-    width: min(100%, 10.75rem);
+    width: min(100%, 11.75rem);
     justify-self: start;
     align-self: center;
     min-width: 0;
@@ -1033,119 +1033,145 @@ html[data-lang-loading] .hero-typewriter span {
     margin-top: 12px;
 }
 
-.time-label {
-    color: inherit;
-    align-self: start;
-    padding-top: 2px;
-    line-height: 1.25;
-    min-width: 0;
-}
-
 .time-item {
     color: inherit;
     display: grid;
-    grid-template-columns: minmax(4.25rem, max-content) minmax(0, 1fr);
-    align-items: start;
-    gap: 7px;
-    min-width: 0;
-    width: 100%;
-}
-
-.time-values {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 2px;
-    min-width: 0;
-    width: 100%;
-}
-
-.time-subrow {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 3.1rem;
+    grid-template-columns: minmax(2.75rem, max-content) 3.25rem minmax(0, 1fr);
+    grid-template-rows: auto auto;
     align-items: baseline;
-    gap: 6px;
-    line-height: 1.2;
-    white-space: nowrap;
+    gap: 3px 8px;
     min-width: 0;
     width: 100%;
+    line-height: 1.15;
 }
 
-.time-sub-label {
-    color: var(--color-base-content);
-    opacity: 0.58;
-    font-size: 0.68rem;
-    font-weight: 800;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
+.time-item + .time-item {
+    border-top: 1px solid color-mix(in oklch, var(--color-base-content) 10%, transparent);
+    padding-top: 8px;
+}
+
+.time-label {
+    grid-column: 1;
+    grid-row: 1;
+    color: inherit;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: clip;
-    white-space: nowrap;
+    font-weight: 500;
+    line-height: 1.2;
 }
 
-.time-sub-value {
+.time-primary-value {
+    grid-column: 2;
+    grid-row: 1;
     color: var(--color-base-content);
     font-size: 0.98rem;
-    font-weight: 650;
-    line-height: 1.2;
-    justify-self: end;
-    text-align: right;
+    font-weight: 800;
+    line-height: 1.15;
+    white-space: nowrap;
+    text-align: left;
 }
 
-.time-val-sched {
-    color: var(--color-base-content);
-    opacity: 0.78;
-}
-
-.time-subrow-muted .time-val-sched {
-    opacity: 0.55;
-}
-
-.time-val-real {
-    font-size: 1rem;
-}
-
-.time-val-real.late {
+.time-primary-value.late {
     color: var(--train-red);
-    font-weight: 700;
 }
 
-.time-val-real.early {
+.time-primary-value.early {
     color: var(--train-green);
-    font-weight: 700;
+}
+
+.time-status-badge {
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: start;
+    max-width: 100%;
+    min-height: 1.25rem;
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 2px 7px;
+    font-size: 0.68rem;
+    font-weight: 750;
+    line-height: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.time-status-on-time {
+    color: color-mix(in oklch, var(--color-base-content) 78%, transparent);
+    background: color-mix(in oklch, var(--color-base-content) 10%, transparent);
+}
+
+.time-status-early {
+    color: color-mix(in oklch, var(--train-green) 82%, #0f172a);
+    background: color-mix(in oklch, var(--train-green) 16%, transparent);
+}
+
+.time-status-late {
+    color: color-mix(in oklch, var(--train-red) 86%, #0f172a);
+    background: color-mix(in oklch, var(--train-red) 15%, transparent);
+}
+
+.time-scheduled-label {
+    grid-column: 2;
+    grid-row: 2;
+    align-self: start;
+    color: var(--color-base-content);
+    opacity: 0.55;
+    font-size: 0.68rem;
+    font-weight: 760;
+    line-height: 1.15;
+    white-space: nowrap;
+    text-transform: lowercase;
+}
+
+.time-scheduled-value {
+    grid-column: 3;
+    grid-row: 2;
+    align-self: start;
+    color: var(--color-base-content);
+    opacity: 0.72;
+    font-size: 0.78rem;
+    font-weight: 650;
+    line-height: 1.15;
+    white-space: nowrap;
+}
+
+.time-scheduled-muted {
+    opacity: 0.62;
 }
 
 @media (max-width: 640px) {
     .station-time-col {
-        gap: 8px;
+        gap: 9px;
         font-size: 0.86rem;
     }
 
     .time-item {
-        grid-template-columns: minmax(3.45rem, max-content) minmax(0, 1fr);
-        gap: 5px;
+        grid-template-columns: minmax(2.55rem, max-content) 3rem minmax(0, 1fr);
+        gap: 3px 6px;
     }
 
     .time-label {
-        padding-top: 0;
-        margin-top: 3px;
         font-size: 0.82rem;
-        opacity: 0.82;
+        opacity: 0.86;
     }
 
-    .time-subrow {
-        grid-template-columns: minmax(0, 1fr) 2.85rem;
-        gap: 5px;
+    .time-primary-value {
+        font-size: 0.88rem;
     }
 
-    .time-sub-label {
-        font-size: 0.56rem;
+    .time-status-badge {
+        min-height: 1.08rem;
+        padding: 2px 6px;
+        font-size: 0.58rem;
     }
 
-    .time-sub-value,
-    .time-val-real {
-        font-size: 0.85rem;
+    .time-scheduled-label {
+        font-size: 0.62rem;
+    }
+
+    .time-scheduled-value {
+        font-size: 0.68rem;
     }
 }
 

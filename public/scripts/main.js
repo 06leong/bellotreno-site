@@ -246,85 +246,101 @@ function sameDisplayedMinute(left, right) {
     return formatT(left) === formatT(right);
 }
 
-function resolveTimeStatusClass(kind, delayMin) {
+function resolveTimeStatusClass(delayMin) {
     const delay = Number(delayMin);
     if (!Number.isFinite(delay)) return '';
     if (delay > 0) return 'late';
-    if (kind === 'actual' || delay < 0) return 'early';
+    if (delay < 0) return 'early';
     return '';
 }
 
-function createTimeSubRow(kind, label, ms, delayMin, options = {}) {
-    const value = formatT(ms) || '--:--';
-    const isRealtime = kind === 'actual' || kind === 'expected';
-    const colorClass = isRealtime ? resolveTimeStatusClass(kind, delayMin) : '';
-
-    return createNode('span', {
-        className: `time-subrow time-subrow-${kind}${options.muted ? ' time-subrow-muted' : ''}`.trim()
-    }, [
-        createNode('span', { className: 'time-sub-label', text: label }),
-        createNode('span', {
-            className: `time-sub-value tabular-nums ${isRealtime ? 'time-val-real' : 'time-val-sched'} ${colorClass}`.trim(),
-            text: value
-        })
-    ]);
+function formatTimeStatusText(status, delayMin) {
+    const delay = Math.abs(Math.round(Number(delayMin) || 0));
+    if (status === 'late') {
+        return `+${delay} min`;
+    }
+    if (status === 'early') {
+        return `-${delay} min`;
+    }
+    if (status === 'on-time') {
+        return translations[currentLang].time_on_time || translations[currentLang].on_time || 'On time';
+    }
+    return '';
 }
 
-function renderTimeHtml(label, schedMs, realMs, delayMin) {
-    const sched = formatT(schedMs);
-    const real = formatT(realMs);
-    const expectedMs = resolveExpectedTimestamp(schedMs, realMs, delayMin);
-    const expected = formatT(expectedMs);
-    const serviceTime = real || expected;
-    const serviceKind = real ? 'actual' : 'expected';
-    const serviceLabel = real ? translations[currentLang].actual : translations[currentLang].expected;
-    const serviceClass = serviceTime ? resolveTimeStatusClass(serviceKind, delayMin) : '';
-    const scheduledLine = sched
-        ? `<span class="time-subrow time-subrow-scheduled${serviceTime ? ' time-subrow-muted' : ''}"><span class="time-sub-label">${translations[currentLang].scheduled}</span><span class="time-sub-value time-val-sched tabular-nums">${sched}</span></span>`
-        : '';
-    const serviceLine = serviceTime
-        ? `<span class="time-subrow time-subrow-${serviceKind}"><span class="time-sub-label">${serviceLabel}</span><span class="time-sub-value time-val-real tabular-nums ${serviceClass}">${serviceTime}</span></span>`
-        : '';
-    const fallbackLine = (!scheduledLine && !serviceLine)
-        ? '<span class="time-subrow"><span class="time-sub-label">&nbsp;</span><span class="time-sub-value tabular-nums">--:--</span></span>'
-        : '';
-    return `<div class="time-item"><span class="time-label">${label}</span><span class="time-values">${scheduledLine}${serviceLine}${fallbackLine}</span></div>`;
+function resolveTimeStatus(delayMin, primaryMs, schedMs) {
+    const status = resolveTimeStatusClass(delayMin);
+    if (status) return status;
+    const delay = Number(delayMin);
+    if (Number.isFinite(delay) && delay === 0 && (hasTimestamp(primaryMs) || hasTimestamp(schedMs))) return 'on-time';
+    if (sameDisplayedMinute(primaryMs, schedMs)) return 'on-time';
+    return '';
 }
 
-function renderTimeNode(label, schedMs, realMs, delayMin) {
+function renderTimeHtml(kind, schedMs, realMs, delayMin) {
     const sched = formatT(schedMs);
     const hasReal = hasTimestamp(realMs);
     const expectedMs = resolveExpectedTimestamp(schedMs, realMs, delayMin);
     const hasExpected = hasTimestamp(expectedMs) && !sameDisplayedMinute(schedMs, expectedMs);
+    const primaryMs = hasReal ? Number(realMs) : (hasExpected ? expectedMs : (hasTimestamp(schedMs) ? Number(schedMs) : null));
+    const primary = formatT(primaryMs) || '--:--';
+    const status = resolveTimeStatus(delayMin, primaryMs, schedMs);
+    const statusText = formatTimeStatusText(status, delayMin);
+    const label = kind === 'arrival'
+        ? (translations[currentLang].arrival_short || translations[currentLang].arrival)
+        : (translations[currentLang].departure_short || translations[currentLang].departure);
+    const scheduledLabel = translations[currentLang].scheduled_short || translations[currentLang].scheduled;
+    const scheduledLine = sched
+        ? `<span class="time-scheduled-label">${scheduledLabel}</span><span class="time-scheduled-value tabular-nums">${sched}</span>`
+        : '';
+    const statusLine = statusText
+        ? `<span class="time-status-badge time-status-${status}">${statusText}</span>`
+        : '';
+    return `<div class="time-item time-item-${kind}"><span class="time-label">${label}</span><span class="time-primary-value tabular-nums ${status}">${primary}</span>${statusLine}${scheduledLine}</div>`;
+}
 
-    const valueChildren = [];
-    if (sched) {
-        valueChildren.push(createTimeSubRow(
-            'scheduled',
-            translations[currentLang].scheduled,
-            schedMs,
-            delayMin,
-            { muted: hasReal || hasExpected }
-        ));
-    }
+function renderTimeNode(kind, schedMs, realMs, delayMin) {
+    const sched = formatT(schedMs);
+    const hasReal = hasTimestamp(realMs);
+    const expectedMs = resolveExpectedTimestamp(schedMs, realMs, delayMin);
+    const hasExpected = hasTimestamp(expectedMs) && !sameDisplayedMinute(schedMs, expectedMs);
+    const primaryMs = hasReal ? Number(realMs) : (hasExpected ? expectedMs : (hasTimestamp(schedMs) ? Number(schedMs) : null));
+    const primary = formatT(primaryMs) || '--:--';
+    const status = resolveTimeStatus(delayMin, primaryMs, schedMs);
+    const statusText = formatTimeStatusText(status, delayMin);
+    const label = kind === 'arrival'
+        ? (translations[currentLang].arrival_short || translations[currentLang].arrival)
+        : (translations[currentLang].departure_short || translations[currentLang].departure);
 
-    if (hasReal) {
-        valueChildren.push(createTimeSubRow('actual', translations[currentLang].actual, realMs, delayMin));
-    } else if (hasExpected) {
-        valueChildren.push(createTimeSubRow('expected', translations[currentLang].expected, expectedMs, delayMin));
-    }
-
-    if (!valueChildren.length) {
-        valueChildren.push(createNode('span', { className: 'time-subrow' }, [
-            createNode('span', { className: 'time-sub-label', text: '' }),
-            createNode('span', { className: 'time-sub-value tabular-nums', text: '--:--' })
-        ]));
-    }
-
-    return createNode('div', { className: 'time-item' }, [
+    const children = [
         createNode('span', { className: 'time-label', text: label }),
-        createNode('span', { className: 'time-values' }, valueChildren)
-    ]);
+        createNode('span', {
+            className: `time-primary-value tabular-nums ${status}`.trim(),
+            text: primary
+        })
+    ];
+
+    if (statusText) {
+        children.push(createNode('span', {
+            className: `time-status-badge time-status-${status}`.trim(),
+            text: statusText
+        }));
+    }
+
+    if (sched) {
+        children.push(
+            createNode('span', {
+                className: `time-scheduled-label${hasReal || hasExpected ? ' time-scheduled-muted' : ''}`.trim(),
+                text: translations[currentLang].scheduled_short || translations[currentLang].scheduled
+            }),
+            createNode('span', {
+                className: `time-scheduled-value tabular-nums${hasReal || hasExpected ? ' time-scheduled-muted' : ''}`.trim(),
+                text: sched
+            })
+        );
+    }
+
+    return createNode('div', { className: `time-item time-item-${kind}` }, children);
 }
 
 function normalizeStationMatchName(value) {
@@ -1166,10 +1182,10 @@ function render(data) {
 
         const timeColChildren = [];
         if (!isFirst) {
-            timeColChildren.push(renderTimeNode(translations[currentLang].arrival, (f.arrivo_teorico || f.programmata), f.arrivoReale, f.ritardoArrivo));
+            timeColChildren.push(renderTimeNode('arrival', (f.arrivo_teorico || f.programmata), f.arrivoReale, f.ritardoArrivo));
         }
         if (!isLast) {
-            timeColChildren.push(renderTimeNode(translations[currentLang].departure, (f.partenza_teorica || f.programmata), f.partenzaReale, f.ritardoPartenza));
+            timeColChildren.push(renderTimeNode('departure', (f.partenza_teorica || f.programmata), f.partenzaReale, f.ritardoPartenza));
         }
 
         const platformChildren = [];
