@@ -1036,9 +1036,9 @@ html[data-lang-loading] .hero-typewriter span {
 .time-item {
     color: inherit;
     display: grid;
-    grid-template-columns: minmax(2.75rem, max-content) minmax(0, 1fr);
+    grid-template-columns: minmax(2.6rem, max-content) minmax(0, 1fr);
     align-items: start;
-    gap: 0 10px;
+    gap: 0 8px;
     min-width: 0;
     width: 100%;
     line-height: 1.15;
@@ -1070,7 +1070,7 @@ html[data-lang-loading] .hero-typewriter span {
 .time-primary-row {
     display: flex;
     align-items: center;
-    gap: 9px;
+    gap: 8px;
     min-width: 0;
     max-width: 100%;
 }
@@ -1124,30 +1124,34 @@ html[data-lang-loading] .hero-typewriter span {
 }
 
 .time-scheduled-row {
-    display: inline-flex;
-    align-items: baseline;
-    gap: 5px;
+    display: inline-grid;
+    grid-template-columns: max-content max-content;
+    align-items: center;
+    column-gap: 4px;
     min-width: 0;
     color: var(--color-base-content);
-    opacity: 0.5;
-    line-height: 1.15;
+    opacity: 0.44;
+    line-height: 1;
+    white-space: nowrap;
 }
 
 .time-scheduled-label {
-    font-size: 0.68rem;
+    font-size: 0.62rem;
     font-weight: 760;
+    line-height: 1;
     white-space: nowrap;
     text-transform: lowercase;
 }
 
 .time-scheduled-value {
-    font-size: 0.78rem;
+    font-size: 0.68rem;
     font-weight: 650;
+    line-height: 1;
     white-space: nowrap;
 }
 
 .time-scheduled-muted {
-    opacity: 0.48;
+    opacity: 0.42;
 }
 
 @media (max-width: 640px) {
@@ -1157,8 +1161,8 @@ html[data-lang-loading] .hero-typewriter span {
     }
 
     .time-item {
-        grid-template-columns: minmax(2.45rem, max-content) minmax(0, 1fr);
-        gap: 0 8px;
+        grid-template-columns: minmax(2.2rem, max-content) minmax(0, 1fr);
+        gap: 0 5px;
     }
 
     .time-label {
@@ -1172,7 +1176,7 @@ html[data-lang-loading] .hero-typewriter span {
     }
 
     .time-primary-row {
-        gap: 7px;
+        gap: 6px;
     }
 
     .time-primary-value {
@@ -1180,18 +1184,22 @@ html[data-lang-loading] .hero-typewriter span {
     }
 
     .time-status-badge {
-        min-width: 3.35rem;
+        min-width: 3.15rem;
         min-height: 1.14rem;
-        padding: 2px 7px;
-        font-size: 0.6rem;
+        padding: 2px 6px;
+        font-size: 0.56rem;
+    }
+
+    .time-scheduled-row {
+        column-gap: 3px;
     }
 
     .time-scheduled-label {
-        font-size: 0.62rem;
+        font-size: 0.55rem;
     }
 
     .time-scheduled-value {
-        font-size: 0.68rem;
+        font-size: 0.58rem;
     }
 }
 
