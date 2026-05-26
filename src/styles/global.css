@@ -921,6 +921,8 @@ html[data-lang-loading] .hero-typewriter span {
     .station-time-col {
         grid-column: 1;
         justify-self: start;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 3px;
     }
     .station-plat-col {
         grid-column: 2;
@@ -935,6 +937,27 @@ html[data-lang-loading] .hero-typewriter span {
         width: auto;
         min-width: 88px;
     }
+
+    .time-subrow {
+        grid-template-columns: minmax(3.85rem, max-content) auto;
+        gap: 6px;
+    }
+
+    .time-label {
+        padding-top: 0;
+        margin-top: 4px;
+        font-size: 0.82rem;
+        opacity: 0.82;
+    }
+
+    .time-sub-label {
+        font-size: 0.58rem;
+    }
+
+    .time-sub-value,
+    .time-val-real {
+        font-size: 0.85rem;
+    }
 }
 
 .station-name-col {
@@ -948,12 +971,12 @@ html[data-lang-loading] .hero-typewriter span {
 .station-time-col {
     display: grid;
     /* Use minmax to ensure shorter labels like "Arrivo" don't collapse leftwards compared to "Partenza" */
-    grid-template-columns: minmax(4.5rem, max-content) auto;
-    gap: 4px 10px;
+    grid-template-columns: minmax(4.5rem, max-content) minmax(7.75rem, max-content);
+    gap: 8px 12px;
     font-size: 0.95rem;
     justify-self: start;
     align-self: center;
-    align-items: center; /* Fixes "Departure" being visibly higher than the time number */
+    align-items: start;
     min-width: 0;
 }
 
@@ -1029,6 +1052,9 @@ html[data-lang-loading] .hero-typewriter span {
 
 .time-label {
     color: inherit;
+    align-self: start;
+    padding-top: 2px;
+    line-height: 1.25;
 }
 
 /* Participant in .station-time-col grid */
@@ -1038,16 +1064,50 @@ html[data-lang-loading] .hero-typewriter span {
     /* Children of .time-item will use the parent .station-time-col grid */
 }
 
-.time-val-real {
-    font-size: 1.05rem;
+.time-values {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    min-width: 0;
+}
+
+.time-subrow {
+    display: grid;
+    grid-template-columns: minmax(4.75rem, max-content) auto;
+    align-items: baseline;
+    gap: 8px;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.time-sub-label {
+    color: var(--color-base-content);
+    opacity: 0.58;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.time-sub-value {
+    color: var(--color-base-content);
+    font-size: 0.98rem;
+    font-weight: 650;
+    line-height: 1.2;
 }
 
 .time-val-sched {
-    text-decoration: line-through;
     color: var(--color-base-content);
-    opacity: 0.4;
-    margin-right: 8px;
-    text-decoration-color: var(--color-error);
+    opacity: 0.78;
+}
+
+.time-subrow-muted .time-val-sched {
+    opacity: 0.55;
+}
+
+.time-val-real {
+    font-size: 1rem;
 }
 
 .time-val-real.late {

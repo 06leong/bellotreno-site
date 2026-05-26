@@ -229,23 +229,101 @@ function formatT(ms) {
     return new Date(ms).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' });
 }
 
+function hasTimestamp(ms) {
+    const value = Number(ms);
+    return Number.isFinite(value) && value > 0;
+}
+
+function resolveExpectedTimestamp(schedMs, realMs, delayMin) {
+    if (!hasTimestamp(schedMs) || hasTimestamp(realMs)) return null;
+    const delay = Number(delayMin);
+    if (!Number.isFinite(delay) || delay === 0) return null;
+    return Number(schedMs) + delay * 60000;
+}
+
+function sameDisplayedMinute(left, right) {
+    if (!hasTimestamp(left) || !hasTimestamp(right)) return false;
+    return formatT(left) === formatT(right);
+}
+
+function resolveTimeStatusClass(kind, delayMin) {
+    const delay = Number(delayMin);
+    if (!Number.isFinite(delay)) return '';
+    if (delay > 0) return 'late';
+    if (kind === 'actual' || delay < 0) return 'early';
+    return '';
+}
+
+function createTimeSubRow(kind, label, ms, delayMin, options = {}) {
+    const value = formatT(ms) || '--:--';
+    const isRealtime = kind === 'actual' || kind === 'expected';
+    const colorClass = isRealtime ? resolveTimeStatusClass(kind, delayMin) : '';
+
+    return createNode('span', {
+        className: `time-subrow time-subrow-${kind}${options.muted ? ' time-subrow-muted' : ''}`.trim()
+    }, [
+        createNode('span', { className: 'time-sub-label', text: label }),
+        createNode('span', {
+            className: `time-sub-value tabular-nums ${isRealtime ? 'time-val-real' : 'time-val-sched'} ${colorClass}`.trim(),
+            text: value
+        })
+    ]);
+}
+
 function renderTimeHtml(label, schedMs, realMs, delayMin) {
     const sched = formatT(schedMs);
     const real = formatT(realMs);
-    const timeToShow = real || sched || '--:--';
-    // Only colorize if we have a real time.
-    const colorClass = real ? ((delayMin > 0) ? 'late' : 'early') : '';
-    return `<div class="time-item"><span class="time-label">${label}</span><span class="time-val-real tabular-nums ${colorClass}">${timeToShow}</span></div>`;
+    const expectedMs = resolveExpectedTimestamp(schedMs, realMs, delayMin);
+    const expected = formatT(expectedMs);
+    const serviceTime = real || expected;
+    const serviceKind = real ? 'actual' : 'expected';
+    const serviceLabel = real ? translations[currentLang].actual : translations[currentLang].expected;
+    const serviceClass = serviceTime ? resolveTimeStatusClass(serviceKind, delayMin) : '';
+    const scheduledLine = sched
+        ? `<span class="time-subrow time-subrow-scheduled${serviceTime ? ' time-subrow-muted' : ''}"><span class="time-sub-label">${translations[currentLang].scheduled}</span><span class="time-sub-value time-val-sched tabular-nums">${sched}</span></span>`
+        : '';
+    const serviceLine = serviceTime
+        ? `<span class="time-subrow time-subrow-${serviceKind}"><span class="time-sub-label">${serviceLabel}</span><span class="time-sub-value time-val-real tabular-nums ${serviceClass}">${serviceTime}</span></span>`
+        : '';
+    const fallbackLine = (!scheduledLine && !serviceLine)
+        ? '<span class="time-subrow"><span class="time-sub-label">&nbsp;</span><span class="time-sub-value tabular-nums">--:--</span></span>'
+        : '';
+    return `<div class="time-item"><span class="time-label">${label}</span><span class="time-values">${scheduledLine}${serviceLine}${fallbackLine}</span></div>`;
 }
 
 function renderTimeNode(label, schedMs, realMs, delayMin) {
     const sched = formatT(schedMs);
-    const real = formatT(realMs);
-    const timeToShow = real || sched || '--:--';
-    const colorClass = real ? ((delayMin > 0) ? 'late' : 'early') : '';
+    const hasReal = hasTimestamp(realMs);
+    const expectedMs = resolveExpectedTimestamp(schedMs, realMs, delayMin);
+    const hasExpected = hasTimestamp(expectedMs) && !sameDisplayedMinute(schedMs, expectedMs);
+
+    const valueChildren = [];
+    if (sched) {
+        valueChildren.push(createTimeSubRow(
+            'scheduled',
+            translations[currentLang].scheduled,
+            schedMs,
+            delayMin,
+            { muted: hasReal || hasExpected }
+        ));
+    }
+
+    if (hasReal) {
+        valueChildren.push(createTimeSubRow('actual', translations[currentLang].actual, realMs, delayMin));
+    } else if (hasExpected) {
+        valueChildren.push(createTimeSubRow('expected', translations[currentLang].expected, expectedMs, delayMin));
+    }
+
+    if (!valueChildren.length) {
+        valueChildren.push(createNode('span', { className: 'time-subrow' }, [
+            createNode('span', { className: 'time-sub-label', text: '' }),
+            createNode('span', { className: 'time-sub-value tabular-nums', text: '--:--' })
+        ]));
+    }
+
     return createNode('div', { className: 'time-item' }, [
         createNode('span', { className: 'time-label', text: label }),
-        createNode('span', { className: `time-val-real tabular-nums ${colorClass}`.trim(), text: timeToShow })
+        createNode('span', { className: 'time-values' }, valueChildren)
     ]);
 }
 
