@@ -665,6 +665,10 @@ html[data-lang-loading] .hero-typewriter span {
 }
 
 .train-number-meta {
+    --detail-train-badge-height: 1.65rem;
+    --detail-train-badge-font-size: 0.9rem;
+    --detail-train-badge-padding-x: 0.72rem;
+    --detail-train-badge-radius: 8px;
     min-width: 0;
 }
 
@@ -2335,6 +2339,22 @@ button.swiss-section-title {
 .badge-storico      { background-color: #827654; }
 .badge-espresso     { background-color: #35556b; }
 
+.train-number-meta .train-badge,
+.train-number-meta .trenord-line-badge {
+    width: auto;
+    min-width: auto;
+    height: var(--detail-train-badge-height);
+    min-height: var(--detail-train-badge-height);
+    padding: 0 var(--detail-train-badge-padding-x);
+    border-radius: var(--detail-train-badge-radius);
+    font-size: var(--detail-train-badge-font-size);
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: 0.04em;
+    position: relative;
+    top: 0;
+}
+
 /* Responsive adjustments for mobile station badge */
 @media (max-width: 639px) {
     .train-badge.station-badge {
@@ -2584,6 +2604,13 @@ button.swiss-section-title {
         font-size: 0.75rem;
         padding: 1px 6px;
         border-radius: 6px;
+    }
+
+    .train-number-meta {
+        --detail-train-badge-height: 1.35rem;
+        --detail-train-badge-font-size: 0.75rem;
+        --detail-train-badge-padding-x: 0.55rem;
+        --detail-train-badge-radius: 6px;
     }
 }
 
