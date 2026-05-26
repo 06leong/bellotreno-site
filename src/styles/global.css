@@ -896,12 +896,12 @@ html[data-lang-loading] .hero-typewriter span {
     color: var(--color-base-content);
     flex: 1;
     display: grid;
-    /* Wider column gap + wider third column pushes times LEFT, away from platform */
-    grid-template-columns: 1fr auto 96px;
-    gap: 12px 36px;
+    grid-template-columns: minmax(0, 1fr) minmax(13.5rem, 16rem) 96px;
+    gap: 12px 24px;
     align-items: center;
     padding: 14px 18px;
     transition: background 0.2s;
+    overflow: hidden;
 }
 
 .station-card:hover {
@@ -911,18 +911,20 @@ html[data-lang-loading] .hero-typewriter span {
 /* Stack on small screens */
 @media (max-width: 640px) {
     .station-card {
-        grid-template-columns: 1fr auto;
+        grid-template-columns: minmax(0, 1fr) minmax(74px, auto);
         grid-template-rows: auto auto;
-        gap: 8px 12px;
+        gap: 10px 10px;
+        align-items: start;
     }
     .station-name-col {
         grid-column: 1;
     }
     .station-time-col {
         grid-column: 1;
-        justify-self: start;
-        grid-template-columns: minmax(0, 1fr);
-        gap: 3px;
+        grid-row: 2;
+        width: 100%;
+        max-width: 100%;
+        justify-self: stretch;
     }
     .station-plat-col {
         grid-column: 2;
@@ -933,30 +935,9 @@ html[data-lang-loading] .hero-typewriter span {
         align-items: center;
         justify-content: center;
         border-left: 1px dashed color-mix(in oklch, var(--color-base-content) 15%, transparent);
-        padding: 0 4px 0 24px;
+        padding: 0 2px 0 16px;
         width: auto;
-        min-width: 88px;
-    }
-
-    .time-subrow {
-        grid-template-columns: minmax(3.85rem, max-content) auto;
-        gap: 6px;
-    }
-
-    .time-label {
-        padding-top: 0;
-        margin-top: 4px;
-        font-size: 0.82rem;
-        opacity: 0.82;
-    }
-
-    .time-sub-label {
-        font-size: 0.58rem;
-    }
-
-    .time-sub-value,
-    .time-val-real {
-        font-size: 0.85rem;
+        min-width: 74px;
     }
 }
 
@@ -967,17 +948,16 @@ html[data-lang-loading] .hero-typewriter span {
     min-width: 0;
 }
 
-/* Time column: Left-aligned grid, aligned between Arrival and Departure */
 .station-time-col {
-    display: grid;
-    /* Use minmax to ensure shorter labels like "Arrivo" don't collapse leftwards compared to "Partenza" */
-    grid-template-columns: minmax(4.5rem, max-content) minmax(7.75rem, max-content);
-    gap: 8px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
     font-size: 0.95rem;
-    justify-self: start;
+    width: min(100%, 16rem);
+    justify-self: end;
     align-self: center;
-    align-items: start;
     min-width: 0;
+    max-width: 100%;
 }
 
 .station-plat-col {
@@ -1055,30 +1035,37 @@ html[data-lang-loading] .hero-typewriter span {
     align-self: start;
     padding-top: 2px;
     line-height: 1.25;
+    min-width: 0;
 }
 
-/* Participant in .station-time-col grid */
 .time-item {
     color: inherit;
-    display: contents;
-    /* Children of .time-item will use the parent .station-time-col grid */
+    display: grid;
+    grid-template-columns: minmax(4.6rem, max-content) minmax(0, 1fr);
+    align-items: start;
+    gap: 10px;
+    min-width: 0;
+    width: 100%;
 }
 
 .time-values {
     display: flex;
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
     gap: 2px;
     min-width: 0;
+    width: 100%;
 }
 
 .time-subrow {
     display: grid;
-    grid-template-columns: minmax(4.75rem, max-content) auto;
+    grid-template-columns: minmax(0, 1fr) 3.35rem;
     align-items: baseline;
     gap: 8px;
     line-height: 1.2;
     white-space: nowrap;
+    min-width: 0;
+    width: 100%;
 }
 
 .time-sub-label {
@@ -1088,6 +1075,10 @@ html[data-lang-loading] .hero-typewriter span {
     font-weight: 800;
     letter-spacing: 0.04em;
     text-transform: uppercase;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: clip;
+    white-space: nowrap;
 }
 
 .time-sub-value {
@@ -1095,6 +1086,8 @@ html[data-lang-loading] .hero-typewriter span {
     font-size: 0.98rem;
     font-weight: 650;
     line-height: 1.2;
+    justify-self: end;
+    text-align: right;
 }
 
 .time-val-sched {
@@ -1118,6 +1111,39 @@ html[data-lang-loading] .hero-typewriter span {
 .time-val-real.early {
     color: var(--train-green);
     font-weight: 700;
+}
+
+@media (max-width: 640px) {
+    .station-time-col {
+        gap: 8px;
+        font-size: 0.86rem;
+    }
+
+    .time-item {
+        grid-template-columns: minmax(3.95rem, max-content) minmax(0, 1fr);
+        gap: 8px;
+    }
+
+    .time-label {
+        padding-top: 0;
+        margin-top: 3px;
+        font-size: 0.82rem;
+        opacity: 0.82;
+    }
+
+    .time-subrow {
+        grid-template-columns: minmax(0, 1fr) 3.05rem;
+        gap: 6px;
+    }
+
+    .time-sub-label {
+        font-size: 0.56rem;
+    }
+
+    .time-sub-value,
+    .time-val-real {
+        font-size: 0.85rem;
+    }
 }
 
 .plat-old {
