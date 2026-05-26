@@ -291,12 +291,12 @@ function renderTimeHtml(kind, schedMs, realMs, delayMin) {
         : (translations[currentLang].departure_short || translations[currentLang].departure);
     const scheduledLabel = translations[currentLang].scheduled_short || translations[currentLang].scheduled;
     const scheduledLine = sched
-        ? `<span class="time-scheduled-label">${scheduledLabel}</span><span class="time-scheduled-value tabular-nums">${sched}</span>`
+        ? `<span class="time-scheduled-row"><span class="time-scheduled-label">${scheduledLabel}</span><span class="time-scheduled-value tabular-nums">${sched}</span></span>`
         : '';
     const statusLine = statusText
         ? `<span class="time-status-badge time-status-${status}">${statusText}</span>`
         : '';
-    return `<div class="time-item time-item-${kind}"><span class="time-label">${label}</span><span class="time-primary-value tabular-nums ${status}">${primary}</span>${statusLine}${scheduledLine}</div>`;
+    return `<div class="time-item time-item-${kind}"><span class="time-label">${label}</span><span class="time-stack"><span class="time-primary-row"><span class="time-primary-value tabular-nums ${status}">${primary}</span>${statusLine}</span>${scheduledLine}</span></div>`;
 }
 
 function renderTimeNode(kind, schedMs, realMs, delayMin) {
@@ -312,8 +312,7 @@ function renderTimeNode(kind, schedMs, realMs, delayMin) {
         ? (translations[currentLang].arrival_short || translations[currentLang].arrival)
         : (translations[currentLang].departure_short || translations[currentLang].departure);
 
-    const children = [
-        createNode('span', { className: 'time-label', text: label }),
+    const primaryChildren = [
         createNode('span', {
             className: `time-primary-value tabular-nums ${status}`.trim(),
             text: primary
@@ -321,26 +320,35 @@ function renderTimeNode(kind, schedMs, realMs, delayMin) {
     ];
 
     if (statusText) {
-        children.push(createNode('span', {
+        primaryChildren.push(createNode('span', {
             className: `time-status-badge time-status-${status}`.trim(),
             text: statusText
         }));
     }
 
+    const stackChildren = [
+        createNode('span', { className: 'time-primary-row' }, primaryChildren)
+    ];
+
     if (sched) {
-        children.push(
+        stackChildren.push(createNode('span', {
+            className: `time-scheduled-row${hasReal || hasExpected ? ' time-scheduled-muted' : ''}`.trim()
+        }, [
             createNode('span', {
-                className: `time-scheduled-label${hasReal || hasExpected ? ' time-scheduled-muted' : ''}`.trim(),
+                className: 'time-scheduled-label',
                 text: translations[currentLang].scheduled_short || translations[currentLang].scheduled
             }),
             createNode('span', {
-                className: `time-scheduled-value tabular-nums${hasReal || hasExpected ? ' time-scheduled-muted' : ''}`.trim(),
+                className: 'time-scheduled-value tabular-nums',
                 text: sched
             })
-        );
+        ]));
     }
 
-    return createNode('div', { className: `time-item time-item-${kind}` }, children);
+    return createNode('div', { className: `time-item time-item-${kind}` }, [
+        createNode('span', { className: 'time-label', text: label }),
+        createNode('span', { className: 'time-stack' }, stackChildren)
+    ]);
 }
 
 function normalizeStationMatchName(value) {

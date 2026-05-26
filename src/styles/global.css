@@ -1036,10 +1036,9 @@ html[data-lang-loading] .hero-typewriter span {
 .time-item {
     color: inherit;
     display: grid;
-    grid-template-columns: minmax(2.75rem, max-content) 3.25rem minmax(0, 1fr);
-    grid-template-rows: auto auto;
-    align-items: baseline;
-    gap: 3px 8px;
+    grid-template-columns: minmax(2.75rem, max-content) minmax(0, 1fr);
+    align-items: start;
+    gap: 0 10px;
     min-width: 0;
     width: 100%;
     line-height: 1.15;
@@ -1052,16 +1051,31 @@ html[data-lang-loading] .hero-typewriter span {
 
 .time-label {
     grid-column: 1;
-    grid-row: 1;
     color: inherit;
     min-width: 0;
     font-weight: 500;
     line-height: 1.2;
+    padding-top: 1px;
+}
+
+.time-stack {
+    grid-column: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    min-width: 0;
+}
+
+.time-primary-row {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 0;
+    max-width: 100%;
 }
 
 .time-primary-value {
-    grid-column: 2;
-    grid-row: 1;
     color: var(--color-base-content);
     font-size: 0.98rem;
     font-weight: 800;
@@ -1079,21 +1093,19 @@ html[data-lang-loading] .hero-typewriter span {
 }
 
 .time-status-badge {
-    grid-column: 3;
-    grid-row: 1;
-    justify-self: start;
-    max-width: 100%;
-    min-height: 1.25rem;
+    flex: 0 0 auto;
+    min-width: 3.65rem;
+    min-height: 1.28rem;
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     border-radius: 999px;
-    padding: 2px 7px;
+    padding: 2px 8px;
     font-size: 0.68rem;
     font-weight: 750;
     line-height: 1;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    text-align: center;
 }
 
 .time-status-on-time {
@@ -1111,33 +1123,31 @@ html[data-lang-loading] .hero-typewriter span {
     background: color-mix(in oklch, var(--train-red) 15%, transparent);
 }
 
-.time-scheduled-label {
-    grid-column: 2;
-    grid-row: 2;
-    align-self: start;
+.time-scheduled-row {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 5px;
+    min-width: 0;
     color: var(--color-base-content);
-    opacity: 0.55;
+    opacity: 0.5;
+    line-height: 1.15;
+}
+
+.time-scheduled-label {
     font-size: 0.68rem;
     font-weight: 760;
-    line-height: 1.15;
     white-space: nowrap;
     text-transform: lowercase;
 }
 
 .time-scheduled-value {
-    grid-column: 3;
-    grid-row: 2;
-    align-self: start;
-    color: var(--color-base-content);
-    opacity: 0.72;
     font-size: 0.78rem;
     font-weight: 650;
-    line-height: 1.15;
     white-space: nowrap;
 }
 
 .time-scheduled-muted {
-    opacity: 0.62;
+    opacity: 0.48;
 }
 
 @media (max-width: 640px) {
@@ -1147,13 +1157,22 @@ html[data-lang-loading] .hero-typewriter span {
     }
 
     .time-item {
-        grid-template-columns: minmax(2.55rem, max-content) 3rem minmax(0, 1fr);
-        gap: 3px 6px;
+        grid-template-columns: minmax(2.45rem, max-content) minmax(0, 1fr);
+        gap: 0 8px;
     }
 
     .time-label {
         font-size: 0.82rem;
         opacity: 0.86;
+        padding-top: 2px;
+    }
+
+    .time-stack {
+        gap: 3px;
+    }
+
+    .time-primary-row {
+        gap: 7px;
     }
 
     .time-primary-value {
@@ -1161,9 +1180,10 @@ html[data-lang-loading] .hero-typewriter span {
     }
 
     .time-status-badge {
-        min-height: 1.08rem;
-        padding: 2px 6px;
-        font-size: 0.58rem;
+        min-width: 3.35rem;
+        min-height: 1.14rem;
+        padding: 2px 7px;
+        font-size: 0.6rem;
     }
 
     .time-scheduled-label {
