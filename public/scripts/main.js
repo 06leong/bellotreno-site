@@ -40,6 +40,10 @@ const TRENORD_LINE_COLORS = Object.freeze({
     S40: "#85bb7d",
     S50: "#754917"
 });
+const TRENORD_LINE_ALIASES = Object.freeze({
+    RE51: "MXP2",
+    RE54: "MXP1"
+});
 
 function clearNode(node) {
     if (node) node.replaceChildren();
@@ -1185,11 +1189,12 @@ function resolveTrenordLineBadgeSpec(line) {
     if (!rawCode) return null;
 
     const compactCode = rawCode.replace(/_/g, '');
-    let color = TRENORD_LINE_COLORS[compactCode];
+    const aliasCode = TRENORD_LINE_ALIASES[compactCode] || compactCode;
+    let color = TRENORD_LINE_COLORS[aliasCode] || TRENORD_LINE_COLORS[compactCode];
 
     if (/^RE0*80$/.test(compactCode)) {
         color = TRENORD_LINE_COLORS.RE80;
-    } else if (!color && compactCode.startsWith('MXP')) {
+    } else if (aliasCode.startsWith('MXP')) {
         color = TRENORD_LINE_COLORS.MXP;
     } else if (!color && compactCode.startsWith('RE')) {
         color = TRENORD_LINE_COLORS.RE;
@@ -1199,7 +1204,7 @@ function resolveTrenordLineBadgeSpec(line) {
 
     if (!color) color = '#69737f';
     return {
-        label: compactCode,
+        label: aliasCode,
         color,
         textColor: getReadableBadgeTextColor(color)
     };
