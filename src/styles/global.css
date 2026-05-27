@@ -73,6 +73,10 @@ html[data-lang-loading] [data-i18n-section] {
     visibility: hidden;
 }
 
+html[data-lang-loading] [data-i18n-nav] {
+    visibility: hidden;
+}
+
 .material-symbols-outlined {
     font-family: var(--font-material-symbols-outlined, "Material Symbols Outlined");
     font-weight: normal;

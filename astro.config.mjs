@@ -80,7 +80,7 @@ export default defineConfig({
       weights: [400, 500, 600, 700, 800, 900],
       styles: ['normal'],
       subsets: ['latin'],
-      display: 'swap',
+      display: 'block',
       fallbacks: [],
     },
     {
