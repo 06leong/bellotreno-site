@@ -1,3 +1,7 @@
+---
+import { Font } from 'astro:assets';
+---
+
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -5,11 +9,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>BelloTreno - 404 Not Found</title>
     <meta name="robots" content="noindex, nofollow">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <Font cssVariable="--font-share-tech-mono" preload />
     
-    <style>
+    <style is:global>
         :root {
             --bg-color: #050505;
             --main-color: #33ff00;
@@ -23,7 +25,7 @@
         body {
             background-color: var(--bg-color);
             color: var(--main-color);
-            font-family: 'Share Tech Mono', monospace;
+            font-family: var(--font-share-tech-mono), monospace;
             margin: 0;
             padding: 0;
             min-height: 100vh;
@@ -245,7 +247,7 @@
         &copy; <span id="year"></span> BELLOTRENO NETWORK. ALL RIGHTS RESERVED.
     </footer>
 
-    <script>
+    <script is:inline>
         document.addEventListener("DOMContentLoaded", function() {
             
             document.getElementById('year').textContent = new Date().getFullYear();
