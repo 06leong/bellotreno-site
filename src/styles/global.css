@@ -33,6 +33,12 @@
 }
 
 :root {
+    --app-font-sans: var(--font-inter, "Inter"), var(--font-noto-sans-sc, "Noto Sans SC"), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --app-font-heading: var(--font-outfit, "Outfit"), var(--font-noto-sans-sc, "Noto Sans SC"), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --app-font-mono: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    --font-sans: var(--app-font-sans);
+    --font-mono: var(--app-font-mono);
+
     /* DO NOT CHANGE TRAIN CATEGORY HEX COLORS */
     --train-green: #2e7d32;
     --train-grey: #cfd8dc;
@@ -70,7 +76,7 @@ html[data-lang-loading] [data-i18n-section] {
 }
 
 .material-symbols-outlined {
-    font-family: var(--font-material-symbols-outlined);
+    font-family: var(--font-material-symbols-outlined, "Material Symbols Outlined");
     font-weight: normal;
     font-style: normal;
     font-size: 24px;
@@ -141,7 +147,7 @@ html {
 }
 
 body {
-    font-family: 'Inter', 'Noto Sans SC', sans-serif;
+    font-family: var(--app-font-sans);
     margin: 0;
     min-height: 100vh;
     display: flex;
@@ -152,7 +158,7 @@ body {
 }
 
 h1, h2, h3, h4, h5, h6, .brand-heading {
-    font-family: 'Outfit', 'Noto Sans SC', sans-serif;
+    font-family: var(--app-font-heading);
 }
 
 * {
@@ -1003,8 +1009,8 @@ html[data-lang-loading] .hero-typewriter span {
 }
 
 .station-name {
-    /* Use Outfit (heading font) for station names 閳?matches infomobilit鑴?style */
-    font-family: 'Outfit', 'Noto Sans SC', sans-serif;
+    /* Match the heading font used by the station board and infomobilita UI. */
+    font-family: var(--app-font-heading);
     font-weight: 700;
     font-size: 1.25rem;   /* user requested larger */
     letter-spacing: 0.01em;
@@ -2425,7 +2431,7 @@ button.swiss-section-title {
     font-size: 0.72rem;
     color: var(--color-base-content);
     opacity: 0.58;
-    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace);
+    font-family: var(--app-font-mono);
     overflow-wrap: anywhere;
 }
 

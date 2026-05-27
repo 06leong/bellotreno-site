@@ -71,7 +71,7 @@ export default defineConfig({
       styles: ['normal'],
       subsets: ['latin'],
       display: 'swap',
-      fallbacks: ['system-ui', 'sans-serif'],
+      fallbacks: [],
     },
     {
       provider: fontProviders.google(),
@@ -81,7 +81,7 @@ export default defineConfig({
       styles: ['normal'],
       subsets: ['latin'],
       display: 'swap',
-      fallbacks: ['Inter', 'system-ui', 'sans-serif'],
+      fallbacks: [],
     },
     {
       provider: fontProviders.google(),

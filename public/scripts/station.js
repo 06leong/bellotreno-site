@@ -511,7 +511,7 @@ function _stAppendPlatform(cell, train, type) {
 function _stRouteCell(text, index) {
     const cell = _stCreateCell('td', text, "text-[0.65rem] sm:text-sm align-middle whitespace-normal leading-tight px-1 sm:px-4");
     cell.dataset.routeCell = String(index);
-    cell.style.fontFamily = "'Outfit', 'Noto Sans SC', sans-serif";
+    cell.style.fontFamily = "var(--app-font-heading)";
     cell.style.fontWeight = '700';
     cell.style.letterSpacing = '0.01em';
     return cell;
