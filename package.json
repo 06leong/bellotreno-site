@@ -2,12 +2,15 @@
   "name": "bellotreno-site",
   "type": "module",
   "version": "1.0.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
     "check": "npm run check:js && npm run check:types && npm run test:js && npm run check:i18n && npm run check:python",
     "check:js": "node scripts/check-js-syntax.mjs",
-    "check:types": "tsc --noEmit --allowJs --checkJs --module NodeNext --moduleResolution NodeNext --target ES2022 --skipLibCheck --strict src/lib/normalizers/statistics.js src/lib/normalizers/swiss.js src/lib/normalizers/trenord.js src/lib/normalizers/viaggiatreno.js",
+    "check:types": "tsc --ignoreConfig --noEmit --allowJs --checkJs --module NodeNext --moduleResolution NodeNext --target ES2022 --skipLibCheck --strict src/lib/normalizers/statistics.js src/lib/normalizers/swiss.js src/lib/normalizers/trenord.js src/lib/normalizers/viaggiatreno.js",
     "check:i18n": "node scripts/check-i18n.mjs",
     "check:python": "python -m py_compile rfi-proxy/app.py rfi-proxy/statistics/app.py && python -m unittest discover -s tests/python",
     "test:js": "node --test tests/js/*.test.mjs",
@@ -17,13 +20,14 @@
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.19",
-    "@tailwindcss/vite": "^4.2.1",
-    "astro": "^5.17.1",
-    "daisyui": "^5.5.19",
-    "tailwindcss": "^4.2.1"
+    "@tailwindcss/vite": "^4.3.0",
+    "astro": "^6.3.8",
+    "daisyui": "^5.5.20",
+    "tailwindcss": "^4.3.0",
+    "typescript": "^6.0.3"
   },
   "dependencies": {
-    "@astrojs/sitemap": "^3.7.2",
+    "@astrojs/sitemap": "^3.7.3",
     "crypto-js": "^4.2.0"
   }
 }
