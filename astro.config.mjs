@@ -61,6 +61,13 @@ const MATERIAL_SYMBOL_NAMES = [
 export default defineConfig({
   output: 'static',
   site: 'https://bellotreno.org',
+  i18n: {
+    locales: ['it', 'en', 'zh'],
+    defaultLocale: 'it',
+    routing: {
+      prefixDefaultLocale: true,
+    },
+  },
 
   fonts: [
     {
@@ -133,8 +140,7 @@ export default defineConfig({
 
   integrations: [
     sitemap({
-      // 单 URL 多语言，无需 i18n 路由，直接列出所有页面
-      filter: (page) => !page.includes('/_'),
+      filter: (page) => !page.includes('/_') && page !== 'https://bellotreno.org/',
     }),
   ],
 });

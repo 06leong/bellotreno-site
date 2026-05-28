@@ -33,9 +33,11 @@
 }
 
 :root {
-    --app-font-sans: var(--font-inter, "Inter"), var(--font-noto-sans-sc, "Noto Sans SC"), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-sans: var(--font-inter, "Inter"), var(--font-noto-sans-sc, "Noto Sans SC"), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-mono: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    --app-font-sans: var(--font-sans);
     --app-font-heading: var(--font-outfit, "Outfit"), var(--font-noto-sans-sc, "Noto Sans SC"), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    --app-font-mono: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
+    --app-font-mono: var(--font-mono);
 
     /* DO NOT CHANGE TRAIN CATEGORY HEX COLORS */
     --train-green: #2e7d32;
@@ -65,12 +67,6 @@
     --page-bg-reg: rgba(112, 168, 74, 0.20);
     --page-bg-ic: rgba(0, 138, 216, 0.24);
     --page-bg-ec: rgba(60, 129, 73, 0.22);
-}
-
-/* Hide translatable text until correct language is applied (prevents Chinese flash) */
-html[data-lang-loading] [data-i18n],
-html[data-lang-loading] [data-i18n-section] {
-    visibility: hidden;
 }
 
 .material-symbols-outlined {
@@ -316,12 +312,6 @@ a:focus-visible {
         animation: none;
     }
 }
-
-html[data-lang-loading] .hero-typewriter span {
-    clip-path: inset(0 100% 0 0);
-    animation: none;
-}
-
 
 /* Tabular Numbers Utility */
 .tabular-nums {

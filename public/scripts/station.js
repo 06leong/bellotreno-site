@@ -44,7 +44,8 @@ function goToStationBoard(stationId, stationName) {
         name: stationName,
         type: 'partenze' 
     });
-    window.location.href = `/station?${params.toString()}`;
+    const path = `/station?${params.toString()}`;
+    window.location.href = window.localePath ? window.localePath(path) : path;
 }
 
 
@@ -598,7 +599,10 @@ function _stRenderBoard(trains) {
     contentEl.querySelectorAll('.train-row').forEach(row => {
         row.addEventListener('click', function () {
             const num = this.getAttribute('data-train-number');
-            if (num) window.location.href = '/?train=' + encodeURIComponent(num.trim());
+            if (num) {
+                const path = '/?train=' + encodeURIComponent(num.trim());
+                window.location.href = window.localePath ? window.localePath(path) : path;
+            }
         });
     });
 }

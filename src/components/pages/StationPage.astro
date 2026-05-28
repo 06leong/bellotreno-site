@@ -1,33 +1,42 @@
 ---
-import BaseLayout from '../layouts/BaseLayout.astro';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getPageMeta, t, type Locale } from '../../lib/i18n';
+
+interface Props {
+    locale: Locale;
+}
+
+const { locale } = Astro.props;
+const meta = getPageMeta(locale, 'station');
 ---
 
 <BaseLayout
-    title="Partenze & Arrivi — BelloTreno"
-    description="Tabellone partenze e arrivi in tempo reale delle stazioni ferroviarie italiane. Cerca la tua stazione e consulta i treni in orario e in ritardo."
+    locale={locale}
+    title={meta.title}
+    description={meta.description}
     pageScripts={["/scripts/swiss.js", "/scripts/station.js"]}>
     <div class="w-full max-w-[850px] mx-auto px-4 flex flex-col items-center overflow-x-hidden">
         <div class="w-full text-center mt-20 md:mt-24 mb-6">
             <h1 class="text-3xl md:text-4xl font-bold text-primary mb-2 leading-normal px-2" id="stationName">--</h1>
             <div id="weatherBar" class="flex items-center justify-center gap-2 sm:gap-3 mb-4 text-xs sm:text-sm text-base-content/60 transition-opacity duration-500 opacity-0">
                 <span class="material-symbols-outlined text-[1.3rem]">device_thermostat</span>
-                <span><span data-i18n="weather_current">当前</span> <span id="weatherTemp" class="font-medium">--</span></span>
+                <span><span data-i18n="weather_current">{t(locale, 'weather_current')}</span> <span id="weatherTemp" class="font-medium">--</span></span>
                 <span class="text-base-content/20">|</span>
                 <div class="flex items-center gap-2 sm:gap-3">
-                    <span><span data-i18n="weather_am">上午</span> <span id="weatherAM">--</span></span>
-                    <span><span data-i18n="weather_pm">下午</span> <span id="weatherPM">--</span></span>
-                    <span><span data-i18n="weather_eve">晚间</span> <span id="weatherEve">--</span></span>
+                    <span><span data-i18n="weather_am">{t(locale, 'weather_am')}</span> <span id="weatherAM">--</span></span>
+                    <span><span data-i18n="weather_pm">{t(locale, 'weather_pm')}</span> <span id="weatherPM">--</span></span>
+                    <span><span data-i18n="weather_eve">{t(locale, 'weather_eve')}</span> <span id="weatherEve">--</span></span>
                 </div>
             </div>
             <div class="flex justify-center mx-auto mb-4 w-[280px] bg-base-200/50 p-1 rounded-full border border-base-200 shadow-sm backdrop-blur">
                 <button class="board-tab active flex-1 flex items-center justify-center gap-1.5 py-2 px-4 text-sm font-medium rounded-full cursor-pointer transition-all" id="btnPartenze"
                     onclick="switchBoardType('partenze')">
                     <span class="material-symbols-outlined text-[1.25rem]">departure_board</span>
-                    <span data-i18n="departures">离站</span>
+                    <span data-i18n="departures">{t(locale, 'departures')}</span>
                 </button>
                 <button class="board-tab flex-1 flex items-center justify-center gap-1.5 py-2 px-4 text-sm font-medium rounded-full cursor-pointer transition-all" id="btnArrivi" onclick="switchBoardType('arrivi')">
                     <span class="material-symbols-outlined text-[1.25rem]">directions_railway</span>
-                    <span data-i18n="arrivals">到站</span>
+                    <span data-i18n="arrivals">{t(locale, 'arrivals')}</span>
                 </button>
             </div>
         </div>
@@ -35,15 +44,15 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         <div class="w-full mb-10">
             <div class="text-center text-sm text-base-content/60 mb-3 p-2 bg-base-200/50 rounded-lg md:hidden">
                 <span class="material-symbols-outlined align-middle text-[16px]">swipe</span>
-                <span data-i18n="scroll_hint">左右滑动查看完整信息</span>
+                <span data-i18n="scroll_hint">{t(locale, 'scroll_hint')}</span>
             </div>
             <div id="loadingIndicator" class="text-center py-16 text-base-content/60">
                 <span class="loading loading-spinner loading-lg text-primary"></span>
-                <p data-i18n="loading" class="mt-4">加载中...</p>
+                <p data-i18n="loading" class="mt-4">{t(locale, 'loading')}</p>
             </div>
             <div id="errorMessage" class="text-center py-10 text-error" style="display: none;">
                 <span class="material-symbols-outlined text-[48px]">error</span>
-                <p data-i18n="load_error" class="mt-4">加载失败，请稍后重试</p>
+                <p data-i18n="load_error" class="mt-4">{t(locale, 'load_error')}</p>
             </div>
             <div id="boardContent" style="display: none;"></div>
         </div>

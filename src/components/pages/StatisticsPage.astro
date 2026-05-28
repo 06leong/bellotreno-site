@@ -1,23 +1,32 @@
 ---
-import BaseLayout from '../layouts/BaseLayout.astro';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getPageMeta, t, type Locale } from '../../lib/i18n';
+
+interface Props {
+    locale: Locale;
+}
+
+const { locale } = Astro.props;
+const meta = getPageMeta(locale, 'statistics');
 ---
 
 <BaseLayout
-    title="Statistiche ferroviarie italiane - BelloTreno"
-    description="Statistiche giornaliere dei treni italiani monitorati da BelloTreno: puntualita, ritardi, cancellazioni, categorie e andamento della circolazione."
+    locale={locale}
+    title={meta.title}
+    description={meta.description}
     pageScripts={["/scripts/statistics.js"]}>
     <Fragment slot="head"></Fragment>
 
     <main class="statistics-page container">
         <section class="statistics-header">
             <div>
-                <p class="statistics-kicker" data-i18n="statistics_kicker">ViaggiaTreno observable data</p>
-                <h1 data-i18n="statistics_title">Railway Statistics</h1>
-                <p data-i18n="statistics_subtitle">Daily operational statistics based on trains visible through ViaggiaTreno.</p>
+                <p class="statistics-kicker" data-i18n="statistics_kicker">{t(locale, 'statistics_kicker')}</p>
+                <h1 data-i18n="statistics_title">{t(locale, 'statistics_title')}</h1>
+                <p data-i18n="statistics_subtitle">{t(locale, 'statistics_subtitle')}</p>
             </div>
             <div class="statistics-controls">
                 <label class="statistics-date-field">
-                    <span data-i18n="statistics_date">Date</span>
+                    <span data-i18n="statistics_date">{t(locale, 'statistics_date')}</span>
                     <select id="statisticsDate" class="select select-bordered rounded-full"></select>
                 </label>
             </div>
@@ -28,17 +37,17 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         <section class="statistics-meta-row">
             <div class="statistics-meta-item">
                 <span class="material-symbols-outlined">update</span>
-                <span data-i18n="statistics_last_updated">Last updated</span>
+                <span data-i18n="statistics_last_updated">{t(locale, 'statistics_last_updated')}</span>
                 <strong id="statisticsLastUpdated">--</strong>
             </div>
             <div class="statistics-meta-item">
                 <span class="material-symbols-outlined">schedule</span>
-                <span data-i18n="statistics_cadence">Sampling</span>
+                <span data-i18n="statistics_cadence">{t(locale, 'statistics_cadence')}</span>
                 <strong id="statisticsCadence">--</strong>
             </div>
             <div class="statistics-meta-item">
                 <span class="material-symbols-outlined">location_on</span>
-                <span data-i18n="statistics_coverage">Coverage</span>
+                <span data-i18n="statistics_coverage">{t(locale, 'statistics_coverage')}</span>
                 <strong id="statisticsCoverage">--</strong>
             </div>
         </section>
@@ -48,25 +57,25 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         <section class="statistics-grid">
             <div class="statistics-panel">
                 <div class="statistics-panel-head">
-                    <h2 data-i18n="statistics_chart_running">Trains in circulation</h2>
+                    <h2 data-i18n="statistics_chart_running">{t(locale, 'statistics_chart_running')}</h2>
                 </div>
                 <div id="statisticsRunningChart" class="statistics-chart-box"></div>
             </div>
             <div class="statistics-panel">
                 <div class="statistics-panel-head">
-                    <h2 data-i18n="statistics_chart_regular">Regularity</h2>
+                    <h2 data-i18n="statistics_chart_regular">{t(locale, 'statistics_chart_regular')}</h2>
                 </div>
                 <div id="statisticsRegularityChart" class="statistics-chart-box"></div>
             </div>
             <div class="statistics-panel">
                 <div class="statistics-panel-head">
-                    <h2 data-i18n="statistics_chart_punctuality">Punctuality</h2>
+                    <h2 data-i18n="statistics_chart_punctuality">{t(locale, 'statistics_chart_punctuality')}</h2>
                 </div>
                 <div id="statisticsPunctualityChart" class="statistics-chart-box"></div>
             </div>
             <div class="statistics-panel">
                 <div class="statistics-panel-head">
-                    <h2 data-i18n="statistics_chart_categories">Categories</h2>
+                    <h2 data-i18n="statistics_chart_categories">{t(locale, 'statistics_chart_categories')}</h2>
                 </div>
                 <div id="statisticsCategoryChart" class="statistics-chart-box"></div>
             </div>
@@ -74,28 +83,28 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
         <section class="statistics-panel statistics-search-panel">
             <div class="statistics-panel-head statistics-query-head">
-                <h2 data-i18n="statistics_query_title">Explore statistics</h2>
+                <h2 data-i18n="statistics_query_title">{t(locale, 'statistics_query_title')}</h2>
             </div>
 
             <div class="statistics-tabs" role="tablist">
-                <button type="button" class="statistics-tab active" data-stat-view="trains" data-i18n="statistics_tab_trains">Trains</button>
-                <button type="button" class="statistics-tab" data-stat-view="stations" data-i18n="statistics_tab_stations">Stations</button>
-                <button type="button" class="statistics-tab" data-stat-view="relations" data-i18n="statistics_tab_relations">Relations</button>
-                <button type="button" class="statistics-tab" data-stat-view="ranking" data-i18n="statistics_tab_ranking">Ranking</button>
+                <button type="button" class="statistics-tab active" data-stat-view="trains" data-i18n="statistics_tab_trains">{t(locale, 'statistics_tab_trains')}</button>
+                <button type="button" class="statistics-tab" data-stat-view="stations" data-i18n="statistics_tab_stations">{t(locale, 'statistics_tab_stations')}</button>
+                <button type="button" class="statistics-tab" data-stat-view="relations" data-i18n="statistics_tab_relations">{t(locale, 'statistics_tab_relations')}</button>
+                <button type="button" class="statistics-tab" data-stat-view="ranking" data-i18n="statistics_tab_ranking">{t(locale, 'statistics_tab_ranking')}</button>
             </div>
 
             <div class="statistics-filter-grid">
-                <input id="statisticsSearch" class="input input-bordered rounded-full" type="search" autocomplete="off" data-i18n="statistics_search_placeholder" placeholder="Search train, station or relation">
+                <input id="statisticsSearch" class="input input-bordered rounded-full" type="search" autocomplete="off" data-i18n="statistics_search_placeholder" placeholder={t(locale, 'statistics_search_placeholder')}>
                 <select id="statisticsCategory" class="select select-bordered rounded-full">
-                    <option value="" data-i18n="statistics_all_categories">All categories</option>
+                    <option value="" data-i18n="statistics_all_categories">{t(locale, 'statistics_all_categories')}</option>
                 </select>
                 <select id="statisticsStatusFilter" class="select select-bordered rounded-full">
-                    <option value="" data-i18n="statistics_all_statuses">All statuses</option>
-                    <option value="regular" data-i18n="statistics_status_regular">Regular</option>
-                    <option value="delayed" data-i18n="statistics_status_delayed">Delayed</option>
-                    <option value="not_departed" data-i18n="statistics_status_not_departed">Not Departed</option>
-                    <option value="cancelled" data-i18n="statistics_status_cancelled">Cancelled</option>
-                    <option value="rescheduled" data-i18n="statistics_status_rescheduled">Rescheduled</option>
+                    <option value="" data-i18n="statistics_all_statuses">{t(locale, 'statistics_all_statuses')}</option>
+                    <option value="regular" data-i18n="statistics_status_regular">{t(locale, 'statistics_status_regular')}</option>
+                    <option value="delayed" data-i18n="statistics_status_delayed">{t(locale, 'statistics_status_delayed')}</option>
+                    <option value="not_departed" data-i18n="statistics_status_not_departed">{t(locale, 'statistics_status_not_departed')}</option>
+                    <option value="cancelled" data-i18n="statistics_status_cancelled">{t(locale, 'statistics_status_cancelled')}</option>
+                    <option value="rescheduled" data-i18n="statistics_status_rescheduled">{t(locale, 'statistics_status_rescheduled')}</option>
                 </select>
             </div>
 
@@ -109,11 +118,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             <div class="statistics-pagination">
                 <button id="statisticsPrev" class="btn btn-sm rounded-full" type="button">
                     <span class="material-symbols-outlined text-[1rem]">chevron_left</span>
-                    <span data-i18n="statistics_prev">Previous</span>
+                    <span data-i18n="statistics_prev">{t(locale, 'statistics_prev')}</span>
                 </button>
                 <span id="statisticsPageInfo">--</span>
                 <button id="statisticsNext" class="btn btn-sm rounded-full" type="button">
-                    <span data-i18n="statistics_next">Next</span>
+                    <span data-i18n="statistics_next">{t(locale, 'statistics_next')}</span>
                     <span class="material-symbols-outlined text-[1rem]">chevron_right</span>
                 </button>
             </div>
@@ -121,7 +130,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
         <section class="statistics-disclaimer">
             <span class="material-symbols-outlined">info</span>
-            <span data-i18n="statistics_disclaimer">Statistics are derived from observable ViaggiaTreno data and are not official full-network figures.</span>
+            <span data-i18n="statistics_disclaimer">{t(locale, 'statistics_disclaimer')}</span>
         </section>
     </main>
 </BaseLayout>

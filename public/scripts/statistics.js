@@ -130,7 +130,8 @@
     function buildTrainHref(item) {
         const number = item?.trainNumber || item?.train_number || item?.number || item?.train || "";
         const cleanNumber = String(number).replace(/[^\d]/g, "") || String(number).trim();
-        return cleanNumber ? `/?train=${encodeURIComponent(cleanNumber)}` : "";
+        const path = cleanNumber ? `/?train=${encodeURIComponent(cleanNumber)}` : "";
+        return path && window.localePath ? window.localePath(path) : path;
     }
 
     function buildStationHref(item) {
@@ -138,7 +139,8 @@
         const name = item?.name || item?.station || item?.stationName || item?.station_name || "";
         if (!code || !name) return "";
         const params = new URLSearchParams({ id: code, name, type: "partenze" });
-        return `/station?${params.toString()}`;
+        const path = `/station?${params.toString()}`;
+        return window.localePath ? window.localePath(path) : path;
     }
 
     function todayRome() {

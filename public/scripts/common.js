@@ -2,15 +2,64 @@
  * BelloTreno - Common UI Logic
  */
 
-window.currentLang = window.currentLang || 'zh';
+var SUPPORTED_LOCALES = ['it', 'en', 'zh'];
+var DEFAULT_LOCALE = 'it';
+
+window.currentLang = window.currentLang || DEFAULT_LOCALE;
 window.currentTheme = 'auto';
 
 // ========== Language Management ==========
 
+function isSupportedLocale(lang) {
+    return SUPPORTED_LOCALES.includes(lang);
+}
+
+function getRouteLocale() {
+    const firstSegment = window.location.pathname.split('/').filter(Boolean)[0];
+    return isSupportedLocale(firstSegment) ? firstSegment : null;
+}
+
+function setLocalePreference(lang) {
+    try {
+        localStorage.setItem('language', lang);
+    } catch (error) {
+        // Ignore storage errors; the URL remains the source of truth.
+    }
+
+    try {
+        const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+        document.cookie = `bt_locale=${encodeURIComponent(lang)}; Max-Age=31536000; Path=/; SameSite=Lax${secure}`;
+    } catch (error) {
+        // Cookie persistence is best-effort only.
+    }
+}
+
+function localePath(path, lang = window.currentLang || DEFAULT_LOCALE) {
+    const targetLang = isSupportedLocale(lang) ? lang : DEFAULT_LOCALE;
+    const url = new URL(path || '/', window.location.origin);
+
+    if (url.origin !== window.location.origin) {
+        return url.href;
+    }
+
+    const parts = url.pathname.split('/').filter(Boolean);
+    if (isSupportedLocale(parts[0])) {
+        parts.shift();
+    }
+
+    url.pathname = parts.length ? `/${targetLang}/${parts.join('/')}` : `/${targetLang}/`;
+    return `${url.pathname}${url.search}${url.hash}`;
+}
+
+function currentLocalePath(lang) {
+    return localePath(`${window.location.pathname}${window.location.search}${window.location.hash}`, lang);
+}
+
 function initLanguage() {
-    const lang = document.documentElement.getAttribute('data-lang');
+    const lang = getRouteLocale() || document.documentElement.getAttribute('data-lang') || DEFAULT_LOCALE;
     if (lang) {
         window.currentLang = lang;
+        document.documentElement.setAttribute('data-lang', lang);
     }
     updateLanguage();
 }
@@ -46,9 +95,11 @@ function updateLanguage() {
 }
 
 function changeLang(lang) {
+    if (!isSupportedLocale(lang)) return;
+
     window.currentLang = lang;
-    localStorage.setItem('language', lang);
-    updateLanguage();
+    setLocalePreference(lang);
+    window.location.href = currentLocalePath(lang);
 }
 
 // ========== Theme Management ==========
@@ -118,6 +169,7 @@ async function initVisitorCounter() {
 window.initLanguage = initLanguage;
 window.updateLanguage = updateLanguage;
 window.changeLang = changeLang;
+window.localePath = localePath;
 window.initTheme = initTheme;
 window.applyTheme = applyTheme;
 window.updateThemeDisplay = updateThemeDisplay;

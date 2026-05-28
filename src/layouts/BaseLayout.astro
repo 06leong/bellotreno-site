@@ -4,12 +4,23 @@ import Footer from '../components/Footer.astro';
 import BackToTop from '../components/BackToTop.astro';
 import { ClientRouter } from 'astro:transitions';
 import { Font } from 'astro:assets';
+import {
+    DEFAULT_LOCALE,
+    LOCALES,
+    alternatePath,
+    htmlLang,
+    localeFromPath,
+    normalizeLocale,
+    ogLocale,
+    type Locale,
+} from '../lib/i18n';
 import '../styles/global.css';
 
 interface Props {
     title: string;
     description?: string;
     pageScripts?: string[];
+    locale?: Locale;
 }
 
 const SITE_URL = 'https://bellotreno.org';
@@ -29,20 +40,22 @@ const ENABLE_UMAMI = Boolean(UMAMI_SCRIPT_URL && UMAMI_WEBSITE_ID);
 const {
     title,
     pageScripts = [],
+    locale: localeProp,
     description = 'BelloTreno — Orari e stato in tempo reale dei treni italiani. Frecciarossa, Intercity, Regionali e molto altro.',
 } = Astro.props;
+const locale = normalizeLocale(localeProp ?? Astro.currentLocale ?? localeFromPath(Astro.url.pathname) ?? DEFAULT_LOCALE);
+const currentPathWithSearch = `${Astro.url.pathname}${Astro.url.search}`;
 
 // Canonical URL: origine + percorso corrente (senza query string / hash)
 const canonicalURL = new URL(Astro.url.pathname, SITE_URL).href;
+const alternateURLs = LOCALES.map((targetLocale) => ({
+    locale: targetLocale,
+    href: new URL(alternatePath(Astro.url.pathname, targetLocale), SITE_URL).href,
+}));
 ---
 
 <!DOCTYPE html>
-<!--
-  lang="it" è il valore statico (lingua principale per i crawler).
-  theme-init.js sovrascrive l'attributo lang in base alla preferenza
-  salvata dell'utente (localStorage) prima che la pagina venga visualizzata.
--->
-<html lang="it">
+<html lang={htmlLang[locale]} data-lang={locale}>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -63,11 +76,11 @@ const canonicalURL = new URL(Astro.url.pathname, SITE_URL).href;
     <meta name="description" content={description}>
     <link rel="canonical" href={canonicalURL}>
 
-    <!-- ===== hreflang: stesso URL serve tutte le lingue ===== -->
-    <link rel="alternate" hreflang="it"      href={canonicalURL}>
-    <link rel="alternate" hreflang="en"      href={canonicalURL}>
-    <link rel="alternate" hreflang="zh-Hans" href={canonicalURL}>
-    <link rel="alternate" hreflang="x-default" href={canonicalURL}>
+    <!-- ===== hreflang: one static URL per language ===== -->
+    {alternateURLs.map((alternate) => (
+        <link rel="alternate" hreflang={alternate.locale === 'zh' ? 'zh-Hans' : alternate.locale} href={alternate.href}>
+    ))}
+    <link rel="alternate" hreflang="x-default" href={new URL('/it/', SITE_URL).href}>
 
     <!-- ===== Open Graph ===== -->
     <meta property="og:type"        content="website">
@@ -76,9 +89,10 @@ const canonicalURL = new URL(Astro.url.pathname, SITE_URL).href;
     <meta property="og:title"       content={title}>
     <meta property="og:description" content={description}>
     <meta property="og:image"       content={OG_IMAGE}>
-    <meta property="og:locale"      content="it_IT">
-    <meta property="og:locale:alternate" content="en_GB">
-    <meta property="og:locale:alternate" content="zh_CN">
+    <meta property="og:locale"      content={ogLocale[locale]}>
+    {LOCALES.filter((targetLocale) => targetLocale !== locale).map((targetLocale) => (
+        <meta property="og:locale:alternate" content={ogLocale[targetLocale]}>
+    ))}
 
     <!-- ===== Twitter Card ===== -->
     <meta name="twitter:card"        content="summary_large_image">
@@ -112,6 +126,7 @@ const canonicalURL = new URL(Astro.url.pathname, SITE_URL).href;
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 
+    <script is:inline set:html={`window.currentLang=${JSON.stringify(locale)};`}></script>
     <script is:inline src={withBuildVersion("/scripts/theme-init.js")}></script>
     {ENABLE_UMAMI && (
         <script
@@ -130,10 +145,10 @@ const canonicalURL = new URL(Astro.url.pathname, SITE_URL).href;
 <body>
     <div class="aurora-bg" transition:persist="aurora-bg" aria-hidden="true"></div>
     <div style="position: relative; z-index: 1; flex: 1; display: flex; flex-direction: column;">
-        <Navbar />
+        <Navbar locale={locale} currentPath={currentPathWithSearch} />
         <BackToTop />
         <slot />
-        <Footer />
+        <Footer locale={locale} />
     </div>
 
     <script is:inline src={withBuildVersion("/scripts/config.js")}></script>

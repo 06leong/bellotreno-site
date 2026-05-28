@@ -181,7 +181,7 @@ window.onLanguageChanged = function () {
 
 
 function goHome() {
-    window.location.href = '/';
+    window.location.href = window.localePath ? window.localePath('/') : '/';
 }
 
 

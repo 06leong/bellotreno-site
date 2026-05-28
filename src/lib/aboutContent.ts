@@ -1,70 +1,6 @@
----
-import BaseLayout from '../layouts/BaseLayout.astro';
----
+import type { Locale } from './i18n';
 
-<BaseLayout
-    title="About — BelloTreno"
-    description="BelloTreno è un progetto amatoriale per il monitoraggio in tempo reale dei treni italiani. Dati forniti da ViaggiaTreno (Trenitalia / RFI).">
-    <div class="w-full max-w-4xl mx-auto px-4 py-8 md:py-12 mt-16 md:mt-24">
-        <div class="about-card prose max-w-none bg-base-100/65 backdrop-blur-3xl p-8 md:p-12 rounded-[2rem] shadow-glass border border-base-content/10 mx-auto transition-all duration-300 hover:bg-base-100/75 shadow-sm">
-            <h1 data-i18n="about_title" class="text-primary mb-8 font-bold">关于 BelloTreno</h1>
-
-            <div data-i18n-section="intro" class="text-base-content/80 leading-relaxed">
-                <p>BelloTreno 是一个由铁路爱好者制作的个人项目，旨在更清晰地展示意大利铁路列车运行、车站到发、出行公告、跨境编组和每日运行统计。相比 <a href="https://developers.deutschebahn.com/db-api-marketplace/apis/" target="_blank" class="text-primary no-underline hover:underline font-medium">德国铁路 DB 开发者门户</a>、<a href="https://data.sncf.com/" target="_blank" class="text-primary no-underline hover:underline font-medium">法国铁路 SNCF 开放数据</a> 和 <a href="https://opentransportdata.swiss/en/" target="_blank" class="text-primary no-underline hover:underline font-medium">瑞士 OpenTransportData.swiss</a>，意大利铁路数据的开放程度仍然有限；本站也希望以可视化方式展示这些公开数据的价值与限制。</p>
-            </div>
-
-            <h2 data-i18n="about_roadmap" class="text-base-content mt-10 mb-6 font-semibold">Roadmap</h2>
-            <div data-i18n-section="roadmap" class="text-base-content/80 leading-relaxed">
-                <p class="font-semibold text-base-content mb-3">目前仍需处理的问题：</p>
-                <ul class="list-disc pl-6 space-y-2 mb-6">
-                    <li>由于 API 问题，需修复 Bologna Centrale/AV 站台显示错误的情况。</li>
-                    <li>部分地方铁路公司（SAD、TT、TFT、TUA、EAV、FUC 等）未找到对应 API，需要 RFI 信息支持。</li>
-                </ul>
-                <p class="font-semibold text-base-content mb-3">未来发展方向：</p>
-                <ul class="list-disc pl-6 space-y-2">
-                    <li>继续完善铁路运行统计，提高车站、关系和车次聚合的可解释性。</li>
-                    <li>扩大可观测数据覆盖，尽量补全地方铁路和跨境列车信息。</li>
-                    <li>持续改进瑞士跨境列车编组、站台扇区和车辆明细显示。</li>
-                    <li>优化移动端和 PWA 体验，让常用查询在手机上更稳定易读。</li>
-                </ul>
-            </div>
-
-            <h2 data-i18n="about_technical" class="text-base-content mt-10 mb-6 font-semibold">技术参考</h2>
-            <div data-i18n-section="technical" class="text-base-content/80 leading-relaxed">
-                <p>特别感谢以下开源项目、博客及社区探索者，他们的工作是本项目得以诞生的基石：</p>
-                <ul class="list-disc pl-6 space-y-2 mt-4">
-                    <li><a href="https://github.com/MarcoBuster/railway-opendata" target="_blank" class="text-primary no-underline hover:underline font-medium">MarcoBuster / railway-opendata</a> 和 <a href="https://github.com/roughconsensusandrunningcode/TrainMonitor/wiki/API-del-sistema-Viaggiatreno" target="_blank" class="text-primary no-underline hover:underline font-medium">roughconsensusandrunningcode / TrainMonitor</a> 等项目提供了详尽的 API 说明和思路。</li>
-                    <li>关于开放数据类问题的一些博客：<a href="https://medium.com/@tert6996/open-data-ed-rfi-che-disastro-1d1b631aabef" target="_blank" class="text-primary no-underline hover:underline font-medium">Open Data ed RFI: Che disastro.</a> 与 <a href="https://medium.com/@albigiu/trenitalia-shock-non-crederete-mai-a-queste-api-painful-14433096502c" target="_blank" class="text-primary no-underline hover:underline font-medium">+++TRENITALIA SHOCK+++ NON crederete MAI a queste API painful</a>。</li>
-                </ul>
-            </div>
-
-            <h2 data-i18n="about_official" class="text-base-content mt-10 mb-6 font-semibold">铁路官方信息</h2>
-            <div data-i18n-section="official" class="text-base-content/80 leading-relaxed">
-                <p class="mb-4">如需获取官方原始信息或查询不受本站支持的列车：</p>
-                <p class="font-semibold text-base-content mt-6 mb-3">查询列车实时信息（通过列车号码）：</p>
-                <ul class="list-disc pl-6 space-y-2">
-                    <li>Trenitalia: <a href="http://www.viaggiatreno.it/infomobilita/index.jsp" target="_blank" class="text-primary no-underline hover:underline font-medium">ViaggiaTreno</a> 或 Trenitalia app</li>
-                    <li>Italo: <a href="https://italoinviaggio.italotreno.com" target="_blank" class="text-primary no-underline hover:underline font-medium">Italo in Viaggio</a></li>
-                    <li>SNCF: <a href="https://www.sncf-voyageurs.com/en/travel-with-us/booking-and-itinerary/search-by-train-number/" target="_blank" class="text-primary no-underline hover:underline font-medium">SNCF Train Search</a></li>
-                    <li>ÖBB: <a href="https://fahrplan.oebb.at/webapp/" target="_blank" class="text-primary no-underline hover:underline font-medium">ÖBB Fahrplan</a></li>
-                </ul>
-                <p class="font-semibold text-base-content mt-6 mb-3">意大利车站（FS）实时信息：</p>
-                <ul class="list-disc pl-6 space-y-2">
-                    <li>RFI 实时监控：<a href="https://www.rfi.it/it/stazioni/pagine-stazioni/servizi-di-qualita/informazioni-al-pubblico/monitor-arrivi-partenze-live.html" target="_blank" class="text-primary no-underline hover:underline font-medium">Monitor Arrivi/Partenze Live</a></li>
-                    <li>车站时刻表：<a href="https://www.rfi.it/it/stazioni/pagine-stazioni/servizi-di-qualita/informazioni-al-pubblico/quadri-orario-on-line.html" target="_blank" class="text-primary no-underline hover:underline font-medium">Quadri Orario Online</a></li>
-                </ul>
-            </div>
-
-            <h2 data-i18n="about_disclaimer" class="text-base-content mt-10 mb-6 font-semibold">免责声明与版权</h2>
-            <div data-i18n-section="disclaimer" class="text-base-content/80 leading-relaxed">
-                <p class="mb-4">本站仅为个人研究及铁路爱好者交流所用，所有数据均来源于公开接口，本站不保证准确性与实时性。在罢工、天气异常等特殊情况下，请务必以火车站站台实时大屏及官方信息为准。目前仅支持 ViaggiaTreno 上可查询的列车。</p>
-                <p>如有任何问题或建议，欢迎通过邮件 <a href="mailto:ferrovie@bellotreno.org" class="text-primary no-underline hover:underline font-medium">ferrovie@bellotreno.org</a> 联系我。</p>
-            </div>
-        </div>
-    </div>
-
-    <script is:inline data-astro-rerun slot="scripts">
-        const aboutContent = {
+export const aboutContent = {
             zh: {
                 intro: `<p>BelloTreno 是一个由铁路爱好者制作的个人项目，旨在更清晰地展示意大利铁路列车运行、车站到发、出行公告、跨境编组和每日运行统计。相比 <a href="https://developers.deutschebahn.com/db-api-marketplace/apis/" target="_blank" class="text-primary no-underline hover:underline font-medium">德国铁路 DB 开发者门户</a>、<a href="https://data.sncf.com/" target="_blank" class="text-primary no-underline hover:underline font-medium">法国铁路 SNCF 开放数据</a> 和 <a href="https://opentransportdata.swiss/en/" target="_blank" class="text-primary no-underline hover:underline font-medium">瑞士 OpenTransportData.swiss</a>，意大利铁路数据的开放程度仍然有限；本站也希望以可视化方式展示这些公开数据的价值与限制。</p>`,
                 roadmap: `<p class="font-semibold text-base-content mb-3">目前仍需处理的问题：</p><ul class="list-disc pl-6 space-y-2 mb-6"><li>由于 API 问题，需修复 Bologna Centrale/AV 站台显示错误的情况。</li><li>部分地方铁路公司（SAD、TT、TFT、TUA、EAV、FUC 等）未找到对应 API，需要 RFI 信息支持。</li></ul><p class="font-semibold text-base-content mb-3">未来发展方向：</p><ul class="list-disc pl-6 space-y-2"><li>继续完善铁路运行统计，提高车站、关系和车次聚合的可解释性。</li><li>扩大可观测数据覆盖，尽量补全地方铁路和跨境列车信息。</li><li>持续改进瑞士跨境列车编组、站台扇区和车辆明细显示。</li><li>优化移动端和 PWA 体验，让常用查询在手机上更稳定易读。</li></ul>`,
@@ -86,15 +22,4 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                 official: `<p class="mb-4">Per informazioni ufficiali o per interrogare treni non supportati da questo sito:</p><p class="font-semibold text-base-content mt-6 mb-3">Informazioni sui treni in tempo reale (per numero di treno):</p><ul class="list-disc pl-6 space-y-2"><li>Trenitalia: <a href="http://www.viaggiatreno.it/infomobilita/index.jsp" target="_blank" class="text-primary no-underline hover:underline font-medium">ViaggiaTreno</a> o app Trenitalia</li><li>Italo: <a href="https://italoinviaggio.italotreno.com" target="_blank" class="text-primary no-underline hover:underline font-medium">Italo in Viaggio</a></li><li>SNCF: <a href="https://www.sncf-voyageurs.com/en/travel-with-us/booking-and-itinerary/search-by-train-number/" target="_blank" class="text-primary no-underline hover:underline font-medium">Ricerca treni SNCF</a></li><li>ÖBB: <a href="https://fahrplan.oebb.at/webapp/" target="_blank" class="text-primary no-underline hover:underline font-medium">ÖBB Fahrplan</a></li></ul><p class="font-semibold text-base-content mt-6 mb-3">Informazioni in tempo reale sulle stazioni italiane (FS):</p><ul class="list-disc pl-6 space-y-2"><li>Monitoraggio in tempo reale RFI: <a href="https://www.rfi.it/it/stazioni/pagine-stazioni/servizi-di-qualita/informazioni-al-pubblico/monitor-arrivi-partenze-live.html" target="_blank" class="text-primary no-underline hover:underline font-medium">Monitor Arrivi/Partenze Live</a></li><li>Tabella orari stazione: <a href="https://www.rfi.it/it/stazioni/pagine-stazioni/servizi-di-qualita/informazioni-al-pubblico/quadri-orario-on-line.html" target="_blank" class="text-primary no-underline hover:underline font-medium">Quadri Orario Online</a></li></ul>`,
                 disclaimer: `<p class="mb-4">Questo sito è solo per ricerca personale e comunicazione tra appassionati di ferrovie. Tutti i dati provengono da interfacce pubbliche e questo sito non garantisce l'accuratezza o la disponibilità in tempo reale. In circostanze speciali come scioperi o condizioni meteorologiche estreme, si prega di fare affidamento sui display delle piattaforme delle stazioni e sulle informazioni ufficiali. Attualmente sono supportati solo i treni interrogabili su ViaggiaTreno.</p><p>Per qualsiasi domanda o suggerimento, contattami tramite e-mail: <a href="mailto:ferrovie@bellotreno.org" class="text-primary no-underline hover:underline font-medium">ferrovie@bellotreno.org</a>.</p>`
             }
-        };
-
-        window.onLanguageChanged = function () {
-            document.querySelectorAll('[data-i18n-section]').forEach(el => {
-                const section = el.getAttribute('data-i18n-section');
-                if (aboutContent[window.currentLang][section]) {
-                    el.innerHTML = aboutContent[window.currentLang][section];
-                }
-            });
-        };
-    </script>
-</BaseLayout>
+        } as const satisfies Record<Locale, Record<'intro' | 'roadmap' | 'technical' | 'official' | 'disclaimer', string>>;

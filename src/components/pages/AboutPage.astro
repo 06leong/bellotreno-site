@@ -1,0 +1,38 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { aboutContent } from '../../lib/aboutContent';
+import { getPageMeta, t, type Locale } from '../../lib/i18n';
+
+interface Props {
+    locale: Locale;
+}
+
+const { locale } = Astro.props;
+const meta = getPageMeta(locale, 'about');
+const content = aboutContent[locale];
+---
+
+<BaseLayout
+    locale={locale}
+    title={meta.title}
+    description={meta.description}>
+    <div class="w-full max-w-4xl mx-auto px-4 py-8 md:py-12 mt-16 md:mt-24">
+        <div class="about-card prose max-w-none bg-base-100/65 backdrop-blur-3xl p-8 md:p-12 rounded-[2rem] shadow-glass border border-base-content/10 mx-auto transition-all duration-300 hover:bg-base-100/75 shadow-sm">
+            <h1 data-i18n="about_title" class="text-primary mb-8 font-bold">{t(locale, 'about_title')}</h1>
+
+            <div data-i18n-section="intro" class="text-base-content/80 leading-relaxed" set:html={content.intro} />
+
+            <h2 data-i18n="about_roadmap" class="text-base-content mt-10 mb-6 font-semibold">{t(locale, 'about_roadmap')}</h2>
+            <div data-i18n-section="roadmap" class="text-base-content/80 leading-relaxed" set:html={content.roadmap} />
+
+            <h2 data-i18n="about_technical" class="text-base-content mt-10 mb-6 font-semibold">{t(locale, 'about_technical')}</h2>
+            <div data-i18n-section="technical" class="text-base-content/80 leading-relaxed" set:html={content.technical} />
+
+            <h2 data-i18n="about_official" class="text-base-content mt-10 mb-6 font-semibold">{t(locale, 'about_official')}</h2>
+            <div data-i18n-section="official" class="text-base-content/80 leading-relaxed" set:html={content.official} />
+
+            <h2 data-i18n="about_disclaimer" class="text-base-content mt-10 mb-6 font-semibold">{t(locale, 'about_disclaimer')}</h2>
+            <div data-i18n-section="disclaimer" class="text-base-content/80 leading-relaxed" set:html={content.disclaimer} />
+        </div>
+    </div>
+</BaseLayout>

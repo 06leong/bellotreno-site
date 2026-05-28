@@ -1,6 +1,14 @@
-# Redirect old .html URLs to clean Astro URLs
+# Root language negotiation is handled by functions/index.js.
 /index.html / 301
-/about.html /about 301
-/infomobilita.html /infomobilita 301
-/statistics.html /statistics 301
-/real_station.html /station 301
+
+# Legacy unprefixed URLs now enter the default Italian route.
+/about /it/about/ 302
+/infomobilita /it/infomobilita/ 302
+/statistics /it/statistics/ 302
+/station /it/station/ 302
+
+# Redirect old .html URLs to localized Astro URLs.
+/about.html /it/about/ 301
+/infomobilita.html /it/infomobilita/ 301
+/statistics.html /it/statistics/ 301
+/real_station.html /it/station/ 301

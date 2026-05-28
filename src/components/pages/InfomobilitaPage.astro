@@ -1,0 +1,84 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getPageMeta, t, type Locale } from '../../lib/i18n';
+
+interface Props {
+    locale: Locale;
+}
+
+const { locale } = Astro.props;
+const meta = getPageMeta(locale, 'infomobilita');
+
+const regions = [
+    ['all', 'region_all'],
+    ['abruzzo', 'region_abruzzo'],
+    ['basilicata', 'region_basilicata'],
+    ['calabria', 'region_calabria'],
+    ['campania', 'region_campania'],
+    ['emilia_romagna', 'region_emilia_romagna'],
+    ['friuli_venezia_giulia', 'region_friuli_venezia_giulia'],
+    ['lazio', 'region_lazio'],
+    ['liguria', 'region_liguria'],
+    ['lombardia', 'region_lombardia'],
+    ['marche', 'region_marche'],
+    ['molise', 'region_molise'],
+    ['piemonte', 'region_piemonte'],
+    ['puglia', 'region_puglia'],
+    ['sardegna', 'region_sardegna'],
+    ['sicilia', 'region_sicilia'],
+    ['toscana', 'region_toscana'],
+    ['trentino_alto_adige', 'region_trentino_alto_adige'],
+    ['umbria', 'region_umbria'],
+    ['valle_d_aosta', 'region_valle_d_aosta'],
+    ['veneto', 'region_veneto'],
+] as const;
+---
+
+<BaseLayout
+    locale={locale}
+    title={meta.title}
+    description={meta.description}
+    pageScripts={["/scripts/infomobilita.js"]}>
+    <Fragment slot="head"></Fragment>
+
+    <div class="container">
+        <div class="text-center mt-10 mb-6">
+            <h1 class="text-[2.5rem] font-bold mb-6 text-primary"
+                data-i18n="nav_infomobilita">{t(locale, 'nav_infomobilita')}</h1>
+
+            <div class="infomobilita-controls flex flex-col items-center gap-6">
+                <div class="flex justify-center mx-auto w-[480px] max-w-full bg-base-200/50 p-1 rounded-full border border-base-200 shadow-sm backdrop-blur">
+                    <button id="modeUpdatesBtn" class="board-tab active flex-1 flex items-center justify-center gap-1.5 py-2 px-4 text-sm font-medium rounded-full cursor-pointer transition-all"
+                        onclick="switchInfoMode('updates')">
+                        <span class="material-symbols-outlined text-[1.25rem]">dynamic_feed</span>
+                        <span data-i18n="info_updates">{t(locale, 'info_updates')}</span>
+                    </button>
+                    <button id="modeNoticesBtn" class="board-tab flex-1 flex items-center justify-center gap-1.5 py-2 px-4 text-sm font-medium rounded-full cursor-pointer transition-all"
+                        onclick="switchInfoMode('notices')">
+                        <span class="material-symbols-outlined text-[1.25rem]">campaign</span>
+                        <span data-i18n="info_notices">{t(locale, 'info_notices')}</span>
+                    </button>
+                </div>
+
+                <div class="dropdown w-[480px] max-w-full mx-auto" id="regionDropdown">
+                    <div tabindex="0" role="button" class="btn btn-lg w-full bg-base-100/65 backdrop-blur-3xl shadow-glass custom-region-dropdown focus:outline-none focus:border-primary transition-all font-medium rounded-full flex justify-center hover:bg-base-100/75 h-14 min-h-[3.5rem]">
+                        <span id="regionBtnText" data-i18n="region_all" class="text-[1.125rem]">{t(locale, 'region_all')}</span>
+                        <span class="material-symbols-outlined absolute right-5 opacity-70">expand_more</span>
+                    </div>
+                    <ul tabindex="0" class="dropdown-content z-[2] menu p-2 shadow-glass bg-base-100/80 backdrop-blur-3xl border border-base-content/10 rounded-box w-full max-h-64 flex-nowrap overflow-y-auto mt-2">
+                        {regions.map(([value, key]) => (
+                            <li><a class="justify-center text-center py-3 text-base" data-i18n={key} onclick={`changeDropdownRegion('${value}', this.textContent, '${key}')`}>{t(locale, key)}</a></li>
+                        ))}
+                    </ul>
+                </div>
+            </div>
+
+            <div id="rssResults" class="rss-container mt-10 text-left">
+                <div id="infoLoading" style="text-align: center; padding: 40px; display: none;">
+                    <span class="loading loading-spinner loading-lg text-primary"></span>
+                </div>
+                <div id="rssContent"></div>
+            </div>
+        </div>
+    </div>
+</BaseLayout>

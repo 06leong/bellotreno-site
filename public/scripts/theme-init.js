@@ -12,16 +12,30 @@
     }
 
     function readLang() {
+        var routeLang = readRouteLang();
+        if (routeLang) return routeLang;
+
         try {
             var savedLang = localStorage.getItem('language');
-            if (savedLang) {
+            if (isSupportedLang(savedLang)) {
                 return savedLang;
             }
         } catch (error) {
             // Ignore storage errors and fall back to the browser language.
         }
         var bl = navigator.language.toLowerCase();
-        return bl.startsWith('zh') ? 'zh' : bl.startsWith('it') ? 'it' : 'en';
+        if (bl.startsWith('zh')) return 'zh';
+        if (bl.startsWith('en')) return 'en';
+        return 'it';
+    }
+
+    function isSupportedLang(lang) {
+        return lang === 'zh' || lang === 'en' || lang === 'it';
+    }
+
+    function readRouteLang() {
+        var firstSegment = window.location.pathname.split('/').filter(Boolean)[0];
+        return isSupportedLang(firstSegment) ? firstSegment : null;
     }
 
     function applyPreferences(targetRoot) {
@@ -34,11 +48,7 @@
         targetRoot.setAttribute('data-theme', theme);
         targetRoot.setAttribute('data-lang', lang);
         targetRoot.lang = langMap[lang] || lang;
-        if (lang !== 'zh') {
-            targetRoot.setAttribute('data-lang-loading', '');
-        } else {
-            targetRoot.removeAttribute('data-lang-loading');
-        }
+        targetRoot.removeAttribute('data-lang-loading');
         window.currentLang = lang;
     }
 
