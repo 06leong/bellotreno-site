@@ -36,28 +36,85 @@ const REGIONS = {
 let currentMode = 'updates';
 let currentRegion = 'all';
 let currentFetchController = null;
+let refreshScheduled = false;
 
+function sanitizeInfoMode(mode) {
+    return mode === 'notices' ? 'notices' : 'updates';
+}
 
-document.addEventListener('astro:page-load', () => {
-    fetchRSS();
-});
+function sanitizeRegion(region) {
+    return Object.prototype.hasOwnProperty.call(REGIONS, region) ? region : 'all';
+}
 
-window.onLanguageChanged = () => {
-    fetchRSS();
-};
+function regionI18nKey(region) {
+    return `region_${sanitizeRegion(region)}`;
+}
 
-window.changeDropdownRegion = function (val, text, i18nKey) {
+function updateRegionButton() {
     const btnText = document.getElementById('regionBtnText');
-    if (btnText) {
-        btnText.textContent = text;
-        if (i18nKey) {
-            btnText.setAttribute('data-i18n', i18nKey);
-        } else {
-            btnText.removeAttribute('data-i18n');
-        }
+    if (!btnText) return;
+
+    const i18nKey = regionI18nKey(currentRegion);
+    btnText.setAttribute('data-i18n', i18nKey);
+    btnText.textContent = getI18n(i18nKey);
+}
+
+function updateModeButtons() {
+    const updatesBtn = document.getElementById('modeUpdatesBtn');
+    const noticesBtn = document.getElementById('modeNoticesBtn');
+    if (updatesBtn) updatesBtn.classList.toggle('active', currentMode === 'updates');
+    if (noticesBtn) noticesBtn.classList.toggle('active', currentMode === 'notices');
+}
+
+function syncInfoStateFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    currentMode = sanitizeInfoMode(params.get('mode'));
+    currentRegion = sanitizeRegion(params.get('region'));
+    updateModeButtons();
+    updateRegionButton();
+}
+
+function replaceInfoStateUrl() {
+    if (!window.history?.replaceState) return;
+
+    const url = new URL(window.location.href);
+    if (currentMode === 'updates') {
+        url.searchParams.delete('mode');
+    } else {
+        url.searchParams.set('mode', currentMode);
     }
 
-    currentRegion = val;
+    if (currentRegion === 'all') {
+        url.searchParams.delete('region');
+    } else {
+        url.searchParams.set('region', currentRegion);
+    }
+
+    const nextPath = `${url.pathname}${url.search}${url.hash}`;
+    const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (nextPath !== currentPath) {
+        window.history.replaceState({}, document.title, nextPath);
+    }
+}
+
+function refreshInfoFromCurrentUrl() {
+    if (refreshScheduled) return;
+    refreshScheduled = true;
+    queueMicrotask(() => {
+        refreshScheduled = false;
+        syncInfoStateFromUrl();
+        fetchRSS();
+    });
+}
+
+document.addEventListener('astro:page-load', refreshInfoFromCurrentUrl);
+window.addEventListener('popstate', refreshInfoFromCurrentUrl);
+window.onLanguageChanged = refreshInfoFromCurrentUrl;
+
+window.changeDropdownRegion = function (val, text, i18nKey) {
+    currentRegion = sanitizeRegion(val);
+    updateRegionButton();
+    replaceInfoStateUrl();
     fetchRSS();
 
     // Close the dropdown cleanly
@@ -67,13 +124,11 @@ window.changeDropdownRegion = function (val, text, i18nKey) {
 };
 
 function switchInfoMode(mode) {
+    mode = sanitizeInfoMode(mode);
     if (currentMode === mode) return;
     currentMode = mode;
-
-
-    document.getElementById('modeUpdatesBtn').classList.toggle('active', mode === 'updates');
-    document.getElementById('modeNoticesBtn').classList.toggle('active', mode === 'notices');
-
+    updateModeButtons();
+    replaceInfoStateUrl();
     fetchRSS();
 }
 
