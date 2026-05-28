@@ -100,6 +100,31 @@ function getCategoryLogoClass(src) {
         : 'category-logo';
 }
 
+function resolvePublicAssetPath(src) {
+    const value = String(src || '').trim();
+    if (!value) return '';
+    return /^(?:[a-z][a-z0-9+.-]*:|\/)/i.test(value) ? value : `/${value}`;
+}
+
+function replaceCurrentTrainUrl(trainNumber, originID, timestamp) {
+    const cleanTrainNumber = String(trainNumber || '').replace(/\D+/g, '').trim();
+    const cleanOriginID = String(originID || '').trim();
+    const cleanTimestamp = String(timestamp || '').trim();
+    if (!cleanTrainNumber || !cleanOriginID || !cleanTimestamp || !window.history?.replaceState) return;
+
+    const query = new URLSearchParams({
+        train: cleanTrainNumber,
+        origin: cleanOriginID,
+        ts: cleanTimestamp
+    });
+    const targetPath = `/?${query.toString()}`;
+    const localizedPath = window.localePath ? window.localePath(targetPath) : targetPath;
+    const currentPath = `${window.location.pathname}${window.location.search}`;
+    if (currentPath !== localizedPath) {
+        window.history.replaceState({}, document.title, localizedPath);
+    }
+}
+
 async function fetchStatistiche() {
     try {
         const res = await fetch(API_BASE + '/statistiche/0');
@@ -846,6 +871,7 @@ async function fetchDetails(triple) {
         const data = await res.json();
         currentTrainData = data;
         currentTrainCategory = resolveTrainCategory(data);
+        replaceCurrentTrainUrl(tNum, originID, ts);
         render(data);
         fetchTrafficInformation(data);
         loadSwissFormation(data, triple, requestSeq);
@@ -1018,6 +1044,8 @@ function render(data) {
         categoryImage = "pic/Tilo.png";
     }
 
+    const categoryImageSrc = resolvePublicAssetPath(categoryImage);
+
     const routeDisplay = resolveRouteDisplay(data, timelineStops);
     const displayOrigin = routeDisplay.origin;
     const displayDest = routeDisplay.destination;
@@ -1051,10 +1079,10 @@ function render(data) {
             style: { color: 'inherit', textDecoration: 'none' }
         })
         : document.createTextNode(operator);
-    const categoryNode = categoryImage
+    const categoryNode = categoryImageSrc
         ? createNode('img', {
-            className: getCategoryLogoClass(categoryImage),
-            attrs: { src: categoryImage, alt: category },
+            className: getCategoryLogoClass(categoryImageSrc),
+            attrs: { src: categoryImageSrc, alt: category },
             style: { height: '1.3rem', verticalAlign: 'middle', marginLeft: '8px' }
         })
         : document.createTextNode(category);
@@ -1899,7 +1927,8 @@ document.addEventListener('astro:page-load', () => {
 
 // astro:page-load 触发时 DOM 已完整就绪，无需轮询重试
 document.addEventListener('astro:page-load', () => {
-    const trainParam = new URLSearchParams(window.location.search).get('train');
+    const params = new URLSearchParams(window.location.search);
+    const trainParam = params.get('train');
     if (!trainParam) return;
     const trainNumber = trainParam.trim();
     const trainInput = document.getElementById('trainSearch');
@@ -1907,11 +1936,12 @@ document.addEventListener('astro:page-load', () => {
     trainInput.value = trainNumber;
     // 短暂延迟确保 common.js 的 astro:page-load 回调（语言初始化）已先执行
     setTimeout(() => {
+        const originParam = params.get('origin');
+        const timestampParam = params.get('ts');
+        if (originParam && timestampParam) {
+            fetchDetails(`${trainNumber.replace(/\D+/g, '').trim()}-${originParam.trim()}-${timestampParam.trim()}`);
+            return;
+        }
         startSearch(trainNumber);
-        setTimeout(() => {
-            if (window.history && window.history.replaceState) {
-                window.history.replaceState({}, document.title, window.location.pathname);
-            }
-        }, 300);
     }, 200);
 });
