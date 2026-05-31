@@ -1,14 +1,14 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue';
-import { useAutoAnimate } from '@formkit/auto-animate/vue';
 import { motion } from 'motion-v';
 import {
+  DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuPortal,
-  DropdownMenuRoot,
   DropdownMenuTrigger,
-} from 'reka-ui';
+} from '@/components/ui/dropdown-menu';
+import { Button } from '@/components/ui/button';
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 
 const navItems = [
   { href: '/statistics', key: 'nav_statistics', fallback: 'Statistics' },
@@ -68,7 +68,6 @@ const currentLang = ref('zh');
 const currentTheme = ref('auto');
 const menuOpen = ref(false);
 const pathname = ref('/');
-const [mobileMenu] = useAutoAnimate({ duration: 160, easing: 'ease-out' });
 
 const activeThemeIcon = computed(() => {
   const option = themeOptions.find((item) => item.value === currentTheme.value);
@@ -139,110 +138,122 @@ onUnmounted(() => {
     </a>
 
     <div class="bt-nav-desktop" aria-label="Primary navigation">
-      <a
+      <Button
         v-for="item in navItems"
         :key="item.href"
+        as="a"
         :href="item.href"
+        variant="ghost"
+        size="sm"
         class="bt-nav-link"
         :class="{ 'bt-nav-link-active': isActive(item.href) }"
       >
         {{ tr(item.key, item.fallback) }}
-      </a>
+      </Button>
 
-      <DropdownMenuRoot>
-        <DropdownMenuTrigger class="bt-icon-button" :aria-label="tr('nav_language', 'Language')">
-          <span class="material-symbols-outlined">language</span>
-          <span class="bt-icon-button-label">{{ languageOptions.find((item) => item.value === currentLang)?.short || 'CN' }}</span>
+      <DropdownMenu>
+        <DropdownMenuTrigger as-child>
+          <Button variant="ghost" size="sm" class="bt-icon-button" :aria-label="tr('nav_language', 'Language')">
+            <span class="material-symbols-outlined">language</span>
+            <span class="bt-icon-button-label">{{ languageOptions.find((item) => item.value === currentLang)?.short || 'CN' }}</span>
+          </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuPortal>
-          <DropdownMenuContent class="bt-menu-content" :side-offset="10" align="end">
-            <DropdownMenuItem
-              v-for="item in languageOptions"
-              :key="item.value"
-              class="bt-menu-item"
-              :class="{ 'bt-menu-item-active': item.value === currentLang }"
-              @select="changeLanguage(item.value)"
-            >
-              {{ item.label }}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenuPortal>
-      </DropdownMenuRoot>
+        <DropdownMenuContent class="bt-menu-content" :side-offset="10" align="end">
+          <DropdownMenuItem
+            v-for="item in languageOptions"
+            :key="item.value"
+            class="bt-menu-item"
+            :class="{ 'bt-menu-item-active': item.value === currentLang }"
+            @select="changeLanguage(item.value)"
+          >
+            {{ item.label }}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
-      <DropdownMenuRoot>
-        <DropdownMenuTrigger class="bt-icon-button" :aria-label="tr('nav_theme', 'Theme')">
-          <span class="material-symbols-outlined">{{ activeThemeIcon }}</span>
+      <DropdownMenu>
+        <DropdownMenuTrigger as-child>
+          <Button variant="ghost" size="icon-sm" class="bt-icon-button" :aria-label="tr('nav_theme', 'Theme')">
+            <span class="material-symbols-outlined">{{ activeThemeIcon }}</span>
+          </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuPortal>
-          <DropdownMenuContent class="bt-menu-content" :side-offset="10" align="end">
-            <DropdownMenuItem
-              v-for="item in themeOptions"
-              :key="item.value"
-              class="bt-menu-item"
-              :class="{ 'bt-menu-item-active': item.value === currentTheme }"
-              @select="changeThemeValue(item.value)"
-            >
-              <span class="material-symbols-outlined">{{ item.icon }}</span>
-              <span>{{ tr(item.key, item.fallback) }}</span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenuPortal>
-      </DropdownMenuRoot>
+        <DropdownMenuContent class="bt-menu-content" :side-offset="10" align="end">
+          <DropdownMenuItem
+            v-for="item in themeOptions"
+            :key="item.value"
+            class="bt-menu-item"
+            :class="{ 'bt-menu-item-active': item.value === currentTheme }"
+            @select="changeThemeValue(item.value)"
+          >
+            <span class="material-symbols-outlined">{{ item.icon }}</span>
+            <span>{{ tr(item.key, item.fallback) }}</span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
 
-    <div class="bt-nav-mobile" ref="mobileMenu">
-      <button
-        type="button"
-        class="bt-icon-button"
-        :aria-expanded="menuOpen"
-        :aria-label="tr('nav_menu', 'Menu')"
-        @click="menuOpen = !menuOpen"
-      >
-        <span class="material-symbols-outlined">{{ menuOpen ? 'close' : 'menu' }}</span>
-      </button>
+    <div class="bt-nav-mobile">
+      <Sheet v-model:open="menuOpen">
+        <SheetTrigger as-child>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            class="bt-icon-button"
+            :aria-label="tr('nav_menu', 'Menu')"
+          >
+            <span class="material-symbols-outlined">{{ menuOpen ? 'close' : 'menu' }}</span>
+          </Button>
+        </SheetTrigger>
 
-      <div v-if="menuOpen" class="bt-mobile-panel">
-        <a
-          v-for="item in navItems"
-          :key="item.href"
-          :href="item.href"
-          class="bt-mobile-link"
-          :class="{ 'bt-nav-link-active': isActive(item.href) }"
-          @click="menuOpen = false"
-        >
-          {{ tr(item.key, item.fallback) }}
-        </a>
-
-        <div class="bt-mobile-group">
-          <span>{{ tr('nav_language', 'Language') }}</span>
-          <div class="bt-mobile-switcher">
-            <button
-              v-for="item in languageOptions"
-              :key="item.value"
-              type="button"
-              :class="{ active: item.value === currentLang }"
-              @click="changeLanguage(item.value)"
+        <SheetContent side="top" class="bt-mobile-sheet">
+          <nav class="bt-mobile-sheet-nav" aria-label="Mobile navigation">
+            <a
+              v-for="item in navItems"
+              :key="item.href"
+              :href="item.href"
+              class="bt-mobile-link"
+              :class="{ 'bt-nav-link-active': isActive(item.href) }"
+              @click="menuOpen = false"
             >
-              {{ item.short }}
-            </button>
-          </div>
-        </div>
+              {{ tr(item.key, item.fallback) }}
+            </a>
+          </nav>
 
-        <div class="bt-mobile-group">
-          <span>{{ tr('nav_theme', 'Theme') }}</span>
-          <div class="bt-mobile-switcher">
-            <button
-              v-for="item in themeOptions"
-              :key="item.value"
-              type="button"
-              :class="{ active: item.value === currentTheme }"
-              @click="changeThemeValue(item.value)"
-            >
-              <span class="material-symbols-outlined">{{ item.icon }}</span>
-            </button>
+          <div class="bt-mobile-group">
+            <span>{{ tr('nav_language', 'Language') }}</span>
+            <div class="bt-mobile-switcher">
+              <Button
+                v-for="item in languageOptions"
+                :key="item.value"
+                type="button"
+                variant="outline"
+                size="sm"
+                :class="{ active: item.value === currentLang }"
+                @click="changeLanguage(item.value)"
+              >
+                {{ item.short }}
+              </Button>
+            </div>
           </div>
-        </div>
-      </div>
+
+          <div class="bt-mobile-group">
+            <span>{{ tr('nav_theme', 'Theme') }}</span>
+            <div class="bt-mobile-switcher">
+              <Button
+                v-for="item in themeOptions"
+                :key="item.value"
+                type="button"
+                variant="outline"
+                size="sm"
+                :class="{ active: item.value === currentTheme }"
+                @click="changeThemeValue(item.value)"
+              >
+                <span class="material-symbols-outlined">{{ item.icon }}</span>
+              </Button>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   </motion.nav>
 </template>

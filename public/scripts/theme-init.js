@@ -32,6 +32,7 @@
         var langMap = { zh: 'zh-CN', en: 'en', it: 'it' };
 
         targetRoot.setAttribute('data-theme', theme);
+        targetRoot.classList.toggle('dark', theme === 'dark');
         targetRoot.setAttribute('data-lang', lang);
         targetRoot.lang = langMap[lang] || lang;
         if (lang !== 'zh') {

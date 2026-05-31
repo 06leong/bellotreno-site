@@ -68,19 +68,24 @@ function applyTheme() {
     const root = document.documentElement;
     root.classList.add('theme-transitioning');
 
+    let resolvedTheme = window.currentTheme;
+
     if (window.currentTheme === 'auto') {
         const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        root.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+        resolvedTheme = prefersDark ? 'dark' : 'light';
     } else {
-        root.setAttribute('data-theme', window.currentTheme);
+        resolvedTheme = window.currentTheme;
     }
+
+    root.setAttribute('data-theme', resolvedTheme);
+    root.classList.toggle('dark', resolvedTheme === 'dark');
 
     setTimeout(() => root.classList.remove('theme-transitioning'), 350);
 
     window.dispatchEvent(new CustomEvent('bellotreno:theme-change', {
         detail: {
             theme: window.currentTheme,
-            resolvedTheme: root.getAttribute('data-theme')
+            resolvedTheme
         }
     }));
 }
