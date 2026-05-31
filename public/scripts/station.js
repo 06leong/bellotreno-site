@@ -598,7 +598,7 @@ function _stRenderBoard(trains) {
     contentEl.querySelectorAll('.train-row').forEach(row => {
         row.addEventListener('click', function () {
             const num = this.getAttribute('data-train-number');
-            if (num) window.location.href = '/?train=' + encodeURIComponent(num.trim());
+            if (num) window.location.href = '/train?number=' + encodeURIComponent(num.trim());
         });
     });
 }

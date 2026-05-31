@@ -1,0 +1,53 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import EmptyState from '../components/ui/EmptyState.astro';
+import GlassPanel from '../components/ui/GlassPanel.astro';
+---
+
+<BaseLayout
+    title="Train details - BelloTreno"
+    description="Real-time details for Italian trains on BelloTreno, including route progress, disruption notices, Trenord traffic information and Swiss formation data."
+    pageScripts={["/scripts/station.js", "/scripts/swiss.js", "/scripts/main.js"]}>
+    <main class="container bt-train-page">
+        <section class="bt-train-hero">
+            <p class="bt-page-eyebrow">Train operations</p>
+            <h1 class="brand-heading">BelloTreno</h1>
+            <p class="bt-page-subtitle">Live train detail, route progress and operational notices.</p>
+        </section>
+
+        <GlassPanel class="bt-train-search-panel">
+            <div class="bt-train-search-shell">
+                <span class="material-symbols-outlined" id="searchIcon" aria-hidden="true">train</span>
+                <input
+                    id="trainSearch"
+                    data-slot="input"
+                    class="bt-train-search-input"
+                    type="text"
+                    placeholder=""
+                    autocomplete="off"
+                />
+                <button id="searchModeToggle" data-slot="button" class="bt-train-search-action" type="button" onclick="startSearch(document.getElementById('trainSearch')?.value || '')">
+                    <span class="material-symbols-outlined" aria-hidden="true">keyboard_return</span>
+                    <span>Search</span>
+                </button>
+            </div>
+        </GlassPanel>
+
+        <EmptyState id="trainDetailEmpty" icon="directions_railway" title="Search a train" message="Enter a train number to open a shareable train detail page." />
+
+        <GlassPanel id="disambiguation" class="bt-disambiguation-panel">
+            <h3 style="margin-top:0;" class="text-primary" data-i18n="disambiguation_title">Select train service:</h3>
+            <div id="choicesList"></div>
+        </GlassPanel>
+
+        <div id="scTooltip" class="sc-tooltip"></div>
+        <section id="results" class="bt-train-results" aria-live="polite">
+            <div id="trainCard" class="train-header"></div>
+            <div id="smartCaringCard" class="sc-card" style="display:none;"></div>
+            <div id="swissFormationCard" class="swiss-card" style="display:none;"></div>
+            <div class="timeline-container">
+                <div id="timelineBody"></div>
+            </div>
+        </section>
+    </main>
+</BaseLayout>

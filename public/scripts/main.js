@@ -52,6 +52,38 @@ const TRENORD_LINE_ALIASES = Object.freeze({
     RE54: "MXP1"
 });
 
+function normalizeTrainNumberInput(value) {
+    return String(value || '').replace(/\D+/g, '').trim();
+}
+
+function isTrainDetailPage() {
+    return window.location.pathname.replace(/\/+$/, '') === '/train';
+}
+
+function buildTrainDetailUrl(value, triple = '') {
+    const params = new URLSearchParams();
+    const trainNumber = normalizeTrainNumberInput(value || (triple ? triple.split('-')[0] : ''));
+    if (trainNumber) params.set('number', trainNumber);
+    if (triple) params.set('triple', triple);
+    return `/train${params.toString() ? `?${params.toString()}` : ''}`;
+}
+
+function navigateToTrainDetail(value, triple = '') {
+    const url = buildTrainDetailUrl(value, triple);
+    if (url === '/train') return false;
+    window.location.href = url;
+    return true;
+}
+
+function updateTrainDetailUrl(value, triple = '') {
+    if (!isTrainDetailPage() || !window.history?.replaceState) return;
+    const url = buildTrainDetailUrl(value, triple);
+    if (url !== '/train') window.history.replaceState({}, document.title, url);
+}
+
+window.buildTrainDetailUrl = buildTrainDetailUrl;
+window.navigateToTrainDetail = navigateToTrainDetail;
+
 function clearNode(node) {
     if (node) node.replaceChildren();
 }
@@ -624,11 +656,7 @@ function renderRecentSearches() {
 
             chip.querySelector('.chip-label').addEventListener('click', () => {
                 if (item.type === 'train') {
-                    if (searchMode !== 'train') {
-                        switchSearchMode('train');
-                    }
-                    document.getElementById('trainSearch').value = item.id;
-                    startSearch(item.id);
+                    navigateToTrainDetail(item.id);
                 } else if (item.type === 'station') {
                     goToStationBoard(item.id, item.name);
                 }
@@ -662,10 +690,11 @@ function removeRecentSearch(id, type, event) {
 async function startSearch(input) {
     document.getElementById('results').style.display = 'none';
     document.getElementById('disambiguation').style.display = 'none';
+    const emptyState = document.getElementById('trainDetailEmpty');
 
     if (searchMode === 'train') {
 
-        const trainNumber = input.replace(/\D+/g, '').trim();
+        const trainNumber = normalizeTrainNumberInput(input);
 
         if (!trainNumber) {
             const msg = currentLang === 'zh' ? "请输入有效的车次号" :
@@ -673,6 +702,14 @@ async function startSearch(input) {
                     "Please enter a valid train number";
             return alert(msg);
         }
+
+        if (!isTrainDetailPage()) {
+            navigateToTrainDetail(trainNumber);
+            return;
+        }
+
+        updateTrainDetailUrl(trainNumber);
+        if (emptyState) emptyState.style.display = 'none';
 
         try {
             const autoRes = await fetch(`${API_BASE}/cercaNumeroTrenoTrenoAutocomplete/${trainNumber}`);
@@ -770,6 +807,7 @@ function renderDisambiguation() {
         div.onclick = () => {
             panel.style.display = 'none';
             disambiguationData = null;
+            updateTrainDetailUrl(tNum, triple);
             fetchDetails(triple);
         };
         list.appendChild(div);
@@ -835,6 +873,9 @@ async function fetchDetails(triple) {
     if (scCard) scCard.style.display = 'none';
     if (window.BelloSwiss) window.BelloSwiss.hideFormationCard();
     const [tNum, originID, ts] = triple.split('-');
+    updateTrainDetailUrl(tNum, triple);
+    const emptyState = document.getElementById('trainDetailEmpty');
+    if (emptyState) emptyState.style.display = 'none';
     try {
         const res = await fetch(`${API_BASE}/andamentoTreno/${originID}/${tNum}/${ts}`);
         if (res.status === 204) {
@@ -1899,19 +1940,25 @@ document.addEventListener('astro:page-load', () => {
 
 // astro:page-load 触发时 DOM 已完整就绪，无需轮询重试
 document.addEventListener('astro:page-load', () => {
-    const trainParam = new URLSearchParams(window.location.search).get('train');
-    if (!trainParam) return;
-    const trainNumber = trainParam.trim();
+    const params = new URLSearchParams(window.location.search);
+    const legacyTrainParam = params.get('train');
+    const trainParam = params.get('number') || legacyTrainParam;
+    const tripleParam = params.get('triple');
+    if (legacyTrainParam && !isTrainDetailPage()) {
+        window.location.replace(buildTrainDetailUrl(legacyTrainParam));
+        return;
+    }
+    if (!trainParam && !tripleParam) return;
+    const trainNumber = (trainParam || tripleParam.split('-')[0]).trim();
     const trainInput = document.getElementById('trainSearch');
     if (!trainInput) return;
     trainInput.value = trainNumber;
     // 短暂延迟确保 common.js 的 astro:page-load 回调（语言初始化）已先执行
     setTimeout(() => {
-        startSearch(trainNumber);
-        setTimeout(() => {
-            if (window.history && window.history.replaceState) {
-                window.history.replaceState({}, document.title, window.location.pathname);
-            }
-        }, 300);
+        if (tripleParam) {
+            fetchDetails(tripleParam);
+        } else {
+            startSearch(trainNumber);
+        }
     }, 200);
 });

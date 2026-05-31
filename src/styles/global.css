@@ -1398,7 +1398,8 @@ footer span {
     display: flex;
     flex-direction: column;
     gap: 16px;
-    margin-top: 20px;
+    width: min(100%, 720px);
+    margin: 20px auto 0;
     text-align: left;
 }
 
@@ -1411,6 +1412,11 @@ footer span {
     transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s;
     position: relative;
     overflow: hidden;
+}
+
+.rss-item .card-body {
+    display: grid;
+    gap: 14px;
 }
 
 .rss-item:hover {
@@ -4221,10 +4227,17 @@ h6,
 
 .rss-container {
     max-width: 720px;
+    padding: 0 !important;
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 .rss-item {
-    padding: 16px 18px;
+    width: 100%;
+    padding: 18px 20px;
 }
 
 .custom-region-dropdown {
@@ -4455,6 +4468,147 @@ button:focus-visible,
     color: var(--color-primary-content) !important;
     font-weight: 780;
     text-decoration: none;
+}
+
+.bt-train-page {
+    display: grid;
+    gap: 18px;
+    width: min(100%, 1040px);
+}
+
+.bt-train-hero {
+    display: grid;
+    gap: 8px;
+    text-align: center;
+    margin: 8px auto 2px;
+}
+
+.bt-train-hero h1 {
+    margin: 0;
+    font-size: clamp(3rem, 7vw, 5.4rem);
+    line-height: 0.95;
+    font-weight: 900;
+}
+
+.bt-train-search-panel {
+    width: min(100%, 760px);
+    margin: 0 auto;
+    padding: 8px;
+    border-radius: var(--bt-radius-control) !important;
+}
+
+.bt-train-search-shell {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    min-height: 50px;
+}
+
+.bt-train-search-shell > .material-symbols-outlined {
+    display: grid;
+    place-items: center;
+    width: 42px;
+    height: 42px;
+    border-radius: var(--bt-radius-control);
+    background: var(--bt-soft);
+    color: var(--color-primary);
+}
+
+.bt-train-search-input {
+    width: 100%;
+    min-width: 0;
+    height: 42px;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--color-base-content);
+    font-size: 1.05rem;
+    font-weight: 650;
+}
+
+.bt-train-search-input::placeholder {
+    color: var(--bt-muted);
+}
+
+.bt-train-search-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 40px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: var(--bt-radius-control);
+    background: var(--color-primary);
+    color: var(--color-primary-content);
+    font-weight: 780;
+    cursor: pointer;
+}
+
+.bt-train-results {
+    display: grid;
+    gap: 0;
+}
+
+.bt-train-page #trainDetailEmpty {
+    width: min(100%, 760px);
+    min-height: 160px;
+    margin: 0 auto;
+}
+
+.bt-train-page .train-header,
+.bt-train-page .timeline-container,
+.bt-train-page .sc-card,
+.bt-train-page .swiss-card {
+    width: min(100%, 950px);
+}
+
+.bt-train-page .train-header {
+    display: grid;
+    gap: 12px;
+}
+
+.bt-train-page .op-cat-row,
+.bt-train-page .train-meta,
+.bt-train-page .train-status-section,
+.bt-train-page .sc-header,
+.bt-train-page .swiss-header {
+    min-height: 38px;
+}
+
+.bt-train-page .sc-header,
+.bt-train-page .swiss-header,
+.bt-train-page .trenord-traffic-header {
+    border-radius: 6px;
+    background: var(--bt-soft);
+}
+
+.bt-train-page .sc-body,
+.bt-train-page .swiss-body {
+    border-top: 1px solid var(--bt-border);
+}
+
+.bt-train-page .timeline-container {
+    padding-top: 24px;
+}
+
+@media (max-width: 640px) {
+    .bt-train-search-shell {
+        grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .bt-train-search-action {
+        grid-column: 1 / -1;
+        width: 100%;
+    }
+
+    .bt-train-page .train-header,
+    .bt-train-page .timeline-container,
+    .bt-train-page .sc-card,
+    .bt-train-page .swiss-card {
+        width: 100%;
+    }
 }
 
 @media (max-width: 640px) {
