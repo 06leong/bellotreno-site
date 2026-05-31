@@ -1,4 +1,6 @@
 <script setup>
+import { Button } from '@/components/ui/button';
+
 defineProps({
   icon: { type: String, default: '' },
   label: { type: String, default: '' },
@@ -8,9 +10,15 @@ defineProps({
 </script>
 
 <template>
-  <button :type="type" class="bt-toolbar-button" :class="{ active }">
+  <Button
+    :type="type"
+    :variant="active ? 'default' : 'ghost'"
+    size="sm"
+    class="bt-toolbar-button"
+    :class="{ active }"
+  >
     <span v-if="icon" class="material-symbols-outlined" aria-hidden="true">{{ icon }}</span>
     <span v-if="label">{{ label }}</span>
     <slot />
-  </button>
+  </Button>
 </template>

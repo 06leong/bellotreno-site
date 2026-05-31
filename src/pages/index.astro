@@ -1,5 +1,6 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
+import GlassPanel from '../components/ui/GlassPanel.astro';
 ---
 
 <BaseLayout
@@ -39,14 +40,16 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                 <!-- Glowing effect behind the search bar when focused -->
                 <div class="absolute -inset-0.5 bg-gradient-to-r from-primary/30 to-info/30 rounded-full blur opacity-0 group-focus-within:opacity-100 transition duration-500"></div>
                 
-                <div class="relative flex items-center bg-base-100/65 backdrop-blur-3xl glass-border shadow-glass rounded-full overflow-hidden transition-all duration-300">
+                <div data-slot="card" class="relative flex items-center bg-base-100/65 backdrop-blur-3xl glass-border shadow-glass rounded-full overflow-hidden transition-all duration-300">
                     <button id="searchModeToggle" onclick="switchSearchMode(searchMode === 'train' ? 'station' : 'train')" 
+                            data-slot="button"
                             class="flex items-center justify-center h-14 w-16 sm:w-20 pl-1 sm:pl-2 flex-shrink-0 gap-0 bg-transparent text-base-content/60 hover:text-primary transition-colors border-r border-base-content/10 outline-none cursor-pointer">
                         <span class="material-symbols-outlined text-[1.4rem]" id="searchIcon">train</span>
                         <span class="material-symbols-outlined text-[1.2rem] -ml-1">arrow_drop_down</span>
                     </button>
                     
                     <input type="text" id="trainSearch" 
+                           data-slot="input"
                            class="flex-1 h-14 px-4 sm:px-6 text-lg bg-transparent border-none focus:outline-none focus:ring-0 text-base-content placeholder-base-content/40 tabular-nums w-full" 
                            placeholder="" autocomplete="off" />
                            
@@ -65,10 +68,10 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             </div>
         </div>
 
-        <div id="disambiguation">
+        <GlassPanel id="disambiguation" class="bt-disambiguation-panel">
             <h3 style="margin-top:0;" class="text-primary" data-i18n="disambiguation_title">检测到多个班次，请选择：</h3>
             <div id="choicesList"></div>
-        </div>
+        </GlassPanel>
 
         <div id="scTooltip" class="sc-tooltip"></div>
         <div id="results">

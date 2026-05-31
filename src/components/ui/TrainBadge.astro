@@ -3,13 +3,14 @@ interface Props {
   category?: string;
   number?: string | number;
   class?: string;
+  [key: string]: unknown;
 }
 
-const { category = '', number = '', class: className = '' } = Astro.props;
+const { category = '', number = '', class: className = '', ...attrs } = Astro.props;
 const badgeClass = category ? `badge-${category.toLowerCase().replace(/[^a-z0-9]+/g, '-')}` : '';
 ---
 
-<span class:list={['train-badge', badgeClass, className]}>
+<span {...attrs} data-slot="badge" class:list={['train-badge', badgeClass, className]}>
   {category && <span class="badge-cat">{category}</span>}
   {number && <span class="badge-num">{number}</span>}
 </span>

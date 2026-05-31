@@ -1,12 +1,13 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
+import GlassPanel from '../components/ui/GlassPanel.astro';
 ---
 
 <BaseLayout
     title="About — BelloTreno"
     description="BelloTreno è un progetto amatoriale per il monitoraggio in tempo reale dei treni italiani. Dati forniti da ViaggiaTreno (Trenitalia / RFI).">
     <div class="w-full max-w-4xl mx-auto px-4 py-8 md:py-12 mt-16 md:mt-24">
-        <div class="about-card prose max-w-none bg-base-100/65 backdrop-blur-3xl p-8 md:p-12 rounded-[2rem] shadow-glass border border-base-content/10 mx-auto transition-all duration-300 hover:bg-base-100/75 shadow-sm">
+        <GlassPanel as="article" class="about-card prose max-w-none bg-base-100/65 backdrop-blur-3xl p-8 md:p-12 rounded-[2rem] shadow-glass border border-base-content/10 mx-auto transition-all duration-300 hover:bg-base-100/75 shadow-sm">
             <h1 data-i18n="about_title" class="text-primary mb-8 font-bold">关于 BelloTreno</h1>
 
             <div data-i18n-section="intro" class="text-base-content/80 leading-relaxed">
@@ -60,7 +61,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                 <p class="mb-4">本站仅为个人研究及铁路爱好者交流所用，所有数据均来源于公开接口，本站不保证准确性与实时性。在罢工、天气异常等特殊情况下，请务必以火车站站台实时大屏及官方信息为准。目前仅支持 ViaggiaTreno 上可查询的列车。</p>
                 <p>如有任何问题或建议，欢迎通过邮件 <a href="mailto:ferrovie@bellotreno.org" class="text-primary no-underline hover:underline font-medium">ferrovie@bellotreno.org</a> 联系我。</p>
             </div>
-        </div>
+        </GlassPanel>
     </div>
 
     <script is:inline data-astro-rerun slot="scripts">

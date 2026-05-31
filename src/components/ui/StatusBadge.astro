@@ -3,12 +3,13 @@ interface Props {
   tone?: 'neutral' | 'info' | 'success' | 'warning' | 'danger';
   icon?: string;
   class?: string;
+  [key: string]: unknown;
 }
 
-const { tone = 'neutral', icon, class: className = '' } = Astro.props;
+const { tone = 'neutral', icon, class: className = '', ...attrs } = Astro.props;
 ---
 
-<span class:list={['bt-status-badge', `bt-status-${tone}`, className]}>
+<span {...attrs} data-slot="badge" class:list={['bt-status-badge', `bt-status-${tone}`, className]}>
   {icon && <span class="material-symbols-outlined" aria-hidden="true">{icon}</span>}
   <slot />
 </span>

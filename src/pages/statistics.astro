@@ -1,5 +1,7 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
+import DataTableShell from '../components/ui/DataTableShell.astro';
+import GlassPanel from '../components/ui/GlassPanel.astro';
 ---
 
 <BaseLayout
@@ -46,50 +48,50 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         <section id="statisticsMetrics" class="statistics-metrics" aria-live="polite"></section>
 
         <section class="statistics-grid">
-            <div class="statistics-panel">
+            <GlassPanel as="div" class="statistics-panel">
                 <div class="statistics-panel-head">
                     <h2 data-i18n="statistics_chart_running">Trains in circulation</h2>
                 </div>
                 <div id="statisticsRunningChart" class="statistics-chart-box"></div>
-            </div>
-            <div class="statistics-panel">
+            </GlassPanel>
+            <GlassPanel as="div" class="statistics-panel">
                 <div class="statistics-panel-head">
                     <h2 data-i18n="statistics_chart_regular">Regularity</h2>
                 </div>
                 <div id="statisticsRegularityChart" class="statistics-chart-box"></div>
-            </div>
-            <div class="statistics-panel">
+            </GlassPanel>
+            <GlassPanel as="div" class="statistics-panel">
                 <div class="statistics-panel-head">
                     <h2 data-i18n="statistics_chart_punctuality">Punctuality</h2>
                 </div>
                 <div id="statisticsPunctualityChart" class="statistics-chart-box"></div>
-            </div>
-            <div class="statistics-panel">
+            </GlassPanel>
+            <GlassPanel as="div" class="statistics-panel">
                 <div class="statistics-panel-head">
                     <h2 data-i18n="statistics_chart_categories">Categories</h2>
                 </div>
                 <div id="statisticsCategoryChart" class="statistics-chart-box"></div>
-            </div>
+            </GlassPanel>
         </section>
 
-        <section class="statistics-panel statistics-search-panel">
+        <GlassPanel class="statistics-panel statistics-search-panel">
             <div class="statistics-panel-head statistics-query-head">
                 <h2 data-i18n="statistics_query_title">Explore statistics</h2>
             </div>
 
-            <div class="statistics-tabs" role="tablist">
-                <button type="button" class="statistics-tab active" data-stat-view="trains" data-i18n="statistics_tab_trains">Trains</button>
-                <button type="button" class="statistics-tab" data-stat-view="stations" data-i18n="statistics_tab_stations">Stations</button>
-                <button type="button" class="statistics-tab" data-stat-view="relations" data-i18n="statistics_tab_relations">Relations</button>
-                <button type="button" class="statistics-tab" data-stat-view="ranking" data-i18n="statistics_tab_ranking">Ranking</button>
+            <div class="statistics-tabs" role="tablist" data-slot="tabs-list">
+                <button type="button" class="statistics-tab active" data-slot="tabs-trigger" data-stat-view="trains" data-i18n="statistics_tab_trains">Trains</button>
+                <button type="button" class="statistics-tab" data-slot="tabs-trigger" data-stat-view="stations" data-i18n="statistics_tab_stations">Stations</button>
+                <button type="button" class="statistics-tab" data-slot="tabs-trigger" data-stat-view="relations" data-i18n="statistics_tab_relations">Relations</button>
+                <button type="button" class="statistics-tab" data-slot="tabs-trigger" data-stat-view="ranking" data-i18n="statistics_tab_ranking">Ranking</button>
             </div>
 
             <div class="statistics-filter-grid">
-                <input id="statisticsSearch" class="input input-bordered rounded-full" type="search" autocomplete="off" data-i18n="statistics_search_placeholder" placeholder="Search train, station or relation">
-                <select id="statisticsCategory" class="select select-bordered rounded-full">
+                <input id="statisticsSearch" data-slot="input" class="input input-bordered rounded-full" type="search" autocomplete="off" data-i18n="statistics_search_placeholder" placeholder="Search train, station or relation">
+                <select id="statisticsCategory" data-slot="select-trigger" class="select select-bordered rounded-full">
                     <option value="" data-i18n="statistics_all_categories">All categories</option>
                 </select>
-                <select id="statisticsStatusFilter" class="select select-bordered rounded-full">
+                <select id="statisticsStatusFilter" data-slot="select-trigger" class="select select-bordered rounded-full">
                     <option value="" data-i18n="statistics_all_statuses">All statuses</option>
                     <option value="regular" data-i18n="statistics_status_regular">Regular</option>
                     <option value="delayed" data-i18n="statistics_status_delayed">Delayed</option>
@@ -100,24 +102,24 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             </div>
 
             <div id="statisticsTableStatus" class="statistics-table-status"></div>
-            <div class="statistics-table-wrap">
+            <DataTableShell class="statistics-table-wrap">
                 <table class="statistics-table">
                     <thead id="statisticsTableHead"></thead>
                     <tbody id="statisticsTableBody"></tbody>
                 </table>
-            </div>
+            </DataTableShell>
             <div class="statistics-pagination">
-                <button id="statisticsPrev" class="btn btn-sm rounded-full" type="button">
+                <button id="statisticsPrev" data-slot="button" class="btn btn-sm rounded-full" type="button">
                     <span class="material-symbols-outlined text-[1rem]">chevron_left</span>
                     <span data-i18n="statistics_prev">Previous</span>
                 </button>
                 <span id="statisticsPageInfo">--</span>
-                <button id="statisticsNext" class="btn btn-sm rounded-full" type="button">
+                <button id="statisticsNext" data-slot="button" class="btn btn-sm rounded-full" type="button">
                     <span data-i18n="statistics_next">Next</span>
                     <span class="material-symbols-outlined text-[1rem]">chevron_right</span>
                 </button>
             </div>
-        </section>
+        </GlassPanel>
 
         <section class="statistics-disclaimer">
             <span class="material-symbols-outlined">info</span>

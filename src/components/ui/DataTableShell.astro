@@ -1,11 +1,12 @@
 ---
 interface Props {
   class?: string;
+  [key: string]: unknown;
 }
 
-const { class: className = '' } = Astro.props;
+const { class: className = '', ...attrs } = Astro.props;
 ---
 
-<div class:list={['bt-data-table-shell', className]}>
+<div {...attrs} data-slot="table-container" class:list={['bt-data-table-shell', 'bg-card text-card-foreground', className]}>
   <slot />
 </div>

@@ -1,6 +1,7 @@
 ---
 import { Font } from 'astro:assets';
 import BaseLayout from '../layouts/BaseLayout.astro';
+import GlassPanel from '../components/ui/GlassPanel.astro';
 ---
 
 <BaseLayout
@@ -12,7 +13,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     </Fragment>
 
     <main class="container bt-404-page">
-        <section class="bt-terminal-panel" aria-labelledby="not-found-title">
+        <GlassPanel class="bt-terminal-panel" aria-labelledby="not-found-title">
             <div class="bt-terminal-header">
                 <span>BELLOTRENO CONTROL NODE</span>
                 <span>HTTP 404</span>
@@ -20,9 +21,9 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             <div class="bt-terminal-body" id="terminal-body">
                 <span class="cmd-prefix">root@bellotreno:~#</span> init_connection...
             </div>
-        </section>
+        </GlassPanel>
 
-        <section class="bt-404-copy">
+        <GlassPanel class="bt-404-copy">
             <p class="bt-page-eyebrow">Route unavailable</p>
             <h1 id="not-found-title">404</h1>
             <p>The requested page is outside the current timetable network.</p>
@@ -30,7 +31,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                 <span class="material-symbols-outlined" aria-hidden="true">train</span>
                 <span>Return to BelloTreno</span>
             </a>
-        </section>
+        </GlassPanel>
     </main>
 
     <script is:inline data-astro-rerun slot="scripts">

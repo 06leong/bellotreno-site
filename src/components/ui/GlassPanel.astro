@@ -2,11 +2,12 @@
 interface Props {
   as?: keyof HTMLElementTagNameMap;
   class?: string;
+  [key: string]: unknown;
 }
 
-const { as: Tag = 'section', class: className = '' } = Astro.props;
+const { as: Tag = 'section', class: className = '', ...attrs } = Astro.props;
 ---
 
-<Tag class:list={['bt-panel', className]}>
+<Tag {...attrs} data-slot="card" class:list={['bt-panel', 'bg-card text-card-foreground', className]}>
   <slot />
 </Tag>

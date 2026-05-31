@@ -1,6 +1,5 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue';
-import { motion } from 'motion-v';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -8,7 +7,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 
 const navItems = [
   { href: '/statistics', key: 'nav_statistics', fallback: 'Statistics' },
@@ -68,6 +66,7 @@ const currentLang = ref('zh');
 const currentTheme = ref('auto');
 const menuOpen = ref(false);
 const pathname = ref('/');
+const navRef = ref(null);
 
 const activeThemeIcon = computed(() => {
   const option = themeOptions.find((item) => item.value === currentTheme.value);
@@ -105,6 +104,23 @@ function changeThemeValue(theme) {
   menuOpen.value = false;
 }
 
+function toggleMenu() {
+  menuOpen.value = !menuOpen.value;
+}
+
+function handleDocumentPointerDown(event) {
+  if (!menuOpen.value || !navRef.value) return;
+  if (!navRef.value.contains(event.target)) {
+    menuOpen.value = false;
+  }
+}
+
+function handleDocumentKeydown(event) {
+  if (event.key === 'Escape') {
+    menuOpen.value = false;
+  }
+}
+
 function isActive(href) {
   if (href === '/') return pathname.value === '/';
   return pathname.value.startsWith(href);
@@ -115,6 +131,8 @@ onMounted(() => {
   window.addEventListener('bellotreno:language-change', syncState);
   window.addEventListener('bellotreno:theme-change', syncState);
   document.addEventListener('astro:page-load', syncState);
+  document.addEventListener('pointerdown', handleDocumentPointerDown);
+  document.addEventListener('keydown', handleDocumentKeydown);
 });
 
 onUnmounted(() => {
@@ -122,15 +140,15 @@ onUnmounted(() => {
   window.removeEventListener('bellotreno:language-change', syncState);
   window.removeEventListener('bellotreno:theme-change', syncState);
   document.removeEventListener('astro:page-load', syncState);
+  document.removeEventListener('pointerdown', handleDocumentPointerDown);
+  document.removeEventListener('keydown', handleDocumentKeydown);
 });
 </script>
 
 <template>
-  <motion.nav
+  <nav
+    ref="navRef"
     class="bt-site-nav"
-    :initial="{ opacity: 0, y: -8 }"
-    :animate="{ opacity: 1, y: 0 }"
-    :transition="{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }"
     aria-label="BelloTreno"
   >
     <a href="/" class="bt-brand" aria-label="BelloTreno home">
@@ -155,7 +173,6 @@ onUnmounted(() => {
         <DropdownMenuTrigger as-child>
           <Button variant="ghost" size="sm" class="bt-icon-button" :aria-label="tr('nav_language', 'Language')">
             <span class="material-symbols-outlined">language</span>
-            <span class="bt-icon-button-label">{{ languageOptions.find((item) => item.value === currentLang)?.short || 'CN' }}</span>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent class="bt-menu-content" :side-offset="10" align="end">
@@ -193,67 +210,67 @@ onUnmounted(() => {
     </div>
 
     <div class="bt-nav-mobile">
-      <Sheet v-model:open="menuOpen">
-        <SheetTrigger as-child>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            class="bt-icon-button"
-            :aria-label="tr('nav_menu', 'Menu')"
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        class="bt-icon-button"
+        :aria-label="tr('nav_menu', 'Menu')"
+        :aria-expanded="menuOpen"
+        aria-controls="bt-mobile-menu"
+        @click="toggleMenu"
+      >
+        <span class="material-symbols-outlined">{{ menuOpen ? 'close' : 'menu' }}</span>
+      </Button>
+
+      <div v-if="menuOpen" id="bt-mobile-menu" class="bt-mobile-panel" role="menu">
+        <nav class="bt-mobile-panel-nav" aria-label="Mobile navigation">
+          <a
+            v-for="item in navItems"
+            :key="item.href"
+            :href="item.href"
+            class="bt-mobile-link"
+            :class="{ 'bt-nav-link-active': isActive(item.href) }"
+            role="menuitem"
+            @click="menuOpen = false"
           >
-            <span class="material-symbols-outlined">{{ menuOpen ? 'close' : 'menu' }}</span>
-          </Button>
-        </SheetTrigger>
+            {{ tr(item.key, item.fallback) }}
+          </a>
+        </nav>
 
-        <SheetContent side="top" class="bt-mobile-sheet">
-          <nav class="bt-mobile-sheet-nav" aria-label="Mobile navigation">
-            <a
-              v-for="item in navItems"
-              :key="item.href"
-              :href="item.href"
-              class="bt-mobile-link"
-              :class="{ 'bt-nav-link-active': isActive(item.href) }"
-              @click="menuOpen = false"
+        <div class="bt-mobile-group">
+          <span>{{ tr('nav_language', 'Language') }}</span>
+          <div class="bt-mobile-switcher">
+            <Button
+              v-for="item in languageOptions"
+              :key="item.value"
+              type="button"
+              variant="outline"
+              size="sm"
+              :class="{ active: item.value === currentLang }"
+              @click="changeLanguage(item.value)"
             >
-              {{ tr(item.key, item.fallback) }}
-            </a>
-          </nav>
-
-          <div class="bt-mobile-group">
-            <span>{{ tr('nav_language', 'Language') }}</span>
-            <div class="bt-mobile-switcher">
-              <Button
-                v-for="item in languageOptions"
-                :key="item.value"
-                type="button"
-                variant="outline"
-                size="sm"
-                :class="{ active: item.value === currentLang }"
-                @click="changeLanguage(item.value)"
-              >
-                {{ item.short }}
-              </Button>
-            </div>
+              {{ item.short }}
+            </Button>
           </div>
+        </div>
 
-          <div class="bt-mobile-group">
-            <span>{{ tr('nav_theme', 'Theme') }}</span>
-            <div class="bt-mobile-switcher">
-              <Button
-                v-for="item in themeOptions"
-                :key="item.value"
-                type="button"
-                variant="outline"
-                size="sm"
-                :class="{ active: item.value === currentTheme }"
-                @click="changeThemeValue(item.value)"
-              >
-                <span class="material-symbols-outlined">{{ item.icon }}</span>
-              </Button>
-            </div>
+        <div class="bt-mobile-group">
+          <span>{{ tr('nav_theme', 'Theme') }}</span>
+          <div class="bt-mobile-switcher">
+            <Button
+              v-for="item in themeOptions"
+              :key="item.value"
+              type="button"
+              variant="outline"
+              size="sm"
+              :class="{ active: item.value === currentTheme }"
+              @click="changeThemeValue(item.value)"
+            >
+              <span class="material-symbols-outlined">{{ item.icon }}</span>
+            </Button>
           </div>
-        </SheetContent>
-      </Sheet>
+        </div>
+      </div>
     </div>
-  </motion.nav>
+  </nav>
 </template>

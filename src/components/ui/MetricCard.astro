@@ -5,12 +5,13 @@ interface Props {
   value?: string | number;
   hint?: string;
   class?: string;
+  [key: string]: unknown;
 }
 
-const { icon = 'verified', label, value = '--', hint, class: className = '' } = Astro.props;
+const { icon = 'verified', label, value = '--', hint, class: className = '', ...attrs } = Astro.props;
 ---
 
-<article class:list={['bt-metric-card', className]}>
+<article {...attrs} data-slot="card" class:list={['bt-metric-card', 'bg-card text-card-foreground', className]}>
   <span class="material-symbols-outlined" aria-hidden="true">{icon}</span>
   <div>
     <small>{label}</small>

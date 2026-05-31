@@ -1,5 +1,6 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
+import GlassPanel from '../components/ui/GlassPanel.astro';
 ---
 
 <BaseLayout
@@ -14,13 +15,15 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                 data-i18n="nav_infomobilita">出行信息</h1>
 
             <div class="infomobilita-controls flex flex-col items-center gap-6">
-                <div class="flex justify-center mx-auto w-[480px] max-w-full bg-base-200/50 p-1 rounded-full border border-base-200 shadow-sm backdrop-blur">
+                <div data-slot="tabs-list" class="flex justify-center mx-auto w-[480px] max-w-full bg-base-200/50 p-1 rounded-full border border-base-200 shadow-sm backdrop-blur">
                     <button id="modeUpdatesBtn" class="board-tab active flex-1 flex items-center justify-center gap-1.5 py-2 px-4 text-sm font-medium rounded-full cursor-pointer transition-all"
+                        data-slot="tabs-trigger"
                         onclick="switchInfoMode('updates')">
                         <span class="material-symbols-outlined text-[1.25rem]">dynamic_feed</span>
                         <span data-i18n="info_updates">实时更新</span>
                     </button>
                     <button id="modeNoticesBtn" class="board-tab flex-1 flex items-center justify-center gap-1.5 py-2 px-4 text-sm font-medium rounded-full cursor-pointer transition-all" 
+                        data-slot="tabs-trigger"
                         onclick="switchInfoMode('notices')">
                         <span class="material-symbols-outlined text-[1.25rem]">campaign</span>
                         <span data-i18n="info_notices">旅行者须知</span>
@@ -28,11 +31,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                 </div>
 
                 <div class="dropdown w-[480px] max-w-full mx-auto" id="regionDropdown">
-                    <div tabindex="0" role="button" class="btn btn-lg w-full bg-base-100/65 backdrop-blur-3xl shadow-glass custom-region-dropdown focus:outline-none focus:border-primary transition-all font-medium rounded-full flex justify-center hover:bg-base-100/75 h-14 min-h-[3.5rem]">
+                    <div tabindex="0" role="button" data-slot="select-trigger" class="btn btn-lg w-full bg-base-100/65 backdrop-blur-3xl shadow-glass custom-region-dropdown focus:outline-none focus:border-primary transition-all font-medium rounded-full flex justify-center hover:bg-base-100/75 h-14 min-h-[3.5rem]">
                         <span id="regionBtnText" data-i18n="region_all" class="text-[1.125rem]">所有大区</span>
                         <span class="material-symbols-outlined absolute right-5 opacity-70">expand_more</span>
                     </div>
-                    <ul tabindex="0" class="dropdown-content z-[2] menu p-2 shadow-glass bg-base-100/80 backdrop-blur-3xl border border-base-content/10 rounded-box w-full max-h-64 flex-nowrap overflow-y-auto mt-2">
+                    <ul tabindex="0" data-slot="select-content" class="dropdown-content z-[2] menu p-2 shadow-glass bg-base-100/80 backdrop-blur-3xl border border-base-content/10 rounded-box w-full max-h-64 flex-nowrap overflow-y-auto mt-2">
                         <li><a class="justify-center text-center py-3 text-base" data-i18n="region_all" onclick="changeDropdownRegion('all', this.textContent, 'region_all')">所有大区</a></li>
                         <li><a class="justify-center text-center py-3 text-base" data-i18n="region_abruzzo" onclick="changeDropdownRegion('abruzzo', this.textContent, 'region_abruzzo')">Abruzzo</a></li>
                         <li><a class="justify-center text-center py-3 text-base" data-i18n="region_basilicata" onclick="changeDropdownRegion('basilicata', this.textContent, 'region_basilicata')">Basilicata</a></li>
@@ -58,12 +61,12 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                 </div>
             </div>
 
-            <div id="rssResults" class="rss-container mt-10 text-left">
+            <GlassPanel as="div" id="rssResults" class="rss-container mt-10 text-left">
                 <div id="infoLoading" style="text-align: center; padding: 40px; display: none;">
                     <span class="loading loading-spinner loading-lg text-primary"></span>
                 </div>
                 <div id="rssContent"></div>
-            </div>
+            </GlassPanel>
         </div>
     </div>
 </BaseLayout>

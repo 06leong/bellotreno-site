@@ -1,5 +1,7 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
+import ErrorState from '../components/ui/ErrorState.astro';
+import GlassPanel from '../components/ui/GlassPanel.astro';
 ---
 
 <BaseLayout
@@ -19,13 +21,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                     <span><span data-i18n="weather_eve">晚间</span> <span id="weatherEve">--</span></span>
                 </div>
             </div>
-            <div class="flex justify-center mx-auto mb-4 w-[280px] bg-base-200/50 p-1 rounded-full border border-base-200 shadow-sm backdrop-blur">
+            <div data-slot="tabs-list" class="flex justify-center mx-auto mb-4 w-[280px] bg-base-200/50 p-1 rounded-full border border-base-200 shadow-sm backdrop-blur">
                 <button class="board-tab active flex-1 flex items-center justify-center gap-1.5 py-2 px-4 text-sm font-medium rounded-full cursor-pointer transition-all" id="btnPartenze"
+                    data-slot="tabs-trigger"
                     onclick="switchBoardType('partenze')">
                     <span class="material-symbols-outlined text-[1.25rem]">departure_board</span>
                     <span data-i18n="departures">离站</span>
                 </button>
-                <button class="board-tab flex-1 flex items-center justify-center gap-1.5 py-2 px-4 text-sm font-medium rounded-full cursor-pointer transition-all" id="btnArrivi" onclick="switchBoardType('arrivi')">
+                <button class="board-tab flex-1 flex items-center justify-center gap-1.5 py-2 px-4 text-sm font-medium rounded-full cursor-pointer transition-all" id="btnArrivi" data-slot="tabs-trigger" onclick="switchBoardType('arrivi')">
                     <span class="material-symbols-outlined text-[1.25rem]">directions_railway</span>
                     <span data-i18n="arrivals">到站</span>
                 </button>
@@ -37,14 +40,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                 <span class="material-symbols-outlined align-middle text-[16px]">swipe</span>
                 <span data-i18n="scroll_hint">左右滑动查看完整信息</span>
             </div>
-            <div id="loadingIndicator" class="text-center py-16 text-base-content/60">
+            <GlassPanel as="div" id="loadingIndicator" class="text-center py-16 text-base-content/60 bt-loading-panel">
                 <span class="loading loading-spinner loading-lg text-primary"></span>
                 <p data-i18n="loading" class="mt-4">加载中...</p>
-            </div>
-            <div id="errorMessage" class="text-center py-10 text-error" style="display: none;">
-                <span class="material-symbols-outlined text-[48px]">error</span>
+            </GlassPanel>
+            <ErrorState id="errorMessage" class="text-center py-10 text-error" style="display: none;">
                 <p data-i18n="load_error" class="mt-4">加载失败，请稍后重试</p>
-            </div>
+            </ErrorState>
             <div id="boardContent" style="display: none;"></div>
         </div>
     </div>

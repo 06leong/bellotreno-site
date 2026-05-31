@@ -1,5 +1,5 @@
 <script setup>
-import { TabsIndicator, TabsList, TabsRoot, TabsTrigger } from 'reka-ui';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 defineProps({
   items: { type: Array, required: true },
@@ -11,14 +11,13 @@ const emit = defineEmits(['update:modelValue']);
 </script>
 
 <template>
-  <TabsRoot
+  <Tabs
     class="bt-segmented"
     :model-value="modelValue"
     :aria-label="ariaLabel"
     @update:model-value="emit('update:modelValue', $event)"
   >
     <TabsList class="bt-segmented-list">
-      <TabsIndicator class="bt-segmented-indicator" />
       <TabsTrigger
         v-for="item in items"
         :key="item.value"
@@ -29,5 +28,5 @@ const emit = defineEmits(['update:modelValue']);
         <span>{{ item.label }}</span>
       </TabsTrigger>
     </TabsList>
-  </TabsRoot>
+  </Tabs>
 </template>

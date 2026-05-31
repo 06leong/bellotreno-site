@@ -4,12 +4,13 @@ interface Props {
   title?: string;
   message?: string;
   class?: string;
+  [key: string]: unknown;
 }
 
-const { icon = 'info', title, message, class: className = '' } = Astro.props;
+const { icon = 'info', title, message, class: className = '', ...attrs } = Astro.props;
 ---
 
-<div class:list={['bt-state', 'bt-empty-state', className]}>
+<div {...attrs} data-slot="alert" class:list={['bt-state', 'bt-empty-state', className]}>
   <span class="material-symbols-outlined" aria-hidden="true">{icon}</span>
   {title && <strong>{title}</strong>}
   {message && <p>{message}</p>}
