@@ -30,6 +30,11 @@
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.7.3",
-    "crypto-js": "^4.2.0"
+    "@astrojs/vue": "^6.0.1",
+    "@formkit/auto-animate": "^0.9.0",
+    "crypto-js": "^4.2.0",
+    "motion-v": "^2.2.1",
+    "reka-ui": "^2.9.8",
+    "vue": "^3.5.35"
   }
 }

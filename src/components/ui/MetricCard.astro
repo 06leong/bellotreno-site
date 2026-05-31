@@ -1,0 +1,20 @@
+---
+interface Props {
+  icon?: string;
+  label: string;
+  value?: string | number;
+  hint?: string;
+  class?: string;
+}
+
+const { icon = 'verified', label, value = '--', hint, class: className = '' } = Astro.props;
+---
+
+<article class:list={['bt-metric-card', className]}>
+  <span class="material-symbols-outlined" aria-hidden="true">{icon}</span>
+  <div>
+    <small>{label}</small>
+    <strong>{value}</strong>
+    {hint && <em>{hint}</em>}
+  </div>
+</article>

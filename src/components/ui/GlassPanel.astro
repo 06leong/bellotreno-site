@@ -1,0 +1,12 @@
+---
+interface Props {
+  as?: keyof HTMLElementTagNameMap;
+  class?: string;
+}
+
+const { as: Tag = 'section', class: className = '' } = Astro.props;
+---
+
+<Tag class:list={['bt-panel', className]}>
+  <slot />
+</Tag>

@@ -2,6 +2,7 @@
 import { defineConfig, fontProviders } from 'astro/config';
 import tailwindcss from '@tailwindcss/vite';
 import sitemap from '@astrojs/sitemap';
+import vue from '@astrojs/vue';
 
 const MATERIAL_SYMBOL_NAMES = [
   'ac_unit',
@@ -132,6 +133,7 @@ export default defineConfig({
   },
 
   integrations: [
+    vue(),
     sitemap({
       // 单 URL 多语言，无需 i18n 路由，直接列出所有页面
       filter: (page) => !page.includes('/_'),

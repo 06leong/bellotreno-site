@@ -1,274 +1,43 @@
 ---
 import { Font } from 'astro:assets';
+import BaseLayout from '../layouts/BaseLayout.astro';
 ---
 
-<!DOCTYPE html>
-<html lang="it">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>BelloTreno - 404 Not Found</title>
-    <meta name="robots" content="noindex, nofollow">
-    <Font cssVariable="--font-share-tech-mono" preload />
-    
-    <style is:global>
-        :root {
-            --bg-color: #050505;
-            --main-color: #33ff00;
-            --dim-color: #005500;
-            --glow: rgba(51, 255, 0, 0.5);
-            --scanline: rgba(0, 0, 0, 0.5);
-        }
+<BaseLayout
+    title="BelloTreno - 404 Not Found"
+    description="BelloTreno page not found."
+    robots="noindex, nofollow">
+    <Fragment slot="head">
+        <Font cssVariable="--font-share-tech-mono" preload />
+    </Fragment>
 
-        * { box-sizing: border-box; }
-
-        body {
-            background-color: var(--bg-color);
-            color: var(--main-color);
-            font-family: var(--font-share-tech-mono), monospace;
-            margin: 0;
-            padding: 0;
-            min-height: 100vh;
-            width: 100vw;
-            display: flex;
-            flex-direction: column;
-            overflow-y: auto;
-            overflow-x: hidden;
-            text-transform: uppercase;
-            transition: background-color 0.3s, color 0.3s;
-        }
-
-        body::before {
-            content: " ";
-            display: block;
-            position: fixed;
-            top: 0;
-            left: 0;
-            bottom: 0;
-            right: 0;
-            background: linear-gradient(
-                to bottom,
-                rgba(0,0,0,0) 50%,
-                var(--scanline) 50%
-            );
-            background-size: 100% 4px;
-            z-index: 1;
-            pointer-events: none;
-        }
-
-        .main-content {
-            flex: 1;
-            width: 100%;
-            z-index: 10;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 40px 10px;
-        }
-
-        /* ASCII Art */
-        .ascii-art {
-            color: var(--main-color);
-            font-family: 'Courier New', Courier, monospace;
-            font-weight: 900;
-            white-space: pre;
-            text-align: center;
-            line-height: 1; 
-            letter-spacing: 0;
-            font-size: clamp(6px, 1.4vw, 16px);
-            text-shadow: 0 0 5px var(--glow);
-            margin-bottom: 3vh;
-            transform: translateZ(0);
-        }
-
-        .welcome-line {
-            font-size: clamp(1rem, 3vw, 1.5rem);
-            letter-spacing: 2px;
-            margin-bottom: 4vh; 
-            text-align: center;
-            text-shadow: 0 0 5px var(--glow);
-            border: none;
-        }
-
-        .cursor-title {
-            display: inline-block;
-            width: 10px;
-            height: 1em;
-            background-color: var(--main-color);
-            animation: blink 1s step-end infinite;
-            vertical-align: text-bottom;
-            margin-left: 5px;
-            box-shadow: 0 0 5px var(--glow);
-        }
-
-
-        .window-frame {
-            width: 90%;
-            max-width: 480px; 
-            border: 2px solid var(--main-color);
-            background-color: var(--bg-color); 
-            box-shadow: 6px 6px 0px rgba(0,0,0,0.4);
-            margin-bottom: 4vh; 
-            position: relative;
-            z-index: 20;
-            display: flex;
-            flex-direction: column;
-        }
-
-
-        .window-header {
-            background-color: var(--main-color);
-            color: var(--bg-color);
-            padding: 2px 6px;
-            font-family: 'Courier New', Courier, monospace; 
-            font-size: 13px; 
-            font-weight: 900;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .close-btn {
-            cursor: pointer;
-            font-weight: bold;
-            font-family: 'Courier New', Courier, monospace;
-            font-size: 13px;
-        }
-
-   
-        .window-content {
-            padding: 12px;
-            background-color: var(--bg-color);
-            color: var(--main-color);
-            font-family: 'Courier New', Courier, monospace;
-            font-size: clamp(10px, 2.5vw, 13px);
-            line-height: 1.4;
-            text-align: left;
-            text-transform: none;
-            text-shadow: none; 
-            opacity: 1;
-            min-height: 110px; 
-            display: block;
-        }
-
-        .cmd-line { margin-bottom: 4px; display: block; word-break: break-all; }
-        .cmd-prefix { color: var(--main-color); font-weight: bold; margin-right: 5px; }
-        .data-val { color: var(--dim-color); font-weight: bold; }
-        
-        .log-fail { color: #ff3333; }
-        .log-info { color: var(--main-color); }
-        .log-warn { color: #ffcc00; }
-
-        .error-wrapper {
-            text-align: center;
-            margin-top: 1vh;
-            z-index: 20;
-        }
-
-        .error-code {
-            font-size: clamp(5rem, 18vw, 10rem); 
-            color: var(--bg-color);
-            text-shadow: 
-                -2px -2px 0 var(--main-color),  
-                2px -2px 0 var(--main-color),
-                -2px 2px 0 var(--main-color),
-                2px 2px 0 var(--main-color),
-                0 0 20px var(--glow);
-            margin: 0;
-            line-height: 0.9;
-        }
-
-        .error-desc {
-            font-size: clamp(1.2rem, 4vw, 2rem); 
-            background: var(--main-color);
-            color: var(--bg-color);
-            padding: 4px 15px;
-            font-weight: 900;
-            display: inline-block;
-            margin-top: 10px;
-        }
-
-        /* Footer */
-        footer {
-            color: var(--dim-color);
-            font-size: 12px;
-            z-index: 20;
-            letter-spacing: 1px;
-            text-align: center;
-            font-weight: 900;
-            text-shadow: none;
-            padding: 20px 0;
-            flex-shrink: 0;
-            width: 100%;
-        }
-
-        @keyframes blink {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0; }
-        }
-    </style>
-</head>
-<body>
-
-    <div class="main-content">
-        
-        <div class="ascii-art">
-██████╗ ███████╗██╗     ██╗      ██████╗ ████████╗██████╗ ███████╗███╗   ██╗██████╗ 
-██╔══██╗██╔════╝██║     ██║     ██╔═══██╗╚══██╔══╝██╔══██╗██╔════╝████╗  ██║██╔═══██╗
-██████╔╝█████╗  ██║     ██║     ██║   ██║   ██║   ██████╔╝█████╗  ██╔██╗ ██║██║   ██║
-██╔══██╗██╔══╝  ██║     ██║     ██║   ██║   ██║   ██╔══██╗██╔══╝  ██║╚██╗██║██║   ██║
-██████╔╝███████╗███████╗███████╗╚██████╔╝   ██║   ██║  ██║███████╗██║ ╚████║╚██████╔╝
-╚═════╝ ╚══════╝╚══════╝╚══════╝ ╚═════╝    ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝ ╚═════╝ 
-        </div>
-
-        <div class="welcome-line">
-            Benvenuti a Bellotreno<span class="cursor-title"></span>
-        </div>
-
-        <div class="window-frame">
-            <div class="window-header">
-                <span>TERMINAL</span>
-                <span class="close-btn">[X]</span>
+    <main class="container bt-404-page">
+        <section class="bt-terminal-panel" aria-labelledby="not-found-title">
+            <div class="bt-terminal-header">
+                <span>BELLOTRENO CONTROL NODE</span>
+                <span>HTTP 404</span>
             </div>
-            <div class="window-content" id="terminal-body">
-                <span class="cmd-prefix">root@bellotreno:~#</span> init_connection...<br>
+            <div class="bt-terminal-body" id="terminal-body">
+                <span class="cmd-prefix">root@bellotreno:~#</span> init_connection...
             </div>
-        </div>
+        </section>
 
-        <div class="error-wrapper">
-            <div class="error-code">404</div>
-            <div class="error-desc">NOT FOUND</div>
-        </div>
+        <section class="bt-404-copy">
+            <p class="bt-page-eyebrow">Route unavailable</p>
+            <h1 id="not-found-title">404</h1>
+            <p>The requested page is outside the current timetable network.</p>
+            <a class="bt-404-action" href="/">
+                <span class="material-symbols-outlined" aria-hidden="true">train</span>
+                <span>Return to BelloTreno</span>
+            </a>
+        </section>
+    </main>
 
-    </div>
-
-    <footer>
-        &copy; <span id="year"></span> BELLOTRENO NETWORK. ALL RIGHTS RESERVED.
-    </footer>
-
-    <script is:inline>
-        document.addEventListener("DOMContentLoaded", function() {
-            
-            document.getElementById('year').textContent = new Date().getFullYear();
-
-            const themes = [
-                { name: 'Green', bg: '#050505', main: '#33ff00', dim: '#006600', glow: 'rgba(51, 255, 0, 0.6)', scanline: 'rgba(0, 0, 0, 0.5)' },
-                { name: 'Amber', bg: '#1a1000', main: '#ffb000', dim: '#664400', glow: 'rgba(255, 176, 0, 0.6)', scanline: 'rgba(20, 10, 0, 0.4)' },
-                { name: 'Blue',  bg: '#101020', main: '#a5a5ff', dim: '#404080', glow: 'rgba(165, 165, 255, 0.5)', scanline: 'rgba(0, 0, 0, 0.3)' },
-                { name: 'Pink',  bg: '#150015', main: '#ff00ff', dim: '#770077', glow: 'rgba(255, 0, 255, 0.5)', scanline: 'rgba(0, 0, 0, 0.4)' },
-                { name: 'SSH',   bg: '#000000', main: '#c0c0c0', dim: '#666666', glow: 'rgba(255, 255, 255, 0.1)', scanline: 'rgba(255, 255, 255, 0.08)' }
-            ];
-
-            const t = themes[Math.floor(Math.random() * themes.length)];
-            const root = document.documentElement;
-            root.style.setProperty('--bg-color', t.bg);
-            root.style.setProperty('--main-color', t.main);
-            root.style.setProperty('--dim-color', t.name === 'SSH' ? '#888' : t.dim);
-            root.style.setProperty('--glow', t.glow);
-            root.style.setProperty('--scanline', t.scanline);
-
+    <script is:inline data-astro-rerun slot="scripts">
+        document.addEventListener("astro:page-load", function() {
             const term = document.getElementById('terminal-body');
+            if (!term) return;
+
             const ua = navigator.userAgent;
             const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (char) => ({
                 '&': '&amp;',
@@ -277,8 +46,8 @@ import { Font } from 'astro:assets';
                 '"': '&quot;',
                 "'": '&#39;'
             }[char]));
+
             let deviceModel = "Unknown Device";
-            
             if (/iPhone/.test(ua)) deviceModel = "iPhone";
             else if (/iPad/.test(ua)) deviceModel = "iPad";
             else if (/Android/.test(ua)) {
@@ -289,25 +58,22 @@ import { Font } from 'astro:assets';
             else if (/Linux/.test(ua)) deviceModel = "Linux Machine";
 
             let browser = "Web Client";
-            if(/Chrome/.test(ua) && !/Edge/.test(ua)) browser = "Chrome";
-            else if(/Firefox/.test(ua)) browser = "Firefox";
-            else if(/Safari/.test(ua)) browser = "Safari";
-            else if(/Edge/.test(ua)) browser = "Edge";
+            if (/Chrome/.test(ua) && !/Edge/.test(ua)) browser = "Chrome";
+            else if (/Firefox/.test(ua)) browser = "Firefox";
+            else if (/Safari/.test(ua)) browser = "Safari";
+            else if (/Edge/.test(ua)) browser = "Edge";
 
             const screenRes = `${window.screen.width}x${window.screen.height}`;
-
-            setTimeout(() => {
-                term.innerHTML = `
+            term.innerHTML = `
                 <span class="cmd-prefix">root@bellotreno:~#</span> client_identify<br>
                 <span class="cmd-line">Connection established from <span class="data-val">${escapeHtml(deviceModel)}</span></span>
                 <span class="cmd-line">Client Agent: <span class="data-val">${escapeHtml(browser)}</span></span>
                 <span class="cmd-line">Display Geometry: <span class="data-val">${escapeHtml(screenRes)}</span></span>
                 <br>
-                <span class="cmd-prefix">root@bellotreno:~#</span> check_status<br>
-                <span class="cmd-line log-warn">> [WARN] ACCESS DENIED: ROOT PRIVILEGES REQUIRED</span>
-                `;
-            }, 300);
+                <span class="cmd-prefix">root@bellotreno:~#</span> resolve_route<br>
+                <span class="cmd-line log-warn">> [WARN] REQUESTED ROUTE NOT FOUND</span>
+                <span class="cmd-line log-info">> [INFO] FALLBACK ENTRYPOINT AVAILABLE: /</span>
+            `;
         });
     </script>
-</body>
-</html>
+</BaseLayout>

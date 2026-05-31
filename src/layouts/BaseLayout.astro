@@ -1,5 +1,5 @@
 ---
-import Navbar from '../components/Navbar.astro';
+import SiteNav from '../components/vue/SiteNav.vue';
 import Footer from '../components/Footer.astro';
 import BackToTop from '../components/BackToTop.astro';
 import { ClientRouter } from 'astro:transitions';
@@ -10,6 +10,7 @@ interface Props {
     title: string;
     description?: string;
     pageScripts?: string[];
+    robots?: string;
 }
 
 const SITE_URL = 'https://bellotreno.org';
@@ -29,6 +30,7 @@ const ENABLE_UMAMI = Boolean(UMAMI_SCRIPT_URL && UMAMI_WEBSITE_ID);
 const {
     title,
     pageScripts = [],
+    robots = 'index, follow',
     description = 'BelloTreno — Orari e stato in tempo reale dei treni italiani. Frecciarossa, Intercity, Regionali e molto altro.',
 } = Astro.props;
 
@@ -46,7 +48,7 @@ const canonicalURL = new URL(Astro.url.pathname, SITE_URL).href;
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="robots" content="index, follow">
+    <meta name="robots" content={robots}>
     <meta name="theme-color" content="#6a8a9f" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#082a1a" media="(prefers-color-scheme: dark)">
     <link rel="manifest" href="/site.webmanifest">
@@ -129,8 +131,10 @@ const canonicalURL = new URL(Astro.url.pathname, SITE_URL).href;
 </head>
 <body>
     <div class="aurora-bg" transition:persist="aurora-bg" aria-hidden="true"></div>
-    <div style="position: relative; z-index: 1; flex: 1; display: flex; flex-direction: column;">
-        <Navbar />
+    <div class="bt-app-frame">
+        <div transition:persist="main-nav">
+            <SiteNav client:load />
+        </div>
         <BackToTop />
         <slot />
         <Footer />

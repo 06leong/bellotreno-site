@@ -42,6 +42,10 @@ function updateLanguage() {
 
     if (window.onLanguageChanged) window.onLanguageChanged();
 
+    window.dispatchEvent(new CustomEvent('bellotreno:language-change', {
+        detail: { lang: window.currentLang }
+    }));
+
     document.documentElement.removeAttribute('data-lang-loading');
 }
 
@@ -72,6 +76,13 @@ function applyTheme() {
     }
 
     setTimeout(() => root.classList.remove('theme-transitioning'), 350);
+
+    window.dispatchEvent(new CustomEvent('bellotreno:theme-change', {
+        detail: {
+            theme: window.currentTheme,
+            resolvedTheme: root.getAttribute('data-theme')
+        }
+    }));
 }
 
 function updateThemeDisplay() {

@@ -737,3 +737,7 @@ const translations = {
         footer: "Queste informazioni sono solo di riferimento. Controllare i display delle stazioni per informazioni ufficiali. | © 2026 BelloTreno"
     }
 };
+
+if (typeof window !== 'undefined') {
+    window.translations = translations;
+}

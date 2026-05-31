@@ -95,10 +95,13 @@ function replaceContent(element, children = []) {
     element.replaceChildren(...children);
 }
 
-function createInfoMessage(text, color = 'var(--text-grey)') {
+function createInfoMessage(text, tone = 'empty') {
     const message = document.createElement('div');
-    message.style.cssText = `text-align:center;padding:40px;color:${color}`;
-    message.textContent = text;
+    message.className = tone === 'error' ? 'bt-state bt-error-state' : 'bt-state bt-empty-state';
+    const icon = createMaterialIcon(tone === 'error' ? 'link_off' : 'info', 'material-symbols-outlined');
+    const label = document.createElement('span');
+    label.textContent = text;
+    message.append(icon, label);
     return message;
 }
 
@@ -111,10 +114,10 @@ function createMaterialIcon(name, className = 'material-symbols-outlined text-[1
 
 function createRSSCard({ title, safeLink, formattedDate, region }) {
     const rssCard = document.createElement('div');
-    rssCard.className = 'card bg-base-100/65 backdrop-blur-3xl shadow-glass border border-base-content/10 hover:bg-base-100/75 hover:shadow-lg transition-all mb-4';
+    rssCard.className = 'rss-item';
 
     const body = document.createElement('div');
-    body.className = 'card-body p-6';
+    body.className = 'card-body p-0';
 
     const heading = document.createElement('h3');
     heading.className = 'card-title text-lg text-base-content leading-snug';
@@ -203,7 +206,12 @@ async function fetchRSS() {
     } catch (error) {
         if (error.name === 'AbortError') return;
         console.error('Error fetching RSS:', error);
-        replaceContent(contentContainer, [createInfoMessage(`Error: ${error.message}`, 'var(--train-red)')]);
+        const message = window.currentLang === 'zh'
+            ? '信息暂时无法加载，请稍后重试'
+            : window.currentLang === 'it'
+                ? 'Informazioni temporaneamente non disponibili. Riprovare più tardi.'
+                : 'Information is temporarily unavailable. Please try again later.';
+        replaceContent(contentContainer, [createInfoMessage(message, 'error')]);
     } finally {
         currentFetchController = null;
         toggleLoading(false);

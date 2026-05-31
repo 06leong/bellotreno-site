@@ -1,0 +1,14 @@
+---
+interface Props {
+  tone?: 'neutral' | 'info' | 'success' | 'warning' | 'danger';
+  icon?: string;
+  class?: string;
+}
+
+const { tone = 'neutral', icon, class: className = '' } = Astro.props;
+---
+
+<span class:list={['bt-status-badge', `bt-status-${tone}`, className]}>
+  {icon && <span class="material-symbols-outlined" aria-hidden="true">{icon}</span>}
+  <slot />
+</span>

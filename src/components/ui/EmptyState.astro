@@ -1,0 +1,17 @@
+---
+interface Props {
+  icon?: string;
+  title?: string;
+  message?: string;
+  class?: string;
+}
+
+const { icon = 'info', title, message, class: className = '' } = Astro.props;
+---
+
+<div class:list={['bt-state', 'bt-empty-state', className]}>
+  <span class="material-symbols-outlined" aria-hidden="true">{icon}</span>
+  {title && <strong>{title}</strong>}
+  {message && <p>{message}</p>}
+  <slot />
+</div>

@@ -1,0 +1,21 @@
+---
+interface Props {
+  eyebrow?: string;
+  title?: string;
+  subtitle?: string;
+  class?: string;
+}
+
+const { eyebrow, title, subtitle, class: className = '' } = Astro.props;
+---
+
+<main class:list={['container', 'bt-page-shell', className]}>
+  {(eyebrow || title || subtitle) && (
+    <header class="bt-page-header">
+      {eyebrow && <p class="bt-page-eyebrow">{eyebrow}</p>}
+      {title && <h1>{title}</h1>}
+      {subtitle && <p class="bt-page-subtitle">{subtitle}</p>}
+    </header>
+  )}
+  <slot />
+</main>
