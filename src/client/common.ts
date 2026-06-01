@@ -1,3 +1,5 @@
+export {};
+
 /**
  * BelloTreno - Common UI Logic
  */
@@ -8,7 +10,7 @@ window.currentTheme = 'auto';
 // ========== Language Management ==========
 
 function initLanguage() {
-    const lang = document.documentElement.getAttribute('data-lang');
+    const lang = document.documentElement.getAttribute('data-lang') as Window["currentLang"] | null;
     if (lang) {
         window.currentLang = lang;
     }
@@ -37,7 +39,7 @@ function updateLanguage() {
     const visitorCountEl = document.getElementById('visitorCount');
     if (visitorCountEl && window.visitorCountData !== undefined) {
         const template = (typeof translations !== 'undefined' && translations[window.currentLang]) ? translations[window.currentLang]['visitor_counter'] : '{count}';
-        visitorCountEl.textContent = template.replace('{count}', window.visitorCountData);
+        visitorCountEl.textContent = template.replace('{count}', String(window.visitorCountData));
     }
 
     if (window.onLanguageChanged) window.onLanguageChanged();
@@ -45,7 +47,7 @@ function updateLanguage() {
     document.documentElement.removeAttribute('data-lang-loading');
 }
 
-function changeLang(lang) {
+function changeLang(lang: NonNullable<Window["currentLang"]>) {
     window.currentLang = lang;
     localStorage.setItem('language', lang);
     updateLanguage();
@@ -54,7 +56,7 @@ function changeLang(lang) {
 // ========== Theme Management ==========
 
 function initTheme() {
-    const savedTheme = localStorage.getItem('theme') || 'auto';
+    const savedTheme = (localStorage.getItem('theme') || 'auto') as NonNullable<Window["currentTheme"]>;
     window.currentTheme = savedTheme;
     applyTheme();
     updateThemeDisplay();
@@ -82,7 +84,7 @@ function updateThemeDisplay() {
     }
 }
 
-function changeTheme(theme) {
+function changeTheme(theme: NonNullable<Window["currentTheme"]>) {
     window.currentTheme = theme;
     localStorage.setItem('theme', theme);
     applyTheme();

@@ -24,7 +24,12 @@ interface BelloSwissApi {
 }
 
 declare global {
-  const translations: TranslationDictionary | undefined;
+  const translations: TranslationDictionary;
+  const currentLang: BelloLanguage;
+  const currentTheme: BelloTheme;
+
+  function applyTheme(): void;
+  function goToStationBoard(stationId: string, stationName?: string, type?: string): void;
 
   interface Window {
     API_BASE?: string;
@@ -43,6 +48,7 @@ declare global {
     _commonInitialized?: boolean;
     _mainInitialized?: boolean;
     applyTheme?: () => void;
+    changeDropdownRegion?: (value: string, text: string, i18nKey?: string) => void;
     changeLang?: (lang: BelloLanguage) => void;
     changeTheme?: (theme: BelloTheme) => void;
     currentLang?: BelloLanguage;
@@ -53,12 +59,16 @@ declare global {
     formatDepartureData?: (train: unknown, lang: string, stationName: string) => unknown;
     getBadgeClass?: (categoryCode: string) => string;
     getItalianTimeString?: () => string;
+    goHome?: () => void;
     goToStationBoard?: (stationId: string, stationName?: string, type?: string) => void;
     initLanguage?: () => void;
     initTheme?: () => void;
     initVisitorCounter?: () => Promise<void>;
     onLanguageChanged?: () => void;
     scrollToTop?: () => void;
+    searchMode?: "train" | "station";
+    switchInfoMode?: (mode: "updates" | "notices") => void;
+    switchSearchMode?: (mode: "train" | "station") => void;
     switchBoardType?: (type: "partenze" | "arrivi") => void;
     translations?: TranslationDictionary;
     updateLanguage?: () => void;

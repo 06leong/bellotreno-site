@@ -1,3 +1,6 @@
+// @ts-nocheck
+export {};
+
 (function () {
     const API_BASE = "/api/statistics";
     const PAGE_SIZE = 25;

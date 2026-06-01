@@ -7,6 +7,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     description="Statistiche giornaliere dei treni italiani monitorati da BelloTreno: puntualita, ritardi, cancellazioni, categorie e andamento della circolazione."
     pageScripts={["/scripts/statistics.js"]}>
     <Fragment slot="head"></Fragment>
+    <Fragment slot="scripts">
+        <script>
+            import '../client/statistics.ts';
+        </script>
+    </Fragment>
 
     <main class="statistics-page container">
         <section class="statistics-header">

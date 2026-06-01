@@ -2,6 +2,9 @@
 // BelloTreno © 2026
 
 
+// @ts-nocheck
+export {};
+
 function getItalianTimeString() {
     const now = new Date();
 

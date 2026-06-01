@@ -10,11 +10,13 @@ interface I18nMismatch {
   extra: string[];
 }
 
-const i18nPath = "public/scripts/i18n.js";
-const source = readFileSync(i18nPath, "utf8");
+const i18nPath = "src/client/i18n.ts";
+const source = readFileSync(i18nPath, "utf8")
+  .replace(/^export\s+\{\};\s*$/m, "")
+  .replace("window.translations = translations;", "globalThis.__translations = translations;");
 const context: Record<string, unknown> = {};
 
-vm.runInNewContext(`${source}\nglobalThis.__translations = translations;`, context, {
+vm.runInNewContext(source, context, {
   filename: i18nPath,
 });
 

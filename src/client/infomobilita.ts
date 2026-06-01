@@ -1,3 +1,6 @@
+// @ts-nocheck
+export {};
+
 /**
  * BelloTreno Infomobilità 模块
  * 负责抓取、解析并展示 RFI RSS 实时公告
@@ -76,6 +79,8 @@ function switchInfoMode(mode) {
 
     fetchRSS();
 }
+
+window.switchInfoMode = switchInfoMode;
 
 /**
  * 切换加载动画显示

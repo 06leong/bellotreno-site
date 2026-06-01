@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
-const roots = ["public/scripts", "functions"];
+const roots = ["src/client", "functions"];
 const auditedExtensions = [".js", ".ts"];
 
 interface InnerHtmlFinding {

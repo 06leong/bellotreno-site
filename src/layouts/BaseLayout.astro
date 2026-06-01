@@ -5,6 +5,7 @@ import BackToTop from '../components/BackToTop.astro';
 import { ClientRouter } from 'astro:transitions';
 import { Font } from 'astro:assets';
 import '../styles/global.css';
+import themeInitSource from '../client/theme-init.ts?raw';
 
 interface Props {
     title: string;
@@ -112,7 +113,7 @@ const canonicalURL = new URL(Astro.url.pathname, SITE_URL).href;
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 
-    <script is:inline src={withBuildVersion("/scripts/theme-init.js")}></script>
+    <script is:inline set:html={themeInitSource}></script>
     {ENABLE_UMAMI && (
         <script
             is:inline
@@ -136,10 +137,11 @@ const canonicalURL = new URL(Astro.url.pathname, SITE_URL).href;
         <Footer />
     </div>
 
-    <script is:inline src={withBuildVersion("/scripts/config.js")}></script>
-    <script is:inline src={withBuildVersion("/scripts/i18n.js")}></script>
-    <script is:inline src={withBuildVersion("/scripts/common.js")}></script>
-    {pageScripts.map((src) => <script is:inline src={withBuildVersion(src)}></script>)}
+    <script>
+        import '../client/config.ts';
+        import '../client/i18n.ts';
+        import '../client/common.ts';
+    </script>
     <slot name="scripts" />
 </body>
 </html>

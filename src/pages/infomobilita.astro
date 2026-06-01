@@ -7,6 +7,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     description="Avvisi e aggiornamenti in tempo reale dell’infomobilità ferroviaria RFI. Notizie su scioperi, lavori e perturbazioni su tutta la rete ferroviaria italiana."
     pageScripts={["/scripts/infomobilita.js"]}>
     <Fragment slot="head"></Fragment>
+    <Fragment slot="scripts">
+        <script>
+            import '../client/infomobilita.ts';
+        </script>
+    </Fragment>
 
     <div class="container">
         <div class="text-center mt-10 mb-6">

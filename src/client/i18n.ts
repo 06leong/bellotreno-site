@@ -1,3 +1,5 @@
+export {};
+
 /**
  * BelloTreno 国际化翻译文件
  * 支持中文、英文、意大利语
@@ -737,3 +739,5 @@ const translations = {
         footer: "Queste informazioni sono solo di riferimento. Controllare i display delle stazioni per informazioni ufficiali. | © 2026 BelloTreno"
     }
 };
+
+window.translations = translations;

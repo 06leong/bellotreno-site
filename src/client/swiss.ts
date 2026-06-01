@@ -1,3 +1,6 @@
+// @ts-nocheck
+export {};
+
 (function () {
     const cache = new Map();
     const SWISS_ENDPOINT = window.SWISS_FORMATION_BASE || window.SWISS_EC_BASE || "/api/swiss/formation";

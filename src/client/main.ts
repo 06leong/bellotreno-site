@@ -1,3 +1,6 @@
+// @ts-nocheck
+export {};
+
 /**
  * BelloTreno 主应用逻辑
  * 包含所有核心功能和事件处理
@@ -7,6 +10,7 @@
 let currentTrainData = null;
 let currentTriple = null;
 let searchMode = 'train';
+window.searchMode = searchMode;
 let disambiguationData = null;
 let currentSmartCaringData = null;
 let currentTrainCategory = '';
@@ -136,6 +140,7 @@ function updateSearchLabel() {
 
 function switchSearchMode(mode) {
     searchMode = mode;
+    window.searchMode = searchMode;
 
     updateSearchLabel();
 
@@ -183,6 +188,9 @@ window.onLanguageChanged = function () {
 function goHome() {
     window.location.href = '/';
 }
+
+window.switchSearchMode = switchSearchMode;
+window.goHome = goHome;
 
 
 

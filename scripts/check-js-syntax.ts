@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
-const roots = ["public/scripts", "functions", "src/lib"];
+const roots = ["public/scripts"];
 
 function collectJsFiles(root: string): string[] {
   if (!existsSync(root)) return [];
@@ -49,4 +49,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(`JavaScript syntax check passed for ${files.length} file(s).`);
+console.log(`Raw JavaScript syntax check passed for ${files.length} file(s).`);
