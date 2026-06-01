@@ -638,7 +638,7 @@ function renderRecentSearches() {
                     document.getElementById('trainSearch').value = item.id;
                     startSearch(item.id);
                 } else if (item.type === 'station') {
-                    goToStationBoard(item.id, item.name);
+                    window.goToStationBoard?.(item.id, item.name);
                 }
             });
 
@@ -822,7 +822,7 @@ function showStationDisambiguation(stations) {
         div.onclick = () => {
             panel.style.display = 'none';
             saveRecentStationSearch(station.id, station.nomeLungo);
-            goToStationBoard(station.id, station.nomeLungo);
+            window.goToStationBoard?.(station.id, station.nomeLungo);
         };
         list.appendChild(div);
     });
@@ -1886,8 +1886,8 @@ document.addEventListener('astro:page-load', () => {
         });
 
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-            if (currentTheme === 'auto') {
-                applyTheme();
+            if (window.currentTheme === 'auto') {
+                window.applyTheme?.();
             }
         });
 
@@ -1897,7 +1897,7 @@ document.addEventListener('astro:page-load', () => {
                 const stationId = stationLink.getAttribute('data-station-id');
                 const stationName = stationLink.getAttribute('data-station-name');
                 if (stationId && stationName) {
-                    goToStationBoard(stationId, stationName);
+                    window.goToStationBoard?.(stationId, stationName);
                 }
             }
         });
