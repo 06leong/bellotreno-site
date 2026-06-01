@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "lib": ["ES2022", "DOM"]
+  },
+  "include": [
+    "src/types/**/*.d.ts",
+    "src/lib/normalizers/**/*.js"
+  ]
+}
