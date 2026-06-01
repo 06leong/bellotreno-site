@@ -7,6 +7,6 @@
   },
   "include": [
     "src/types/**/*.d.ts",
-    "src/lib/normalizers/**/*.js"
+    "src/lib/normalizers/**/*.ts"
   ]
 }

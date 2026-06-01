@@ -1,21 +1,15 @@
-/**
- * @typedef {Object} ViaggiaTrenoStop
- * @property {string=} stazione
- * @property {string=} name
- * @property {number|string=} actualFermataType
- */
+export interface ViaggiaTrenoStop {
+  stazione?: string;
+  name?: string;
+  actualFermataType?: number | string;
+}
 
-/**
- * @typedef {Object} PartialCancellationState
- * @property {boolean} cancelled
- * @property {""|"actualStart"|"actualEnd"|"replacementStart"} boundary
- */
+export interface PartialCancellationState {
+  cancelled: boolean;
+  boundary: "" | "actualStart" | "actualEnd" | "replacementStart";
+}
 
-/**
- * @param {unknown} value
- * @returns {string}
- */
-export function normalizeStationMatchName(value) {
+export function normalizeStationMatchName(value: unknown): string {
   return String(value || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -26,32 +20,22 @@ export function normalizeStationMatchName(value) {
     .toUpperCase();
 }
 
-/**
- * @param {ViaggiaTrenoStop[]} stops
- * @param {unknown} name
- * @returns {number}
- */
-export function findStopIndexByName(stops, name) {
+export function findStopIndexByName(stops: ViaggiaTrenoStop[], name: unknown): number {
   const target = normalizeStationMatchName(name);
   if (!target || !Array.isArray(stops)) return -1;
   return stops.findIndex((stop) => normalizeStationMatchName(stop?.stazione || stop?.name) === target);
 }
 
-/**
- * @param {unknown} data
- * @returns {string[]}
- */
-export function collectSuppressedStopNames(data) {
-  /** @type {string[]} */
-  const names = [];
-  const recordData = /** @type {Record<string, unknown>} */ (data || {});
+export function collectSuppressedStopNames(data: unknown): string[] {
+  const names: string[] = [];
+  const recordData = (data || {}) as Record<string, unknown>;
   const raw = recordData.fermateSoppresse;
   if (!Array.isArray(raw)) return names;
   for (const item of raw) {
     if (typeof item === "string") {
       names.push(item);
     } else if (item && typeof item === "object") {
-      const record = /** @type {Record<string, unknown>} */ (item);
+      const record = item as Record<string, unknown>;
       names.push(String(record.stazione || record.nome || record.name || record.descrizione || ""));
     }
   }
@@ -61,15 +45,11 @@ export function collectSuppressedStopNames(data) {
 /**
  * Infer cancelled/boundary stops from ViaggiaTreno subtitle conventions.
  *
- * @param {Record<string, unknown>} data
- * @param {ViaggiaTrenoStop[]} stops
- * @returns {PartialCancellationState[]}
  */
-export function buildPartialCancellationState(data, stops) {
-  /** @type {PartialCancellationState[]} */
+export function buildPartialCancellationState(data: Record<string, unknown>, stops: ViaggiaTrenoStop[]): PartialCancellationState[] {
   const state = (Array.isArray(stops) ? stops : []).map((stop) => ({
     cancelled: Number(stop?.actualFermataType) === 3,
-    boundary: "",
+    boundary: "" as PartialCancellationState["boundary"],
   }));
   if (!state.length) return state;
 

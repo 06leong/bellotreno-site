@@ -1,5 +1,5 @@
 import CryptoJS from "crypto-js";
-import { normalizeTrenordTrafficInformation } from "../../../src/lib/normalizers/trenord.js";
+import { normalizeTrenordTrafficInformation } from "../../../src/lib/normalizers/trenord.ts";
 
 const TRAIN_BFF_BASE = "https://www.trenord.it/mia/bff/train";
 const DIRETTRICI_URL = "https://www.trenord.it/mgmt/store-management-api/mia/direttrici/";

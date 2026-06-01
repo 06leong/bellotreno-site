@@ -1,52 +1,45 @@
-/**
- * @typedef {Object} SwissTrainLike
- * @property {string|number=} numeroTreno
- * @property {string|number=} trainNumber
- * @property {string|number=} dataPartenzaTreno
- * @property {string|number=} dataPartenza
- * @property {string=} categoria
- * @property {string=} categoriaDescrizione
- * @property {string=} compNumeroTreno
- * @property {string=} origine
- * @property {string=} destinazione
- * @property {{ stazione?: string }[]=} fermate
- */
+export interface SwissTrainLike {
+  numeroTreno?: string | number;
+  trainNumber?: string | number;
+  dataPartenzaTreno?: string | number;
+  dataPartenza?: string | number;
+  categoria?: string;
+  categoriaDescrizione?: string;
+  compNumeroTreno?: string;
+  origine?: string;
+  destinazione?: string;
+  fermate?: { stazione?: string }[];
+}
 
-/**
- * @typedef {Object} SwissVehicleSegment
- * @property {string=} fromStop
- * @property {string=} toStop
- * @property {boolean=} closed
- * @property {boolean=} vehicleWillBePutAway
- * @property {string=} trolleyStatus
- */
+export interface SwissVehicleSegment {
+  fromStop?: string;
+  toStop?: string;
+  closed?: boolean;
+  vehicleWillBePutAway?: boolean;
+  trolleyStatus?: string;
+}
 
-/**
- * @typedef {Object} SwissVehicle
- * @property {string=} evn
- * @property {string|number=} countryCode
- * @property {string|number=} vehicleNumber
- * @property {string|number=} checkNumber
- * @property {number|string=} position
- * @property {number|string=} number
- * @property {string=} typeCodeName
- * @property {string=} typeCode
- * @property {number|string=} firstClassSeats
- * @property {number|string=} secondClassSeats
- * @property {boolean=} closed
- * @property {boolean=} vehicleWillBePutAway
- * @property {string=} trolleyStatus
- * @property {SwissVehicleSegment[]=} segments
- * @property {Record<string, unknown>[]=} stopSectors
- */
+export interface SwissVehicle {
+  evn?: string;
+  countryCode?: string | number;
+  vehicleNumber?: string | number;
+  checkNumber?: string | number;
+  position?: number | string;
+  number?: number | string;
+  typeCodeName?: string;
+  typeCode?: string;
+  firstClassSeats?: number | string;
+  secondClassSeats?: number | string;
+  closed?: boolean;
+  vehicleWillBePutAway?: boolean;
+  trolleyStatus?: string;
+  segments?: SwissVehicleSegment[];
+  stopSectors?: Record<string, unknown>[];
+}
 
 export const SWISS_BORDER_HINTS = new Set(["CHIASSO", "DOMODOSSOLA", "LUINO", "TIRANO", "STABIO"]);
 
-/**
- * @param {unknown} value
- * @returns {string}
- */
-export function normalizeSwissStationName(value) {
+export function normalizeSwissStationName(value: unknown): string {
   const normalized = String(value || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -60,36 +53,20 @@ export function normalizeSwissStationName(value) {
   return normalized;
 }
 
-/**
- * @param {unknown} value
- * @returns {boolean}
- */
-export function isSimplonGalleryKey(value) {
+export function isSimplonGalleryKey(value: unknown): boolean {
   const key = String(value || "").toUpperCase();
   return key.includes("GALLERIA SEMPIONE") || key.includes("SIMPLON");
 }
 
-/**
- * @param {unknown} value
- * @returns {boolean}
- */
-export function isSwissBoundaryName(value) {
+export function isSwissBoundaryName(value: unknown): boolean {
   return SWISS_BORDER_HINTS.has(normalizeSwissStationName(value));
 }
 
-/**
- * @param {SwissTrainLike} data
- * @returns {string}
- */
-export function getSwissTrainNumber(data) {
+export function getSwissTrainNumber(data: SwissTrainLike): string {
   return String(data?.numeroTreno || data?.trainNumber || "").replace(/\D/g, "");
 }
 
-/**
- * @param {SwissTrainLike} data
- * @returns {string}
- */
-export function getSwissOperationDate(data) {
+export function getSwissOperationDate(data: SwissTrainLike): string {
   const raw = Number(data?.dataPartenzaTreno || data?.dataPartenza);
   if (Number.isFinite(raw) && raw > 0) {
     return new Intl.DateTimeFormat("en-CA", {
@@ -102,11 +79,7 @@ export function getSwissOperationDate(data) {
   return "";
 }
 
-/**
- * @param {SwissTrainLike} data
- * @returns {string}
- */
-export function getSwissCategory(data) {
+export function getSwissCategory(data: SwissTrainLike): string {
   const category = String(data?.categoria || data?.categoriaDescrizione || "").trim().toUpperCase();
   const comp = String(data?.compNumeroTreno || "").toUpperCase();
   if (comp.includes("EC FR")) return "FR";
@@ -115,22 +88,12 @@ export function getSwissCategory(data) {
   return match ? match[0] : "";
 }
 
-/**
- * @param {SwissTrainLike} data
- * @returns {boolean}
- */
-export function hasSwissHint(data) {
+export function hasSwissHint(data: SwissTrainLike): boolean {
   const values = [data?.origine, data?.destinazione, ...(Array.isArray(data?.fermate) ? data.fermate.map((stop) => stop?.stazione) : [])];
   return values.some(isSwissBoundaryName);
 }
 
-/**
- * @param {SwissTrainLike} data
- * @param {string=} category
- * @param {string=} today
- * @returns {boolean}
- */
-export function shouldQuerySwissFormation(data, category = getSwissCategory(data), today = getTodayInZurich()) {
+export function shouldQuerySwissFormation(data: SwissTrainLike, category = getSwissCategory(data), today = getTodayInZurich()): boolean {
   const trainNumber = getSwissTrainNumber(data);
   const operationDate = getSwissOperationDate(data);
   if (!trainNumber || !operationDate || operationDate !== today) return false;
@@ -141,11 +104,7 @@ export function shouldQuerySwissFormation(data, category = getSwissCategory(data
   return false;
 }
 
-/**
- * @param {SwissVehicle} vehicle
- * @returns {string}
- */
-export function swissVehicleIdentityKey(vehicle) {
+export function swissVehicleIdentityKey(vehicle: SwissVehicle): string {
   const evn = String(vehicle?.evn || "").replace(/\s+/g, "");
   if (evn) return `evn:${evn}`;
 
@@ -169,11 +128,9 @@ export function swissVehicleIdentityKey(vehicle) {
  * remains segment-aware: a closed segment must not globally mark the vehicle
  * closed for every selected station.
  *
- * @param {SwissVehicle[]} records
- * @returns {SwissVehicle[]}
  */
-export function mergeSwissVehicleRecords(records) {
-  const merged = new Map();
+export function mergeSwissVehicleRecords(records: SwissVehicle[]): SwissVehicle[] {
+  const merged = new Map<string, SwissVehicle>();
 
   for (const record of Array.isArray(records) ? records : []) {
     const key = swissVehicleIdentityKey(record);
@@ -202,12 +159,10 @@ export function mergeSwissVehicleRecords(records) {
 }
 
 /**
- * @param {Record<string, unknown>[]} items
- * @returns {Record<string, unknown>[]}
  */
-function uniqueObjects(items) {
-  const seen = new Set();
-  const output = [];
+function uniqueObjects<T extends object>(items: T[]): T[] {
+  const seen = new Set<string>();
+  const output: T[] = [];
   for (const item of items) {
     const key = JSON.stringify(item || {});
     if (seen.has(key)) continue;
@@ -217,7 +172,7 @@ function uniqueObjects(items) {
   return output;
 }
 
-function getTodayInZurich() {
+function getTodayInZurich(): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Europe/Zurich",
     year: "numeric",

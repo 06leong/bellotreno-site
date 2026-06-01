@@ -1,102 +1,75 @@
-/**
- * @typedef {Object} TrenordTrainInfo
- * @property {string|null} line
- * @property {string|null} trainCategory
- * @property {string|null} trainOperator
- * @property {string|null} direttrice
- * @property {string|null} direttriceSecurity
- */
+export interface TrenordTrainInfo {
+  line: string | null;
+  trainCategory: string | null;
+  trainOperator: string | null;
+  direttrice: string | null;
+  direttriceSecurity: string | null;
+}
 
-/**
- * @typedef {Object} TrenordDirettrice
- * @property {string=} nome
- * @property {string=} descrizione
- * @property {TrenordDirettriceNews[]=} news
- */
+export interface TrenordDirettrice {
+  nome?: string;
+  descrizione?: string;
+  news?: TrenordDirettriceNews[];
+}
 
-/**
- * @typedef {Object} TrenordDirettriceNews
- * @property {string=} description
- * @property {string=} date
- * @property {number|string=} severity_code
- * @property {string=} severity_description
- */
+export interface TrenordDirettriceNews {
+  description?: string;
+  date?: string;
+  severity_code?: number | string;
+  severity_description?: string;
+}
 
-/**
- * @typedef {"primary-direttrice"|"security-direttrice-fallback"|"none"} TrenordMatchSource
- */
+export type TrenordMatchSource = "primary-direttrice" | "security-direttrice-fallback" | "none";
 
-/**
- * @typedef {Object} TrenordNotice
- * @property {string} id
- * @property {"trenord-direttrici"} source
- * @property {string} direttriceCode
- * @property {string} direttriceDescription
- * @property {string} description
- * @property {string|undefined} date
- * @property {number|undefined} severityCode
- * @property {string|undefined} severityDescription
- * @property {"disruption"|"warning"|"info"} severityLevel
- * @property {string[]} urls
- */
+export interface TrenordNotice {
+  id: string;
+  source: "trenord-direttrici";
+  direttriceCode: string;
+  direttriceDescription: string;
+  description: string;
+  date?: string;
+  severityCode?: number;
+  severityDescription?: string;
+  severityLevel: "disruption" | "warning" | "info";
+  urls: string[];
+}
 
-/**
- * @typedef {Object} TrenordTrafficInformationResult
- * @property {boolean} available
- * @property {string} trainNumber
- * @property {string} date
- * @property {string|null|undefined} line
- * @property {string|null|undefined} trainCategory
- * @property {string|null|undefined} trainOperator
- * @property {string|null|undefined} direttrice
- * @property {string|null|undefined} direttriceDescription
- * @property {string|null|undefined} direttriceSecurity
- * @property {TrenordMatchSource} matchSource
- * @property {string=} reason
- * @property {TrenordNotice[]} notices
- */
+export interface TrenordTrafficInformationResult {
+  available: boolean;
+  trainNumber: string;
+  date: string;
+  line: string | null | undefined;
+  trainCategory: string | null | undefined;
+  trainOperator: string | null | undefined;
+  direttrice: string | null | undefined;
+  direttriceDescription: string | null | undefined;
+  direttriceSecurity: string | null | undefined;
+  matchSource: TrenordMatchSource;
+  reason?: string;
+  notices: TrenordNotice[];
+}
 
-/**
- * @param {unknown} value
- * @returns {string|null}
- */
-function asString(value) {
+function asString(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   const text = String(value).trim();
   return text ? text : null;
 }
 
-/**
- * @param {unknown} value
- * @returns {number|undefined}
- */
-function asOptionalNumber(value) {
+function asOptionalNumber(value: unknown): number | undefined {
   if (value === null || value === undefined || value === "") return undefined;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-/**
- * @param {unknown} value
- * @returns {Record<string, unknown>}
- */
-function asRecord(value) {
-  return value && typeof value === "object" ? /** @type {Record<string, unknown>} */ (value) : {};
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? value as Record<string, unknown> : {};
 }
 
-/**
- * @param {Record<string, unknown>} train
- * @returns {boolean}
- */
-function hasDirettrice(train) {
+function hasDirettrice(train: Record<string, unknown>): boolean {
   return Boolean(asString(train.direttrice) || asString(train.direttrice_security));
 }
 
-/**
- * @param {Record<string, unknown>} record
- * @returns {boolean}
- */
-function isTrainLikeRecord(record) {
+function isTrainLikeRecord(record: Record<string, unknown>): boolean {
   return Boolean(
     asString(record.train_id)
     || asString(record.trainId)
@@ -108,13 +81,13 @@ function isTrainLikeRecord(record) {
 }
 
 /**
- * @param {unknown} value
- * @param {Record<string, unknown>[]} candidates
- * @param {WeakSet<object>} seen
- * @param {number} depth
- * @returns {Record<string, unknown>[]}
  */
-function collectTrainCandidates(value, candidates = [], seen = new WeakSet(), depth = 0) {
+function collectTrainCandidates(
+  value: unknown,
+  candidates: Record<string, unknown>[] = [],
+  seen = new WeakSet<object>(),
+  depth = 0,
+): Record<string, unknown>[] {
   if (value === null || value === undefined || depth > 8) return candidates;
 
   if (Array.isArray(value)) {
@@ -126,7 +99,7 @@ function collectTrainCandidates(value, candidates = [], seen = new WeakSet(), de
   if (seen.has(value)) return candidates;
   seen.add(value);
 
-  const record = /** @type {Record<string, unknown>} */ (value);
+  const record = value as Record<string, unknown>;
   if (hasDirettrice(record) || isTrainLikeRecord(record)) {
     candidates.push(record);
   }
@@ -144,21 +117,13 @@ function collectTrainCandidates(value, candidates = [], seen = new WeakSet(), de
   return candidates;
 }
 
-/**
- * @param {unknown} payload
- * @returns {Record<string, unknown>}
- */
-export function getTrenordTrainRecord(payload) {
+export function getTrenordTrainRecord(payload: unknown): Record<string, unknown> {
   const candidates = collectTrainCandidates(payload);
 
   return candidates.find(hasDirettrice) || candidates[0] || {};
 }
 
-/**
- * @param {unknown} payload
- * @returns {TrenordTrainInfo}
- */
-export function getTrenordTrainInfo(payload) {
+export function getTrenordTrainInfo(payload: unknown): TrenordTrainInfo {
   const train = getTrenordTrainRecord(payload);
   return {
     line: asString(train.line),
@@ -169,22 +134,13 @@ export function getTrenordTrainInfo(payload) {
   };
 }
 
-/**
- * @param {TrenordDirettrice[]} direttrici
- * @param {string|null|undefined} code
- * @returns {TrenordDirettrice|null}
- */
-export function findTrenordDirettrice(direttrici, code) {
+export function findTrenordDirettrice(direttrici: TrenordDirettrice[], code: string | null | undefined): TrenordDirettrice | null {
   const normalizedCode = asString(code);
   if (!normalizedCode || !Array.isArray(direttrici)) return null;
   return direttrici.find((item) => asString(item?.nome) === normalizedCode) || null;
 }
 
-/**
- * @param {unknown} description
- * @returns {string[]}
- */
-export function extractTrenordNoticeUrls(description) {
+export function extractTrenordNoticeUrls(description: unknown): string[] {
   const text = String(description || "");
   const matches = text.match(/https?:\/\/[^\s<>"']+/gi) || [];
   const urls = matches
@@ -200,11 +156,7 @@ export function extractTrenordNoticeUrls(description) {
   return Array.from(new Set(urls));
 }
 
-/**
- * @param {unknown} value
- * @returns {"disruption"|"warning"|"info"}
- */
-export function trenordSeverityLevel(value) {
+export function trenordSeverityLevel(value: unknown): "disruption" | "warning" | "info" {
   const severity = String(value || "").trim().toLowerCase();
   if (severity === "critical" || severity === "high" || severity === "disruption") return "disruption";
   if (severity === "warning" || severity === "warn") return "warning";
@@ -214,10 +166,8 @@ export function trenordSeverityLevel(value) {
 /**
  * FNV-1a hash for stable browser/server ids without a crypto dependency.
  *
- * @param {string} value
- * @returns {string}
  */
-export function stableTrenordNoticeHash(value) {
+export function stableTrenordNoticeHash(value: string): string {
   let hash = 0x811c9dc5;
   for (let index = 0; index < value.length; index += 1) {
     hash ^= value.charCodeAt(index);
@@ -227,13 +177,8 @@ export function stableTrenordNoticeHash(value) {
 }
 
 /**
- * @param {string} trainNumber
- * @param {string} date
- * @param {string} direttriceCode
- * @param {TrenordDirettriceNews} notice
- * @returns {string}
  */
-export function buildTrenordNoticeId(trainNumber, date, direttriceCode, notice) {
+export function buildTrenordNoticeId(trainNumber: string, date: string, direttriceCode: string, notice: TrenordDirettriceNews): string {
   return `tn-${stableTrenordNoticeHash([
     trainNumber,
     date,
@@ -244,12 +189,8 @@ export function buildTrenordNoticeId(trainNumber, date, direttriceCode, notice) 
 }
 
 /**
- * @param {string} trainNumber
- * @param {string} date
- * @param {TrenordDirettrice|null} direttrice
- * @returns {TrenordNotice[]}
  */
-export function normalizeTrenordNotices(trainNumber, date, direttrice) {
+export function normalizeTrenordNotices(trainNumber: string, date: string, direttrice: TrenordDirettrice | null): TrenordNotice[] {
   const direttriceCode = asString(direttrice?.nome);
   const direttriceDescription = asString(direttrice?.descrizione);
   if (!direttriceCode || !direttriceDescription || !Array.isArray(direttrice?.news)) return [];
@@ -259,8 +200,7 @@ export function normalizeTrenordNotices(trainNumber, date, direttrice) {
       const description = asString(notice?.description);
       if (!description) return null;
       const severityDescription = asString(notice?.severity_description) || undefined;
-      /** @type {TrenordNotice} */
-      const normalized = {
+      const normalized: TrenordNotice = {
         id: buildTrenordNoticeId(trainNumber, date, direttriceCode, notice),
         source: "trenord-direttrici",
         direttriceCode,
@@ -274,7 +214,7 @@ export function normalizeTrenordNotices(trainNumber, date, direttrice) {
       };
       return normalized;
     })
-    .filter((notice) => notice !== null)
+    .filter((notice): notice is TrenordNotice => notice !== null)
     .sort((left, right) => {
       const leftTime = Date.parse(left?.date || "");
       const rightTime = Date.parse(right?.date || "");
@@ -287,13 +227,13 @@ export function normalizeTrenordNotices(trainNumber, date, direttrice) {
 }
 
 /**
- * @param {string} trainNumber
- * @param {string} date
- * @param {unknown} trainPayload
- * @param {TrenordDirettrice[]} direttrici
- * @returns {TrenordTrafficInformationResult}
  */
-export function normalizeTrenordTrafficInformation(trainNumber, date, trainPayload, direttrici) {
+export function normalizeTrenordTrafficInformation(
+  trainNumber: string,
+  date: string,
+  trainPayload: unknown,
+  direttrici: TrenordDirettrice[],
+): TrenordTrafficInformationResult {
   const info = getTrenordTrainInfo(trainPayload);
   const primary = findTrenordDirettrice(direttrici, info.direttrice);
   const primaryNotices = normalizeTrenordNotices(trainNumber, date, primary);
@@ -326,20 +266,12 @@ export function normalizeTrenordTrafficInformation(trainNumber, date, trainPaylo
   return buildResult(trainNumber, date, info, null, "none", [], reason);
 }
 
-/**
- * @param {TrenordDirettrice|null} direttrice
- * @returns {boolean}
- */
-function hasTrenordDirettriceNews(direttrice) {
+function hasTrenordDirettriceNews(direttrice: TrenordDirettrice | null): boolean {
   return Array.isArray(direttrice?.news)
     && direttrice.news.some((notice) => Boolean(asString(notice?.description)));
 }
 
-/**
- * @param {unknown} value
- * @returns {string|null}
- */
-function toRomeDateKey(value) {
+function toRomeDateKey(value: unknown): string | null {
   if (!value) return null;
   const timestamp = Date.parse(String(value));
   if (!Number.isFinite(timestamp)) return null;
@@ -356,11 +288,8 @@ function toRomeDateKey(value) {
  * show today's notices when present, otherwise show recent notices in the
  * 14-day window ending on the requested operation date.
  *
- * @param {TrenordNotice[]} notices
- * @param {string} operationDate
- * @returns {TrenordNotice[]}
  */
-export function filterTrenordNoticesForDisplay(notices, operationDate) {
+export function filterTrenordNoticesForDisplay(notices: TrenordNotice[], operationDate: string): TrenordNotice[] {
   if (!Array.isArray(notices) || !/^\d{4}-\d{2}-\d{2}$/.test(operationDate)) return [];
 
   const today = notices.filter((notice) => toRomeDateKey(notice.date) === operationDate);
@@ -377,18 +306,17 @@ export function filterTrenordNoticesForDisplay(notices, operationDate) {
 }
 
 /**
- * @param {string} trainNumber
- * @param {string} date
- * @param {TrenordTrainInfo} info
- * @param {TrenordDirettrice|null} direttrice
- * @param {TrenordMatchSource} matchSource
- * @param {TrenordNotice[]} notices
- * @param {string=} reason
- * @returns {TrenordTrafficInformationResult}
  */
-function buildResult(trainNumber, date, info, direttrice, matchSource, notices, reason = undefined) {
-  /** @type {TrenordTrafficInformationResult} */
-  const result = {
+function buildResult(
+  trainNumber: string,
+  date: string,
+  info: TrenordTrainInfo,
+  direttrice: TrenordDirettrice | null,
+  matchSource: TrenordMatchSource,
+  notices: TrenordNotice[],
+  reason: string | undefined = undefined,
+): TrenordTrafficInformationResult {
+  const result: TrenordTrafficInformationResult = {
     available: Boolean(direttrice),
     trainNumber,
     date,

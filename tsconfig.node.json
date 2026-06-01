@@ -8,6 +8,6 @@
   },
   "include": [
     "scripts/**/*.mjs",
-    "tests/js/**/*.mjs"
+    "tests/js/**/*.ts"
   ]
 }

@@ -1,18 +1,16 @@
-/**
- * @typedef {Object} CategoryCountInput
- * @property {string=} label
- * @property {string=} category
- * @property {string=} name
- * @property {number|string=} value
- * @property {number|string=} count
- * @property {number|string=} total
- */
+export interface CategoryCountInput {
+  label?: string;
+  category?: string;
+  name?: string;
+  value?: number | string;
+  count?: number | string;
+  total?: number | string;
+}
 
-/**
- * @typedef {Object} CategoryCount
- * @property {string} label
- * @property {number} value
- */
+export interface CategoryCount {
+  label: string;
+  value: number;
+}
 
 export const CATEGORY_ORDER = [
   "REG",
@@ -31,8 +29,7 @@ export const CATEGORY_ORDER = [
   "TS",
 ];
 
-/** @type {Record<string, string>} */
-export const CATEGORY_COLORS = {
+export const CATEGORY_COLORS: Record<string, string> = {
   REG: "#83b85b",
   MET: "#83b85b",
   FR: "#c94b45",
@@ -49,11 +46,7 @@ export const CATEGORY_COLORS = {
   TS: "#69c6d4",
 };
 
-/**
- * @param {unknown} value
- * @returns {string}
- */
-export function categoryCode(value) {
+export function categoryCode(value: unknown): string {
   const raw = String(value || "").trim().toUpperCase();
   if (!raw) return "";
   const normalized = raw.replace(/[-_]+/g, " ").replace(/\s+/g, " ");
@@ -61,30 +54,18 @@ export function categoryCode(value) {
   return normalized;
 }
 
-/**
- * @param {unknown} value
- * @returns {string}
- */
-export function chartCategoryCode(value) {
+export function chartCategoryCode(value: unknown): string {
   const code = categoryCode(value);
   if (code === "RE" || code === "RV") return "REG";
   return code;
 }
 
-/**
- * @param {unknown} value
- * @returns {number}
- */
-export function categorySortIndex(value) {
+export function categorySortIndex(value: unknown): number {
   const index = CATEGORY_ORDER.indexOf(categoryCode(value));
   return index === -1 ? Number.MAX_SAFE_INTEGER : index;
 }
 
-/**
- * @param {unknown} value
- * @returns {string}
- */
-export function statisticsCategoryColor(value) {
+export function statisticsCategoryColor(value: unknown): string {
   return CATEGORY_COLORS[categoryCode(value)] || "#65bfc0";
 }
 
@@ -95,11 +76,9 @@ export function statisticsCategoryColor(value) {
  * board aliases RE/RV are folded into REG because they are operating variants
  * of the regional bucket in BelloTreno statistics.
  *
- * @param {CategoryCountInput[]} items
- * @returns {CategoryCount[]}
  */
-export function normalizeCategoryCounts(items) {
-  const totals = new Map();
+export function normalizeCategoryCounts(items: CategoryCountInput[]): CategoryCount[] {
+  const totals = new Map<string, number>();
   for (const item of Array.isArray(items) ? items : []) {
     const label = chartCategoryCode(item?.label ?? item?.category ?? item?.name);
     if (!label) continue;
