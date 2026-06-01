@@ -3,6 +3,8 @@
 
 
 // @ts-nocheck
+import { navigateToStationBoard, registerStationNavigationGlobal } from './station-navigation';
+
 export {};
 
 function getItalianTimeString() {
@@ -40,15 +42,7 @@ function getItalianTimeString() {
 }
 
 
-function goToStationBoard(stationId, stationName) {
-    
-    const params = new URLSearchParams({
-        id: stationId,
-        name: stationName,
-        type: 'partenze' 
-    });
-    window.location.href = `/station?${params.toString()}`;
-}
+const goToStationBoard = navigateToStationBoard;
 
 
 async function fetchStationBoard(stationId, type = 'partenze') {
@@ -265,7 +259,7 @@ if (typeof module !== 'undefined' && module.exports) {
 } else {
     
     window.getItalianTimeString = getItalianTimeString;
-    window.goToStationBoard = goToStationBoard;
+    registerStationNavigationGlobal();
     window.fetchStationBoard = fetchStationBoard;
     window.formatDepartureData = formatDepartureData;
     window.formatArrivalData = formatArrivalData;

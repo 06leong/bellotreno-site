@@ -1,4 +1,6 @@
 // @ts-nocheck
+import { navigateToStationBoard, registerStationNavigationGlobal } from './station-navigation';
+
 export {};
 
 /**
@@ -191,6 +193,7 @@ function goHome() {
 
 window.switchSearchMode = switchSearchMode;
 window.goHome = goHome;
+registerStationNavigationGlobal();
 
 
 
@@ -638,7 +641,7 @@ function renderRecentSearches() {
                     document.getElementById('trainSearch').value = item.id;
                     startSearch(item.id);
                 } else if (item.type === 'station') {
-                    window.goToStationBoard?.(item.id, item.name);
+                    navigateToStationBoard(item.id, item.name);
                 }
             });
 
@@ -792,8 +795,8 @@ function showStationDisambiguation(stations) {
     const panel = document.getElementById('disambiguation');
     const panelTitle = panel.querySelector('h3');
 
-    const titleText = currentLang === 'zh' ? '选择车站：' :
-        currentLang === 'it' ? 'Seleziona stazione:' :
+    const titleText = window.currentLang === 'zh' ? '选择车站：' :
+        window.currentLang === 'it' ? 'Seleziona stazione:' :
             'Select station:';
     panelTitle.textContent = titleText;
 
@@ -822,7 +825,7 @@ function showStationDisambiguation(stations) {
         div.onclick = () => {
             panel.style.display = 'none';
             saveRecentStationSearch(station.id, station.nomeLungo);
-            window.goToStationBoard?.(station.id, station.nomeLungo);
+            navigateToStationBoard(station.id, station.nomeLungo);
         };
         list.appendChild(div);
     });
@@ -1897,7 +1900,7 @@ document.addEventListener('astro:page-load', () => {
                 const stationId = stationLink.getAttribute('data-station-id');
                 const stationName = stationLink.getAttribute('data-station-name');
                 if (stationId && stationName) {
-                    window.goToStationBoard?.(stationId, stationName);
+                    navigateToStationBoard(stationId, stationName);
                 }
             }
         });
