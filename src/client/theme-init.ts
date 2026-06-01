@@ -1,8 +1,10 @@
-// @ts-nocheck
 (function () {
-    function readTheme() {
+    type StoredLanguage = 'zh' | 'en' | 'it';
+    type StoredTheme = 'dark' | 'light';
+
+    function readTheme(): StoredTheme {
         try {
-            var savedTheme = localStorage.getItem('theme');
+            const savedTheme = localStorage.getItem('theme');
             if (savedTheme === 'dark' || savedTheme === 'light') {
                 return savedTheme;
             }
@@ -12,25 +14,25 @@
         return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     }
 
-    function readLang() {
+    function readLang(): StoredLanguage {
         try {
-            var savedLang = localStorage.getItem('language');
-            if (savedLang) {
+            const savedLang = localStorage.getItem('language');
+            if (savedLang === 'zh' || savedLang === 'en' || savedLang === 'it') {
                 return savedLang;
             }
         } catch (error) {
             // Ignore storage errors and fall back to the browser language.
         }
-        var bl = navigator.language.toLowerCase();
+        const bl = navigator.language.toLowerCase();
         return bl.startsWith('zh') ? 'zh' : bl.startsWith('it') ? 'it' : 'en';
     }
 
-    function applyPreferences(targetRoot) {
+    function applyPreferences(targetRoot?: HTMLElement | null): void {
         if (!targetRoot) return;
 
-        var theme = readTheme();
-        var lang = readLang();
-        var langMap = { zh: 'zh-CN', en: 'en', it: 'it' };
+        const theme = readTheme();
+        const lang = readLang();
+        const langMap: Record<StoredLanguage, string> = { zh: 'zh-CN', en: 'en', it: 'it' };
 
         targetRoot.setAttribute('data-theme', theme);
         targetRoot.setAttribute('data-lang', lang);
@@ -48,7 +50,8 @@
     if (!window.__btThemeSwapGuard) {
         window.__btThemeSwapGuard = true;
         document.addEventListener('astro:before-swap', function (event) {
-            applyPreferences(event.newDocument && event.newDocument.documentElement);
+            const swapEvent = event as Event & { newDocument?: Document };
+            applyPreferences(swapEvent.newDocument?.documentElement);
         });
         document.addEventListener('astro:after-swap', function () {
             applyPreferences(document.documentElement);

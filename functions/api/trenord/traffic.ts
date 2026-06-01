@@ -150,16 +150,16 @@ export async function fetchTrenordTrainBff(trainNumber: string, date: string, se
     return decryptTrenordBffPayload(await response.arrayBuffer(), secret);
 }
 
-function normalizeDirettriciPayload(payload: any): TrenordDirettrice[] {
+function normalizeDirettriciPayload(payload: unknown): TrenordDirettrice[] {
     if (Array.isArray(payload)) return payload;
-    if (Array.isArray(payload?.items)) return payload.items;
-    if (Array.isArray(payload?.data)) return payload.data;
-    if (payload && typeof payload === "object") {
-        return Object.values(payload).filter((item): item is TrenordDirettrice => Boolean(
-            item && typeof item === "object" && "nome" in item
-        ));
-    }
-    return [];
+    if (!payload || typeof payload !== "object") return [];
+
+    const record = payload as Record<string, unknown>;
+    if (Array.isArray(record.items)) return record.items as TrenordDirettrice[];
+    if (Array.isArray(record.data)) return record.data as TrenordDirettrice[];
+    return Object.values(record).filter((item): item is TrenordDirettrice => Boolean(
+        item && typeof item === "object" && "nome" in item
+    ));
 }
 
 export async function fetchTrenordDirettrici(): Promise<TrenordDirettrice[]> {
