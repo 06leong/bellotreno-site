@@ -4,7 +4,7 @@ const [, , trainNumber, date] = process.argv;
 const secret = process.env.TRENORD_BFF_SECRET;
 
 if (!trainNumber || !date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-  console.error("Usage: TRENORD_BFF_SECRET=... node scripts/validate-trenord-traffic.mjs <trainNumber> <YYYY-MM-DD>");
+  console.error("Usage: TRENORD_BFF_SECRET=... tsx scripts/validate-trenord-traffic.ts <trainNumber> <YYYY-MM-DD>");
   process.exit(1);
 }
 

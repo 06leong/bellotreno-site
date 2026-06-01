@@ -1,16 +1,30 @@
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
 
+type Language = "zh" | "en" | "it";
+type TranslationBundle = Record<Language, Record<string, string>>;
+
+interface I18nMismatch {
+  language: Language;
+  missing: string[];
+  extra: string[];
+}
+
 const i18nPath = "public/scripts/i18n.js";
 const source = readFileSync(i18nPath, "utf8");
-const context = {};
+const context: Record<string, unknown> = {};
 
 vm.runInNewContext(`${source}\nglobalThis.__translations = translations;`, context, {
   filename: i18nPath,
 });
 
-const translations = context.__translations;
-const languages = ["zh", "en", "it"];
+const translations = context.__translations as TranslationBundle | undefined;
+const languages: Language[] = ["zh", "en", "it"];
+
+if (!translations) {
+  console.error("Missing i18n translations object.");
+  process.exit(1);
+}
 
 for (const language of languages) {
   if (!translations?.[language]) {
@@ -21,7 +35,7 @@ for (const language of languages) {
 
 const referenceLanguage = languages[0];
 const referenceKeys = Object.keys(translations[referenceLanguage]).sort();
-const failed = [];
+const failed: I18nMismatch[] = [];
 
 for (const language of languages.slice(1)) {
   const keys = new Set(Object.keys(translations[language]));
