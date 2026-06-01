@@ -1,5 +1,9 @@
 import CryptoJS from "crypto-js";
-import { normalizeTrenordTrafficInformation } from "../../../src/lib/normalizers/trenord.ts";
+import {
+    normalizeTrenordTrafficInformation,
+    type TrenordDirettrice,
+    type TrenordTrafficInformationResult,
+} from "../../../src/lib/normalizers/trenord.ts";
 
 const TRAIN_BFF_BASE = "https://www.trenord.it/mia/bff/train";
 const DIRETTRICI_URL = "https://www.trenord.it/mgmt/store-management-api/mia/direttrici/";
@@ -14,13 +18,21 @@ const ALLOWED_HOSTS = new Set([
     "[::1]"
 ]);
 
-let direttriciCache = {
+type CorsHeaderMap = Record<string, string>;
+type TrenordUnavailableResult = { available: false; reason: string } & Record<string, unknown>;
+type HttpError = Error & { status?: number };
+
+let direttriciCache: {
+    expiresAt: number;
+    data: TrenordDirettrice[] | null;
+    promise: Promise<TrenordDirettrice[]> | null;
+} = {
     expiresAt: 0,
     data: null,
     promise: null
 };
 
-function json(data, status = 200, extraHeaders = {}) {
+function json(data: unknown, status = 200, extraHeaders: HeadersInit = {}): Response {
     return new Response(JSON.stringify(data), {
         status,
         headers: {
@@ -32,11 +44,11 @@ function json(data, status = 200, extraHeaders = {}) {
     });
 }
 
-function unavailable(reason, extra = {}, status = 200, headers = {}) {
+function unavailable(reason: string, extra: Record<string, unknown> = {}, status = 200, headers: HeadersInit = {}): Response {
     return json({ available: false, reason, ...extra }, status, headers);
 }
 
-function getUrlHostname(value) {
+function getUrlHostname(value: string): string {
     try {
         return new URL(value).hostname;
     } catch {
@@ -44,15 +56,15 @@ function getUrlHostname(value) {
     }
 }
 
-function isLocalHost(hostname) {
+function isLocalHost(hostname: string): boolean {
     return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]";
 }
 
-function isAllowedHost(hostname, requestHost) {
+function isAllowedHost(hostname: string, requestHost: string): boolean {
     return hostname === requestHost || ALLOWED_HOSTS.has(hostname);
 }
 
-function requestIsAllowed(request) {
+function requestIsAllowed(request: Request): boolean {
     const requestUrl = new URL(request.url);
     const requestHost = requestUrl.hostname;
     const origin = request.headers.get("origin");
@@ -63,7 +75,7 @@ function requestIsAllowed(request) {
     return isLocalHost(requestHost);
 }
 
-function corsHeaders(request) {
+function corsHeaders(request: Request): CorsHeaderMap {
     const origin = request.headers.get("origin");
     if (!origin) return {};
     const requestHost = new URL(request.url).hostname;
@@ -77,16 +89,16 @@ function corsHeaders(request) {
     };
 }
 
-function arrayBufferToWordArray(buffer) {
+function arrayBufferToWordArray(buffer: ArrayBuffer): CryptoJS.lib.WordArray {
     const bytes = new Uint8Array(buffer);
-    const words = [];
+    const words: number[] = [];
     for (let index = 0; index < bytes.length; index += 1) {
         words[index >>> 2] |= bytes[index] << (24 - (index % 4) * 8);
     }
     return CryptoJS.lib.WordArray.create(words, bytes.length);
 }
 
-export function decryptTrenordBffPayload(buffer, secret) {
+export function decryptTrenordBffPayload(buffer: ArrayBuffer, secret: string): unknown {
     if (!secret) throw new Error("missing_secret");
 
     let text = "";
@@ -94,7 +106,7 @@ export function decryptTrenordBffPayload(buffer, secret) {
         const ciphertext = arrayBufferToWordArray(buffer);
         const key = CryptoJS.SHA256(secret);
         const decrypted = CryptoJS.AES.decrypt(
-            { ciphertext },
+            { ciphertext } as CryptoJS.lib.CipherParams,
             key,
             { mode: CryptoJS.mode.ECB, padding: CryptoJS.pad.Pkcs7 }
         );
@@ -112,7 +124,7 @@ export function decryptTrenordBffPayload(buffer, secret) {
     }
 }
 
-export async function fetchTrenordTrainBff(trainNumber, date, secret) {
+export async function fetchTrenordTrainBff(trainNumber: string, date: string, secret: string): Promise<unknown> {
     const train = String(trainNumber || "").replace(/\D+/g, "");
     if (!train || !/^\d{4}-\d{2}-\d{2}$/.test(String(date || ""))) {
         throw new Error("bad_request");
@@ -130,7 +142,7 @@ export async function fetchTrenordTrainBff(trainNumber, date, secret) {
     });
 
     if (!response.ok) {
-        const error = new Error("upstream_train_bff_error");
+        const error: HttpError = new Error("upstream_train_bff_error");
         error.status = response.status;
         throw error;
     }
@@ -138,17 +150,19 @@ export async function fetchTrenordTrainBff(trainNumber, date, secret) {
     return decryptTrenordBffPayload(await response.arrayBuffer(), secret);
 }
 
-function normalizeDirettriciPayload(payload) {
+function normalizeDirettriciPayload(payload: any): TrenordDirettrice[] {
     if (Array.isArray(payload)) return payload;
     if (Array.isArray(payload?.items)) return payload.items;
     if (Array.isArray(payload?.data)) return payload.data;
     if (payload && typeof payload === "object") {
-        return Object.values(payload).filter((item) => item && typeof item === "object" && item.nome);
+        return Object.values(payload).filter((item): item is TrenordDirettrice => Boolean(
+            item && typeof item === "object" && "nome" in item
+        ));
     }
     return [];
 }
 
-export async function fetchTrenordDirettrici() {
+export async function fetchTrenordDirettrici(): Promise<TrenordDirettrice[]> {
     const now = Date.now();
     if (direttriciCache.data && direttriciCache.expiresAt > now) {
         return direttriciCache.data;
@@ -165,7 +179,7 @@ export async function fetchTrenordDirettrici() {
         }
     }).then(async (response) => {
         if (!response.ok) {
-            const error = new Error("upstream_direttrici_error");
+            const error: HttpError = new Error("upstream_direttrici_error");
             error.status = response.status;
             throw error;
         }
@@ -185,7 +199,7 @@ export async function fetchTrenordDirettrici() {
     return direttriciCache.promise;
 }
 
-export async function getTrenordTrafficInformation(trainNumber, date, secret) {
+export async function getTrenordTrafficInformation(trainNumber: string, date: string, secret: string): Promise<TrenordTrafficInformationResult> {
     const [trainPayload, direttrici] = await Promise.all([
         fetchTrenordTrainBff(trainNumber, date, secret),
         fetchTrenordDirettrici()
@@ -199,14 +213,14 @@ export async function getTrenordTrafficInformation(trainNumber, date, secret) {
     );
 }
 
-export async function onRequestOptions(context) {
+export async function onRequestOptions(context: PagesContext): Promise<Response> {
     return new Response(null, {
         status: 204,
         headers: corsHeaders(context.request)
     });
 }
 
-export async function onRequestGet(context) {
+export async function onRequestGet(context: PagesContext): Promise<Response> {
     const request = context.request;
     const headers = corsHeaders(request);
 
@@ -233,8 +247,8 @@ export async function onRequestGet(context) {
     try {
         const result = await getTrenordTrafficInformation(trainNumber, date, secret);
         return json(result, 200, headers);
-    } catch (error) {
-        const reason = error?.message || "upstream_error";
+    } catch (error: unknown) {
+        const reason = error instanceof Error ? error.message : "upstream_error";
         return unavailable(reason, {}, 200, {
             ...headers,
             "cache-control": "no-store"
@@ -242,7 +256,7 @@ export async function onRequestGet(context) {
     }
 }
 
-export async function onRequest(context) {
+export async function onRequest(context: PagesContext): Promise<Response> {
     if (context.request.method === "OPTIONS") {
         return onRequestOptions(context);
     }

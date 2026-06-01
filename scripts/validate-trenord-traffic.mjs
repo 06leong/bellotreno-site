@@ -1,4 +1,4 @@
-import { getTrenordTrafficInformation } from "../functions/api/trenord/traffic.js";
+import { getTrenordTrafficInformation } from "../functions/api/trenord/traffic.ts";
 
 const [, , trainNumber, date] = process.argv;
 const secret = process.env.TRENORD_BFF_SECRET;

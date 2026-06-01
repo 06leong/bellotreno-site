@@ -1,13 +1,13 @@
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "allowJs": true,
-    "checkJs": false,
     "lib": ["ES2022", "WebWorker"],
-    "types": ["@cloudflare/workers-types"]
+    "types": ["@cloudflare/workers-types"],
+    "noImplicitAny": false
   },
   "include": [
     "src/types/cloudflare-pages.d.ts",
-    "functions/**/*.js"
+    "src/lib/normalizers/**/*.ts",
+    "functions/**/*.ts"
   ]
 }

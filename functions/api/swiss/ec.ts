@@ -11,7 +11,10 @@ const ALLOWED_HOSTS = new Set([
     "[::1]"
 ]);
 
-function json(data, status = 200, extraHeaders = {}) {
+type AnyRecord = Record<string, any>;
+type CorsHeaderMap = Record<string, string>;
+
+function json(data: unknown, status = 200, extraHeaders: HeadersInit = {}): Response {
     return new Response(JSON.stringify(data), {
         status,
         headers: {
@@ -23,15 +26,15 @@ function json(data, status = 200, extraHeaders = {}) {
     });
 }
 
-function isLocalHost(hostname) {
+function isLocalHost(hostname: string): boolean {
     return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]";
 }
 
-function isAllowedHost(hostname, requestHost) {
+function isAllowedHost(hostname: string, requestHost: string): boolean {
     return hostname === requestHost || ALLOWED_HOSTS.has(hostname);
 }
 
-function getUrlHostname(value) {
+function getUrlHostname(value: string): string {
     try {
         return new URL(value).hostname;
     } catch {
@@ -39,7 +42,7 @@ function getUrlHostname(value) {
     }
 }
 
-function requestIsAllowed(request) {
+function requestIsAllowed(request: Request): boolean {
     const requestUrl = new URL(request.url);
     const requestHost = requestUrl.hostname;
     const origin = request.headers.get("origin");
@@ -56,7 +59,7 @@ function requestIsAllowed(request) {
     return isLocalHost(requestHost);
 }
 
-function corsHeaders(request) {
+function corsHeaders(request: Request): CorsHeaderMap {
     const origin = request.headers.get("origin");
     if (!origin) return {};
     const requestHost = new URL(request.url).hostname;
@@ -79,43 +82,43 @@ function todayInZurich() {
     }).format(new Date());
 }
 
-function asString(value) {
+function asString(value: unknown): string | null {
     if (value === null || value === undefined) return null;
     const text = String(value).trim();
     return text ? text : null;
 }
 
-function asInt(value) {
-    const parsed = Number.parseInt(value, 10);
+function asInt(value: unknown): number {
+    const parsed = Number.parseInt(String(value), 10);
     return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function asFloat(value) {
-    const parsed = Number.parseFloat(value);
+function asFloat(value: unknown): number {
+    const parsed = Number.parseFloat(String(value));
     return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function asBool(value) {
+function asBool(value: unknown): boolean {
     return value === true || value === "true" || value === 1 || value === "1";
 }
 
-function asOptionalBool(value) {
+function asOptionalBool(value: unknown): boolean | null {
     if (value === null || value === undefined || value === "") return null;
     return asBool(value);
 }
 
-function isClosedTrolleyStatus(value) {
+function isClosedTrolleyStatus(value: unknown): boolean {
     return /geschlossen/i.test(String(value || ""));
 }
 
-function normalizeStopPoint(stopPoint) {
+function normalizeStopPoint(stopPoint: AnyRecord) {
     return {
         uic: asString(stopPoint?.uic),
         name: asString(stopPoint?.name)
     };
 }
 
-function normalizeStop(rawStop) {
+function normalizeStop(rawStop: AnyRecord) {
     const scheduledStop = rawStop?.scheduledStop || {};
     const stopPoint = normalizeStopPoint(scheduledStop.stopPoint || {});
     const stopTime = scheduledStop.stopTime || {};
@@ -140,8 +143,8 @@ function normalizeStop(rawStop) {
     };
 }
 
-function extractVehicles(raw) {
-    const vehicles = [];
+function extractVehicles(raw: AnyRecord): AnyRecord[] {
+    const vehicles: AnyRecord[] = [];
     if (!Array.isArray(raw?.formations)) return vehicles;
 
     for (const formation of raw.formations) {
@@ -155,7 +158,7 @@ function extractVehicles(raw) {
     return vehicles;
 }
 
-function normalizeVehicleStop(rawStop) {
+function normalizeVehicleStop(rawStop: AnyRecord) {
     const stopPoint = normalizeStopPoint(rawStop?.stopPoint || {});
     const stopTime = rawStop?.stopTime || {};
 
@@ -170,7 +173,7 @@ function normalizeVehicleStop(rawStop) {
     };
 }
 
-function normalizeVehicle(rawVehicle) {
+function normalizeVehicle(rawVehicle: AnyRecord) {
     const identifier = rawVehicle?.vehicleIdentifier || {};
     const props = rawVehicle?.vehicleProperties || {};
     const accessibility = props.accessibilityProperties || {};
@@ -228,7 +231,7 @@ function normalizeVehicle(rawVehicle) {
     };
 }
 
-function buildVehicleSegments(props, closed = false, vehicleWillBePutAway = false, trolleyStatus = null) {
+function buildVehicleSegments(props: AnyRecord, closed = false, vehicleWillBePutAway = false, trolleyStatus: string | null = null) {
     const fromStop = asString(props?.fromStop?.name);
     const toStop = asString(props?.toStop?.name);
     if (!fromStop && !toStop) return [];
@@ -241,7 +244,7 @@ function buildVehicleSegments(props, closed = false, vehicleWillBePutAway = fals
     }];
 }
 
-function vehicleKey(vehicle) {
+function vehicleKey(vehicle: AnyRecord): string {
     if (vehicle.evn) return `evn:${vehicle.evn}`;
 
     const completeVehicleNumber = [
@@ -255,7 +258,7 @@ function vehicleKey(vehicle) {
     return `fallback:${vehicle.position || ""}:${vehicle.number || ""}:${vehicle.typeCodeName || ""}:${vehicle.typeCode || ""}`;
 }
 
-function mergeUniqueObjects(left, right, keyFn) {
+function mergeUniqueObjects<T>(left: T[], right: T[], keyFn: (item: T) => string): T[] {
     const map = new Map();
     for (const item of [...left, ...right]) {
         const key = keyFn(item);
@@ -264,24 +267,24 @@ function mergeUniqueObjects(left, right, keyFn) {
     return Array.from(map.values());
 }
 
-function preferValue(currentValue, nextValue) {
+function preferValue<T>(currentValue: T, nextValue: T): T {
     if (currentValue === null || currentValue === undefined || currentValue === "" || currentValue === 0) {
         return nextValue;
     }
     return currentValue;
 }
 
-function mergeStatusFlag(existing, incoming) {
+function mergeStatusFlag(existing: unknown, incoming: unknown): boolean {
     return Boolean(existing && incoming);
 }
 
-function preferTrolleyStatus(currentValue, nextValue) {
+function preferTrolleyStatus(currentValue: string | null, nextValue: string | null): string | null {
     if (!currentValue || currentValue === "Normal") return currentValue || nextValue;
     if (!nextValue || nextValue === "Normal") return nextValue || currentValue;
     return currentValue;
 }
 
-function mergeVehicles(existing, incoming) {
+function mergeVehicles(existing: AnyRecord, incoming: AnyRecord): AnyRecord {
     return {
         ...existing,
         position: Math.min(existing.position || incoming.position || 9999, incoming.position || existing.position || 9999),
@@ -323,14 +326,14 @@ function mergeVehicles(existing, incoming) {
         trolleyStatus: preferTrolleyStatus(existing.trolleyStatus, incoming.trolleyStatus),
         fromStop: preferValue(existing.fromStop, incoming.fromStop),
         toStop: preferValue(existing.toStop, incoming.toStop),
-        segments: mergeUniqueObjects(existing.segments || [], incoming.segments || [], (segment) => [
+        segments: mergeUniqueObjects<AnyRecord>(existing.segments || [], incoming.segments || [], (segment) => [
             segment.fromStop || "",
             segment.toStop || "",
             segment.closed ? "closed" : "open",
             segment.vehicleWillBePutAway ? "putaway" : "active",
             segment.trolleyStatus || ""
         ].join("|")),
-        stopSectors: mergeUniqueObjects(existing.stopSectors || [], incoming.stopSectors || [], (stop) => [
+        stopSectors: mergeUniqueObjects<AnyRecord>(existing.stopSectors || [], incoming.stopSectors || [], (stop) => [
             stop.uic || "",
             stop.name || "",
             stop.track || "",
@@ -342,13 +345,13 @@ function mergeVehicles(existing, incoming) {
     };
 }
 
-function normalizeVehicles(rawVehicles) {
-    const map = new Map();
+function normalizeVehicles(rawVehicles: AnyRecord[]): AnyRecord[] {
+    const map = new Map<string, AnyRecord>();
     for (const rawVehicle of rawVehicles) {
         const vehicle = normalizeVehicle(rawVehicle);
         const key = vehicleKey(vehicle);
         if (map.has(key)) {
-            map.set(key, mergeVehicles(map.get(key), vehicle));
+            map.set(key, mergeVehicles(map.get(key) || {}, vehicle));
         } else {
             map.set(key, vehicle);
         }
@@ -357,14 +360,14 @@ function normalizeVehicles(rawVehicles) {
     return Array.from(map.values()).sort((a, b) => (a.position || 9999) - (b.position || 9999));
 }
 
-function reportedVehicleCount(raw) {
+function reportedVehicleCount(raw: AnyRecord): number {
     const counts = Array.isArray(raw?.formations)
         ? raw.formations.map((formation) => asInt(formation?.metaInformation?.numberVehicles)).filter(Boolean)
         : [];
     return counts.length ? Math.max(...counts) : 0;
 }
 
-function normalizeFormation(raw, requestedTrainNumber, requestedDate, evu) {
+function normalizeFormation(raw: AnyRecord, requestedTrainNumber: string, requestedDate: string, evu: string) {
     const trainMeta = raw?.trainMetaInformation || {};
     const journeyMeta = raw?.journeyMetaInformation || {};
     const stops = Array.isArray(raw?.formationsAtScheduledStops)
@@ -393,7 +396,7 @@ function normalizeFormation(raw, requestedTrainNumber, requestedDate, evu) {
     };
 }
 
-function buildFormationUrl(baseUrl, fullPath, evu, operationDate, trainNumber) {
+function buildFormationUrl(baseUrl: string, fullPath: string, evu: string, operationDate: string, trainNumber: string): URL {
     const normalizedBase = String(baseUrl || DEFAULT_BASE_URL).replace(/\/+$/, "");
     const normalizedPath = String(fullPath || DEFAULT_FULL_PATH).replace(/^\/+/, "");
     const upstreamUrl = new URL(`${normalizedBase}/${normalizedPath}`);
@@ -403,14 +406,14 @@ function buildFormationUrl(baseUrl, fullPath, evu, operationDate, trainNumber) {
     return upstreamUrl;
 }
 
-export async function onRequestOptions(context) {
+export async function onRequestOptions(context: PagesContext): Promise<Response> {
     return new Response(null, {
         status: 204,
         headers: corsHeaders(context.request)
     });
 }
 
-export async function onRequestGet(context) {
+export async function onRequestGet(context: PagesContext): Promise<Response> {
     const request = context.request;
     const headers = corsHeaders(request);
 
@@ -475,7 +478,7 @@ export async function onRequestGet(context) {
             });
         }
 
-        const raw = await upstream.json();
+        const raw = await upstream.json() as AnyRecord;
         const normalized = normalizeFormation(raw, trainNumber, operationDate, evu);
 
         if (!normalized) {
@@ -491,7 +494,7 @@ export async function onRequestGet(context) {
     }
 }
 
-export async function onRequest(context) {
+export async function onRequest(context: PagesContext): Promise<Response> {
     if (context.request.method === "OPTIONS") {
         return onRequestOptions(context);
     }

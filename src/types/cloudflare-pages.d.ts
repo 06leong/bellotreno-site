@@ -4,7 +4,11 @@ declare global {
   interface PagesEnv {
     STATISTICS_API_BASE_URL?: string;
     STATISTICS_API_TOKEN?: string;
+    SWISS_TRAIN_FORMATION_API_BASE_URL?: string;
     SWISS_TRAIN_FORMATION_API_KEY?: string;
+    SWISS_TRAIN_FORMATION_EVU?: string;
+    SWISS_TRAIN_FORMATION_FULL_PATH?: string;
+    SWISS_TRAIN_FORMATION_USER_AGENT?: string;
     TRENORD_BFF_SECRET?: string;
   }
 

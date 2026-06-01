@@ -3,10 +3,11 @@
   "compilerOptions": {
     "allowJs": true,
     "checkJs": false,
-    "lib": ["ES2022"],
-    "types": ["node"]
+    "lib": ["ES2022", "DOM"],
+    "types": ["node", "@cloudflare/workers-types"]
   },
   "include": [
+    "src/types/cloudflare-pages.d.ts",
     "scripts/**/*.mjs",
     "tests/js/**/*.ts"
   ]
