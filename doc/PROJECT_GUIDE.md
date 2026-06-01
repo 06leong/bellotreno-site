@@ -23,7 +23,7 @@ BelloTreno 现在包含五个主要页面：
 3. **Statistics 聚合数据**：Cloudflare Pages Function `/api/statistics/*` 转发到 VPS 上的 `bellotreno-statistics` 服务；当前部署使用 `https://stats-api.bellotreno.org/v1` 作为 statistics 上游 API。该服务定时扫描车站 registry、`partenze`/`arrivi` board 和 `andamentoTreno`，把聚合结果写入 SQLite 与 JSON cache。
 4. **Trenord line notices**：Cloudflare Pages Function `/api/trenord/traffic` fetches Trenord's train BFF and `direttrici` feed, maps the train `direttrice` to line-level notices, and feeds the collapsed `Traffic info` card for Trenord trains only.
 
-浏览器缓存方面，项目使用 `public/_headers` 控制 HTML 与脚本重新校验，并在 `BaseLayout.astro` 中给 `/scripts/*.js` 追加 build version 查询参数，避免 Cloudflare Pages 新部署后 iOS Safari 或桌面浏览器继续使用旧脚本。
+浏览器缓存方面，项目使用 `public/_headers` 控制 HTML 等入口资源重新校验，浏览器运行时代码由 Astro/Vite 打包成带 hash 的 `/_astro/*` 资源，避免 Cloudflare Pages 新部署后 iOS Safari 或桌面浏览器继续使用旧脚本。
 
 访问统计方面，`BaseLayout.astro` 支持可选 Umami 注入。只有同时配置 `PUBLIC_UMAMI_SCRIPT_URL` 和 `PUBLIC_UMAMI_WEBSITE_ID` 时才会加载，默认限定 `PUBLIC_UMAMI_DOMAINS=bellotreno.org,real.bellotreno.org`，并启用 `data-do-not-track` 和 `data-exclude-search`。
 
@@ -263,9 +263,28 @@ Trenord Traffic info is intentionally implemented as a same-origin Pages Functio
 | 统计 | `/statistics` | 每日运行统计、运行中曲线、状态/准点率/类别图、车次/车站/关系/Ranking 查询 |
 | 关于 | `/about` | 项目说明 |
 
+#### 前端代码组织
+
+前端运行时代码已经从未编译的 `public/scripts/*.js` 迁移到 Astro/Vite 管理的 TypeScript 模块：
+
+| 模块 | 职责 |
+|------|------|
+| `src/client/config.ts` | API base URL、operator/category 映射、badge helper |
+| `src/client/i18n.ts` | `zh` / `en` / `it` 翻译字典 |
+| `src/client/common.ts` | 语言、主题、访问计数、`escapeHtml` 等跨页面行为 |
+| `src/client/main.ts` | 首页列车/车站搜索、车次详情、SmartCaring / Trenord card |
+| `src/client/station.ts` | 车站 departure/arrival board |
+| `src/client/station-navigation.ts` | 搜索、最近搜索、车次详情站名链接共用的 `/station` 跳转 |
+| `src/client/infomobilita.ts` | RFI RSS 公告页 |
+| `src/client/statistics.ts` | 统计 dashboard、chart、表格和 CSV link |
+| `src/client/swiss.ts` | Swiss formation fetch、timeline merge、coach strip |
+| `src/client/theme-init.ts` | head 内联主题初始化，避免主题闪烁 |
+
+`BaseLayout.astro` 固定先导入 `config.ts`、`i18n.ts`、`common.ts`，各页面再通过 `slot="scripts"` 导入自己的模块。新的浏览器代码不应再放回 `public/scripts/`。
+
 #### 前端数据获取流程（以查询列车为例）
 
-```javascript
+```ts
 // 1. 用户输入列车号，如 "9505"
 // 2. 调用自动补全接口
 fetch("https://ah.bellotreno.workers.dev/?url=https://www.viaggiatreno.it/.../cercaNumeroTrenoTrenoAutocomplete/9505")
@@ -302,7 +321,7 @@ fetch("https://ah.bellotreno.workers.dev/?url=https://www.viaggiatreno.it/.../an
 
 `BaseLayout.astro` 集中管理所有 SEO 标签，各页面只需传入意大利语 `description`：
 
-- **静态 `lang="it"`**：搜索引擎爬虫看到意大利语作为主语言；`theme-init.js` 在运行时根据 `localStorage('language')` 覆盖为用户偏好语言
+- **静态 `lang="it"`**：搜索引擎爬虫看到意大利语作为主语言；`theme-init.ts` 在运行时根据 `localStorage('language')` 覆盖为用户偏好语言
 - **每页独立 canonical URL**：使用 `Astro.url.pathname` 自动生成，避免重复内容问题
 - **hreflang 多语言提示**：`it` / `en` / `zh-Hans` / `x-default` 均指向同一 URL（单 URL 多语言架构）
 - **Open Graph + Twitter Card**：社交分享预览，依赖 `public/og-image.png`（1200×630 px）
@@ -314,28 +333,29 @@ fetch("https://ah.bellotreno.workers.dev/?url=https://www.viaggiatreno.it/.../an
 
 #### Cloudflare Pages 缓存失效
 
-Cloudflare Pages 部署后，浏览器可能继续使用旧的 `/scripts/*.js`。项目现在通过两层方式避免这个问题：
+Cloudflare Pages 部署后，浏览器可能继续使用旧资源。项目现在通过两层方式避免这个问题：
 
-- `public/_headers` 对 HTML、manifest、脚本入口设置 `Cache-Control: public, max-age=0, must-revalidate`，让普通浏览器每次打开都重新校验。
-- `BaseLayout.astro` 为 `/scripts/config.js`、`i18n.js`、`common.js` 和页面脚本追加 `?v=<build-id>`。build id 优先来自 `PUBLIC_BUILD_ID`、`CF_PAGES_COMMIT_SHA` 或 `CF_PAGES_DEPLOYMENT_ID`，没有时才用构建时间。
+- `public/_headers` 对 HTML、manifest 等入口资源设置 `Cache-Control: public, max-age=0, must-revalidate`，让普通浏览器每次打开都重新校验。
+- Astro/Vite 输出的浏览器脚本、CSS 和字体位于带 hash 的 `/_astro/*` 路径，文件名变化就是缓存失效边界。
 
-这不会明显拖慢正常访问：HTML 很小，脚本在同一个部署版本内仍可复用；只有新部署时 URL 变化，浏览器才会下载新脚本。`/_astro/*` 这类带 hash 的资源，包括 Astro Fonts API 输出的字体文件，仍然使用长期 immutable 缓存。
+这不会明显拖慢正常访问：HTML 很小，`/_astro/*` 这类带 hash 的资源，包括 Astro Fonts API 输出的字体文件，仍然使用长期 immutable 缓存。
 
 #### 前端代码质量改进
 
 | 问题 | 解决方案 |
 |------|---------|
-| badge 映射逻辑重复（`main.js` 和 `station.js` 各有一份） | 提取为 `window.getBadgeClass(catCode)` 放在 `config.js` 末尾，两处共用 |
-| API 数据直接注入 `innerHTML` 存在 XSS 风险 | `common.js` 提供 `window.escapeHtml(str)`，已应用于 `n.infoNote`、`data.subTitle`、`tipReason`、`data-station-name` 等高风险位置 |
-| `station.astro` 内嵌 ~175 行业务逻辑脚本 | 全部移入 `station.js`（通过 `astro:page-load` 初始化），`station.astro` 现为纯 HTML 模板 |
+| badge 映射逻辑重复（`main.ts` 和 `station.ts` 曾各有一份） | 提取为 `window.getBadgeClass(catCode)` 放在 `config.ts`，两处共用 |
+| API 数据直接注入 `innerHTML` 存在 XSS 风险 | `common.ts` 提供 `window.escapeHtml(str)`，高风险新代码优先使用 DOM builder 和 `textContent` |
+| `station.astro` 内嵌 ~175 行业务逻辑脚本 | 全部移入 `station.ts`（通过 `astro:page-load` 初始化），`station.astro` 现为纯 HTML 模板 |
 | `platform-pulse` CSS 用 `<style is:global>` 限制在单页 | 移入 `global.css`，全局可用 |
-| 访问计数每次 SPA 跳转重复触发 | `common.js` 用 `sessionStorage` 标记，同一标签页会话只计一次 |
+| 访问计数每次 SPA 跳转重复触发 | `common.ts` 用 `sessionStorage` 标记，同一标签页会话只计一次 |
 | URL 参数触发搜索用轮询重试（10 次，100ms 间隔） | 改为在 `astro:page-load` 内直接处理（DOM 此时已就绪） |
-| Swiss Formation 同号误匹配 | `swiss.js` 只对 EC/EN 默认尝试；REG/RE/RV/S/IR 必须命中边境站提示。当前边境提示保留 `CHIASSO`、`DOMODOSSOLA`、`LUINO`、`TIRANO`、`STABIO`，移除 Porto Ceresio、Ponte Tresa、Gaggiolo |
+| 车站搜索、最近搜索、车次详情站名跳转分散 | `station-navigation.ts` 统一生成 `/station?id=&name=&type=` URL，避免模块加载顺序造成静默无动作 |
+| Swiss Formation 同号误匹配 | `swiss.ts` 只对 EC/EN 默认尝试；REG/RE/RV/S/IR 必须命中边境站提示。当前边境提示保留 `CHIASSO`、`DOMODOSSOLA`、`LUINO`、`TIRANO`、`STABIO`，移除 Porto Ceresio、Ponte Tresa、Gaggiolo |
 | Swiss 车辆重复与关闭状态污染 | 以 EVN 作为真实车辆 identity 合并多段记录；`Closed` / `GeschlossenBetrieblich` 按当前 selected stop 的 active segment 判断，不再全程 OR 合并 |
-| 统计页面类别和查询交互 | `statistics.js` 维护 `CATEGORY_ORDER`，包含 `EC FR`、`NCL`、`IR`、`TS` 等；图表只展示实际出现类别，查询表中的车次/车站尽量可点击 |
-| 部分取消区间不易读 | `main.js` 根据 `subTitle`、`fermateSoppresse`、`actualFermataType` 计算 partial cancellation state，取消停站用红色 timeline 和 `Cancelled stop` 标签 |
-| Cloudflare Pages 新部署后旧 JS 残留 | `_headers` + `BaseLayout.astro` build version 参数共同处理脚本缓存失效 |
+| 统计页面类别和查询交互 | `statistics.ts` 维护 `CATEGORY_ORDER`，包含 `EC FR`、`NCL`、`IR`、`TS` 等；图表只展示实际出现类别，查询表中的车次/车站尽量可点击 |
+| 部分取消区间不易读 | `main.ts` 根据 `subTitle`、`fermateSoppresse`、`actualFermataType` 计算 partial cancellation state，取消停站用红色 timeline 和 `Cancelled stop` 标签 |
+| Cloudflare Pages 新部署后旧 JS 残留 | Astro/Vite hashed assets + `_headers` 共同处理缓存失效 |
 
 ---
 

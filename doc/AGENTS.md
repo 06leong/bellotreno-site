@@ -10,10 +10,12 @@ Personal learning project: real-time Italian railway timetable viewer, built wit
 npm run dev        # start Astro dev server
 npm run build      # production build → dist/  (also generates sitemap-index.xml)
 npm run check      # syntax, i18n, normalizer fixtures, Python compile/unit checks
+npm run check:types # TypeScript checks for normalizers, Functions, Node scripts/tests, and client modules
+npm run test:js    # Node test runner through tsx for tests/js/*.test.ts
 npm run preview    # serve built output
 ```
 
-TypeScript is checked implicitly by Astro (strict mode via `astro/tsconfigs/strict`). `npm run check` is the baseline quality gate and is also run in CI.
+`npm run check` is the baseline quality gate and is also run in CI. TypeScript is split across scoped configs so the migration can remain reviewable: `tsconfig.normalizers.json`, `tsconfig.functions.json`, `tsconfig.node.json`, and `tsconfig.client.json`.
 
 ---
 
@@ -22,24 +24,23 @@ TypeScript is checked implicitly by Astro (strict mode via `astro/tsconfigs/stri
 - **Static site** (`output: 'static'` in `astro.config.mjs`). No SSR.
 - **`site`** is set to `'https://bellotreno.org'` in `astro.config.mjs` — required for sitemap generation and canonical URLs. `real.bellotreno.org` is kept only as the legacy alias/redirect domain.
 - **Astro pages** live in `src/pages/`: `index.astro`, `station.astro`, `infomobilita.astro`, `statistics.astro`, `about.astro`.
-- **Layouts**: single `src/layouts/BaseLayout.astro` wraps all pages. Accepts `title`, `description`, and `pageScripts: string[]` props.
+- **Layouts**: single `src/layouts/BaseLayout.astro` wraps all pages. Accepts `title`, `description`, and compatibility `pageScripts` props, and imports shared browser modules directly through Astro/Vite.
 - **Components**: `src/components/` — `Navbar.astro`, `Footer.astro`, `BackToTop.astro`.
-- **All application logic is vanilla JS** in `public/scripts/` (not bundled by Astro, served as static files):
-  - `config.js` — global constants loaded first (`window.API_BASE`, `window.PROXY_BASE`, etc.) **plus shared helpers** (`window.getBadgeClass`, `window.CAT_MAP`, etc.)
-  - `i18n.js` — translation strings (`zh`, `en`, `it`)
-  - `common.js` — language & theme management, visitor counter (session-deduped), **`window.escapeHtml`** XSS utility; loaded on every page
-  - `main.js` — train search, results rendering, SmartCaring card (index page)
-  - `station.js` — station departure/arrival board utilities **+ full station page logic** (`_stLoadBoard`, `_stRenderBoard`, `_stFetchWeather`, `window.switchBoardType`)
-  - `infomobilita.js` — RSS/news page
-  - `statistics.js` — railway statistics dashboard, charts, query table, and links into train/station pages
-  - `swiss.js` — Swiss OpenTransportData formation fetch, timeline merge, coach strip, vehicle details, TILO/EC/REG cross-border enrichment
-  - `theme-init.js` — inlined in `<head>` to prevent flash
+- **Browser runtime modules** live in `src/client/` and are bundled by Astro/Vite:
+  - `config.ts` — global constants loaded first (`window.API_BASE`, `window.PROXY_BASE`, etc.) plus shared helpers (`window.getBadgeClass`, `window.CAT_MAP`, etc.).
+  - `i18n.ts` — translation strings (`zh`, `en`, `it`).
+  - `common.ts` — language and theme management, visitor counter, `window.escapeHtml`, shared page behavior.
+  - `main.ts` — train search, results rendering, SmartCaring/Trenord cards, and homepage interactions.
+  - `station.ts` — station departure/arrival board utilities and full station page logic.
+  - `station-navigation.ts` — canonical station board URL creation and navigation shared by search, recent station chips, train detail station links, and the station page.
+  - `infomobilita.ts`, `statistics.ts`, `swiss.ts` — page-specific runtime modules.
+  - `theme-init.ts` — imported as raw text and inlined in `<head>` to prevent theme flash.
 
-New pure normalizer/helper code should go under `src/lib/normalizers/` first, with fixture coverage in `tests/js/`. Keep the existing `public/scripts/` entry points as compatibility layers until each behavior is safely migrated.
+Shared pure normalizer/helper code belongs under `src/lib/normalizers/`, with fixture coverage in `tests/js/`. Do not add new browser source under `public/scripts/`; that directory is no longer the source of truth for runtime code.
 
-**Script load order in BaseLayout matters**: `config.js → i18n.js → common.js → [page-specific scripts]`. Page scripts passed via `pageScripts` prop are appended last.
+**Runtime import order in BaseLayout matters**: `config.ts → i18n.ts → common.ts → [page-specific slot scripts]`. Page-specific Astro files import their client modules through `<script slot="scripts">`.
 
-> **station.astro** is now a pure HTML template (no inline `<script>` or `<style is:global>` blocks). All page logic lives in `station.js` and is initialised inside an `astro:page-load` listener. `window.switchBoardType` is exposed globally for the `onclick` attributes in the HTML.
+> **station.astro** is now a pure HTML template (no inline business logic). All page logic lives in `src/client/station.ts` and is initialised inside an `astro:page-load` listener. `window.switchBoardType` remains exposed globally for current template compatibility.
 
 ---
 
@@ -74,11 +75,11 @@ These Workers are **not in this repo**. Direct calls to `viaggiatreno.it` fail i
 
 ### Quality gates
 
-- `scripts/check-js-syntax.mjs` runs `node --check` for `public/scripts/**/*.js` and `functions/**/*.js`.
-- `npm run check:types` runs TypeScript's `checkJs` mode over `src/lib/normalizers/` so JSDoc data contracts are enforced without migrating the whole app to TypeScript yet.
-- `scripts/check-i18n.mjs` requires `zh`, `en`, and `it` translation keys to stay identical.
-- `scripts/audit-innerhtml.mjs` lists current `innerHTML` use sites for manual review; it is intentionally non-blocking for now.
-- `tests/js/` covers high-risk normalizer behavior for statistics categories, Swiss formation gatekeeping, and partial cancellation.
+- `scripts/check-js-syntax.ts` checks any remaining raw JavaScript syntax. A fully migrated source tree should report `0 file(s)`.
+- `npm run check:types` runs TypeScript over normalizers, Cloudflare Pages Functions, Node scripts/tests, and client runtime modules.
+- `scripts/check-i18n.ts` requires `zh`, `en`, and `it` translation keys to stay identical.
+- `scripts/audit-innerhtml.ts` lists current `innerHTML` use sites for manual review; it is intentionally non-blocking for now.
+- `tests/js/` covers high-risk normalizer behavior for statistics categories, Swiss formation gatekeeping, partial cancellation, Trenord notices, and station navigation.
 - `tests/python/` covers pure statistics helpers such as service-date filtering.
 - `doc/innerhtml-audit.md` tracks the current `innerHTML` risk areas and migration priority.
 - `doc/priority-2-maintenance-map.md` tracks the remaining maintainability work, suggested PR sequence, and Cloudflare Pages preview checklist.
@@ -86,7 +87,7 @@ These Workers are **not in this repo**. Direct calls to `viaggiatreno.it` fail i
 ### Swiss formation
 
 - Pages Functions live under `functions/api/swiss/`. They read `SWISS_TRAIN_FORMATION_API_KEY` from Cloudflare Pages Secrets and must never expose the token to the browser.
-- `public/scripts/swiss.js` owns Swiss fetch/cache, timeline merge, TILO image override, coach strip rendering, and vehicle detail rendering.
+- `src/client/swiss.ts` owns Swiss fetch/cache, timeline merge, TILO image override, coach strip rendering, and vehicle detail rendering.
 - Vehicle identity is based primarily on EVN. Same EVN records from different route segments are merged into one display vehicle with `segments`.
 - Closed state is segment-specific. Do not OR `closed` / `trolleyStatus` globally across all segments; the UI must resolve the active segment for the selected stop.
 - Coach display must keep a stable vehicle sequence while using the selected stop only for track/sector/no-passage display. Sector labels should be normalized and displayed from A onward in station-facing order.
@@ -95,8 +96,8 @@ These Workers are **not in this repo**. Direct calls to `viaggiatreno.it` fail i
 
 ### Statistics
 
-- The frontend statistics page uses `public/scripts/statistics.js` and calls only `/api/statistics/*`.
-- `functions/api/statistics/[[path]].js` proxies requests to `STATISTICS_API_BASE_URL` and injects `STATISTICS_API_TOKEN`. The browser must not know the VPS token.
+- The frontend statistics page uses `src/client/statistics.ts` and calls only `/api/statistics/*`.
+- `functions/api/statistics/[[path]].ts` proxies requests to `STATISTICS_API_BASE_URL` and injects `STATISTICS_API_TOKEN`. The browser must not know the VPS token.
 - The VPS statistics service lives in `rfi-proxy/statistics/` but deploys as a separate Docker service in the same compose project. It stores SQLite data in the mounted `statistics-data` volume.
 - `/statistiche/0` from ViaggiaTreno is only a global counter. Category, route, station, delay, cancellation, and relation statistics come from station registry + station boards + `andamentoTreno` sampling.
 - The collector uses fixed Europe/Rome slots (`HH:05`, `HH:35`, plus `23:55` by default). Keep every board request in one run pinned to that slot time; do not change it back to "collect, then sleep interval" scheduling.
@@ -106,7 +107,7 @@ These Workers are **not in this repo**. Direct calls to `viaggiatreno.it` fail i
 
 ### Cache and deployment
 
-- Static `/scripts/*.js` files are served with build-version query parameters from `BaseLayout.astro`.
+- Browser runtime files are bundled by Astro/Vite under hashed `/_astro/*` assets.
 - `public/_headers` keeps HTML and scripts revalidated while allowing hashed Astro assets under `/_astro/*` to be immutable.
 - Do not add a service worker unless the update lifecycle is explicitly designed; stale SW caches are harder to debug than normal browser cache.
 
@@ -115,8 +116,8 @@ These Workers are **not in this repo**. Direct calls to `viaggiatreno.it` fail i
 ## i18n
 
 - Three languages: `zh` (default static HTML lang), `en`, `it`.
-- `BaseLayout.astro` sets `lang="it"` as the static default (primary audience); `theme-init.js` overwrites the attribute at runtime based on `localStorage('language')`.
-- Elements use `data-i18n="key"` attributes; `common.js` applies translations on page load and language change.
+- `BaseLayout.astro` sets `lang="it"` as the static default (primary audience); `theme-init.ts` overwrites the attribute at runtime based on `localStorage('language')`.
+- Elements use `data-i18n="key"` attributes; `common.ts` applies translations on page load and language change.
 - `html[data-lang-loading]` hides `[data-i18n]` and `[data-i18n-section]` elements until translations are applied (prevents Chinese text flash on non-zh load).
 - Language persisted to `localStorage('language')`.
 
@@ -147,12 +148,12 @@ Each page passes its own `description` in Italian (primary language). Sitemap is
 
 ---
 
-## Shared helpers (window globals from config.js / common.js)
+## Shared helpers (window globals from config.ts / common.ts)
 
 | Function | Source | Purpose |
 |----------|--------|---------|
-| `window.getBadgeClass(catCode)` | `config.js` | Maps a train category code to its CSS badge class (`badge-regional`, `badge-arrow`, etc.). Used by both `main.js` and `station.js` — **do not duplicate this logic**. |
-| `window.escapeHtml(str)` | `common.js` | Escapes `&`, `<`, `>`, `"`, `'` for safe innerHTML injection. Apply to all API-sourced strings inserted into HTML. |
+| `window.getBadgeClass(catCode)` | `config.ts` | Maps a train category code to its CSS badge class (`badge-regional`, `badge-arrow`, etc.). Used by both `main.ts` and `station.ts` — **do not duplicate this logic**. |
+| `window.escapeHtml(str)` | `common.ts` | Escapes `&`, `<`, `>`, `"`, `'` for safe innerHTML injection. Apply to all API-sourced strings inserted into HTML. |
 
 ---
 
@@ -162,7 +163,7 @@ See `blog-viaggiatreno-api.md` for full reference. Key facts:
 
 - **Train identity is a triple**: `{numeroTreno}-{idStazOrigine}-{timestampMezzanotte}`. The same train number can belong to different trains (different origins or dates).
 - **`categoria` field is unreliable for FR trains**: `categoria` is `""` for Frecciarossa; use `compNumeroTreno` as the authoritative category+number field.
-- **`codiceCliente`** maps to operator: `1/2/4` = Trenitalia, `18` = TPER, `63` = Trenord, `64` = ÖBB, `910` = FSE, `77` = TTI. Defined in `public/scripts/config.js` as `window.CLIENT_MAP`.
+- **`codiceCliente`** maps to operator: `1/2/4` = Trenitalia, `18` = TPER, `63` = Trenord, `64` = ÖBB, `910` = FSE, `77` = TTI. Defined in `src/client/config.ts` as `window.CLIENT_MAP`.
 - **`partenze`/`arrivi` `dateTime` parameter** must be JavaScript `Date.toString()` format (e.g. `Thu Mar 12 2026 13:31:00 GMT+0100`), URL-encoded. Italy observes CET (`+0100`) / CEST (`+0200`) — daylight saving switches last Sunday of March/October.
 - **SmartCaring** (`window.NOTIFY_BASE`) — `notify.bellotreno.workers.dev` is a **dedicated CF Worker** (not the main CORS proxy). It calls `viaggiatreno.it/infomobilita/resteasy/news/smartcaring?commercialTrainNumber={n}`, aggregates the raw array into `{ today, recent, history, stats }`, and caches the response for 120 s. The raw API returns *all* historical notifications; the Worker filters to the past 14 days and marks entries matching Italy's current date as `today`. See **SmartCaring feature** section below for details.
 - **`tipoTreno` + `provvedimento` combination** determines cancellation status: `ST`+`1` = full cancel, `PP`/`SI`/`SF` = partial cancel, `DV`+`3` = rerouted.
@@ -209,7 +210,7 @@ Allowed origins: `https://bellotreno.org`, `https://real.bellotreno.org`, `https
 
 If no entries fall within the 14-day window the Worker still returns the same shape with empty arrays and zeroed stats (it does **not** set a `noData` flag — the client checks `!today.length && !recent.length && !history.length`).
 
-### Category-gating logic (in `main.js`)
+### Category-gating logic (in `main.ts`)
 
 | Constant | Categories | Behaviour |
 |----------|------------|-----------|
