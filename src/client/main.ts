@@ -1,7 +1,105 @@
-// @ts-nocheck
-import { navigateToStationBoard, registerStationNavigationGlobal } from './station-navigation';
+import { navigateToStationBoard, registerStationNavigationGlobal } from './station-navigation.js';
 
 export {};
+
+type SearchMode = 'train' | 'station';
+type JsonRecord = Record<string, unknown>;
+type TimeKind = 'arrival' | 'departure';
+type TimeStatus = '' | 'early' | 'late' | 'on-time';
+type PartialStopBoundary = '' | 'actualStart' | 'actualEnd' | 'replacementStart';
+
+interface NodeOptions {
+    attrs?: Record<string, unknown>;
+    className?: string;
+    dataset?: Record<string, unknown>;
+    href?: string;
+    rel?: string;
+    style?: Partial<CSSStyleDeclaration>;
+    target?: string;
+    text?: unknown;
+    title?: string;
+    type?: string;
+}
+
+type NodeChild = Node | string | number | boolean | null | undefined;
+
+interface RecentSearchItem {
+    id: string;
+    name: string;
+    timestamp: number;
+    type: SearchMode;
+}
+
+interface StationSearchResult {
+    id: string | number;
+    nomeLungo: string;
+}
+
+interface TrainStop extends JsonRecord {
+    actualFermataType?: number | string | null;
+    arrivoReale?: number | null;
+    arrivo_teorico?: number | null;
+    binarioEffettivoArrivoDescrizione?: string | null;
+    binarioEffettivoPartenzaDescrizione?: string | null;
+    binarioProgrammatoArrivoDescrizione?: string | null;
+    binarioProgrammatoPartenzaDescrizione?: string | null;
+    id?: string | number | null;
+    orientamento?: string | null;
+    partenzaReale?: number | null;
+    partenza_teorica?: number | null;
+    programmata?: number | null;
+    progressivo?: number | string | null;
+    ritardoArrivo?: number | string | null;
+    ritardoPartenza?: number | string | null;
+    source?: string;
+    stazione?: string;
+    swissStop?: unknown;
+}
+
+interface TrainData extends JsonRecord {
+    categoria?: string;
+    categoriaDescrizione?: string;
+    codiceCliente?: string | number;
+    compCategoria?: string;
+    compDurata?: string;
+    compNumeroTreno?: string;
+    compRitardoAndamento?: string[];
+    dataPartenzaTreno?: number | string;
+    dataPartenzaTrenoAsDate?: string;
+    destinazione?: string;
+    destinazioneEstera?: string;
+    fermate?: TrainStop[];
+    fermateSoppresse?: unknown;
+    nonPartito?: boolean;
+    numeroTreno?: string | number;
+    origine?: string;
+    origineEstera?: string;
+    provvedimento?: number | string | null;
+    stazioneUltimoRilevamento?: string;
+    subTitle?: string;
+}
+
+interface PartialCancellationState {
+    boundary: PartialStopBoundary;
+    cancelled: boolean;
+}
+
+interface SwissFormationPayload extends JsonRecord {
+    available?: boolean;
+}
+
+interface StatisticsPayload {
+    treniCircolanti?: number;
+    treniGiorno?: number;
+}
+
+function isElementTarget(target: EventTarget | null): target is Element {
+    return target instanceof Element;
+}
+
+function asRecord(value: unknown): JsonRecord {
+    return value && typeof value === 'object' && !Array.isArray(value) ? value as JsonRecord : {};
+}
 
 /**
  * BelloTreno 主应用逻辑
@@ -9,16 +107,16 @@ export {};
  */
 
 
-let currentTrainData = null;
-let currentTriple = null;
-let searchMode = 'train';
+let currentTrainData: TrainData | null = null;
+let currentTriple: string | null = null;
+let searchMode: SearchMode = 'train';
 window.searchMode = searchMode;
-let disambiguationData = null;
-let currentSmartCaringData = null;
+let disambiguationData: string[] | null = null;
+let currentSmartCaringData: JsonRecord | null = null;
 let currentTrainCategory = '';
-let currentSwissFormationData = null;
+let currentSwissFormationData: SwissFormationPayload | null = null;
 let swissRequestSeq = 0;
-let currentTrenordLineInfo = null;
+let currentTrenordLineInfo: JsonRecord | null = null;
 
 
 const API_BASE = window.API_BASE;
@@ -63,19 +161,23 @@ const TRENORD_LINE_ALIASES = Object.freeze({
     RE54: "MXP1"
 });
 
-function clearNode(node) {
+function clearNode(node: Element | null): void {
     if (node) node.replaceChildren();
 }
 
-function createNode(tagName, options = {}, children = []) {
+function createNode<K extends keyof HTMLElementTagNameMap>(
+    tagName: K,
+    options: NodeOptions = {},
+    children: NodeChild | NodeChild[] = []
+): HTMLElementTagNameMap[K] {
     const node = document.createElement(tagName);
     if (options.className) node.className = options.className;
     if (options.text !== undefined) node.textContent = String(options.text);
     if (options.title) node.title = options.title;
-    if (options.type) node.type = options.type;
-    if (options.href) node.href = options.href;
-    if (options.target) node.target = options.target;
-    if (options.rel) node.rel = options.rel;
+    if (options.type) node.setAttribute('type', options.type);
+    if (options.href) node.setAttribute('href', options.href);
+    if (options.target) node.setAttribute('target', options.target);
+    if (options.rel) node.setAttribute('rel', options.rel);
     if (options.style) Object.assign(node.style, options.style);
     if (options.attrs) {
         Object.entries(options.attrs).forEach(([key, value]) => {
@@ -95,7 +197,7 @@ function createNode(tagName, options = {}, children = []) {
     return node;
 }
 
-function createIcon(name, className = 'material-symbols-outlined', options = {}) {
+function createIcon(name: string, className = 'material-symbols-outlined', options: Pick<NodeOptions, 'attrs' | 'style'> = {}): HTMLSpanElement {
     return createNode('span', {
         className,
         text: name,
@@ -104,7 +206,7 @@ function createIcon(name, className = 'material-symbols-outlined', options = {})
     });
 }
 
-function getCategoryLogoClass(src) {
+function getCategoryLogoClass(src: unknown): string {
     const fileName = String(src || '').split('/').pop()?.toLowerCase() || '';
     return DARK_MODE_CONTRAST_LOGOS.has(fileName)
         ? 'category-logo category-logo-needs-contrast'
@@ -115,12 +217,12 @@ async function fetchStatistiche() {
     try {
         const res = await fetch(API_BASE + '/statistiche/0');
         if (!res.ok) return;
-        const data = await res.json();
+        const data = await res.json() as StatisticsPayload;
         const circolanti = document.getElementById('statsCircolanti');
         const giorno = document.getElementById('statsGiorno');
         const bar = document.getElementById('statsBar');
-        if (circolanti) circolanti.textContent = data.treniCircolanti.toLocaleString();
-        if (giorno) giorno.textContent = data.treniGiorno.toLocaleString();
+        if (circolanti) circolanti.textContent = Number(data.treniCircolanti || 0).toLocaleString();
+        if (giorno) giorno.textContent = Number(data.treniGiorno || 0).toLocaleString();
         if (bar) bar.classList.remove('opacity-0');
     } catch (e) {
         console.error('Stats fetch failed:', e);
@@ -131,7 +233,7 @@ async function fetchStatistiche() {
 
 
 function updateSearchLabel() {
-    const trainSearch = document.getElementById('trainSearch');
+    const trainSearch = document.getElementById('trainSearch') as HTMLInputElement | null;
     const searchIcon = document.getElementById('searchIcon');
     if (!trainSearch) return;
 
@@ -145,14 +247,14 @@ function updateSearchLabel() {
 }
 
 
-function switchSearchMode(mode) {
+function switchSearchMode(mode: SearchMode) {
     searchMode = mode;
     window.searchMode = searchMode;
 
     updateSearchLabel();
 
 
-    const trainSearch = document.getElementById('trainSearch');
+    const trainSearch = document.getElementById('trainSearch') as HTMLInputElement | null;
     if (trainSearch) trainSearch.value = '';
 
 
@@ -203,7 +305,7 @@ registerStationNavigationGlobal();
 
 
 
-function formatDuration(duration) {
+function formatDuration(duration: string | null | undefined): string {
     if (!duration) return 'N/A';
     const parts = duration.split(':');
     if (parts.length === 2) {
@@ -215,7 +317,7 @@ function formatDuration(duration) {
     return duration;
 }
 
-function formatDurationMinutes(totalMinutes) {
+function formatDurationMinutes(totalMinutes: number): string {
     if (!Number.isFinite(totalMinutes) || totalMinutes < 0) return 'N/A';
     const hours = Math.floor(totalMinutes / 60);
     const mins = totalMinutes % 60;
@@ -226,7 +328,7 @@ function formatDurationMinutes(totalMinutes) {
 }
 
 
-function translateStatus(text) {
+function translateStatus(text: string): string {
     if (!text) return "";
 
     // Global cleanup: remove trailing dot from "min."
@@ -254,29 +356,30 @@ function translateStatus(text) {
     return text;
 }
 
-function formatT(ms) {
+function formatT(ms: unknown): string | null {
     if (!ms) return null;
-    return new Date(ms).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' });
+    const raw = typeof ms === 'string' || typeof ms === 'number' || ms instanceof Date ? ms : String(ms);
+    return new Date(raw).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' });
 }
 
-function hasTimestamp(ms) {
+function hasTimestamp(ms: unknown): boolean {
     const value = Number(ms);
     return Number.isFinite(value) && value > 0;
 }
 
-function resolveExpectedTimestamp(schedMs, realMs, delayMin) {
+function resolveExpectedTimestamp(schedMs: unknown, realMs: unknown, delayMin: unknown): number | null {
     if (!hasTimestamp(schedMs) || hasTimestamp(realMs)) return null;
     const delay = Number(delayMin);
     if (!Number.isFinite(delay) || delay === 0) return null;
     return Number(schedMs) + delay * 60000;
 }
 
-function sameDisplayedMinute(left, right) {
+function sameDisplayedMinute(left: unknown, right: unknown): boolean {
     if (!hasTimestamp(left) || !hasTimestamp(right)) return false;
     return formatT(left) === formatT(right);
 }
 
-function resolveTimeStatusClass(delayMin) {
+function resolveTimeStatusClass(delayMin: unknown): Exclude<TimeStatus, 'on-time'> {
     const delay = Number(delayMin);
     if (!Number.isFinite(delay)) return '';
     if (delay > 0) return 'late';
@@ -284,7 +387,7 @@ function resolveTimeStatusClass(delayMin) {
     return '';
 }
 
-function formatTimeStatusText(status, delayMin) {
+function formatTimeStatusText(status: TimeStatus, delayMin: unknown): string {
     const delay = Math.abs(Math.round(Number(delayMin) || 0));
     if (status === 'late') {
         return `+${delay} min`;
@@ -298,7 +401,7 @@ function formatTimeStatusText(status, delayMin) {
     return '';
 }
 
-function resolveTimeStatus(delayMin, primaryMs, schedMs) {
+function resolveTimeStatus(delayMin: unknown, primaryMs: unknown, schedMs: unknown): TimeStatus {
     const status = resolveTimeStatusClass(delayMin);
     if (status) return status;
     const delay = Number(delayMin);
@@ -307,7 +410,7 @@ function resolveTimeStatus(delayMin, primaryMs, schedMs) {
     return '';
 }
 
-function getTimeLabelParts(kind) {
+function getTimeLabelParts(kind: TimeKind): { full: string; short: string } {
     if (kind === 'arrival') {
         return {
             full: translations[window.currentLang].arrival,
@@ -320,7 +423,7 @@ function getTimeLabelParts(kind) {
     };
 }
 
-function createTimeLabelNode(kind) {
+function createTimeLabelNode(kind: TimeKind): HTMLSpanElement {
     const label = getTimeLabelParts(kind);
     return createNode('span', { className: 'time-label' }, [
         createNode('span', { className: 'time-label-full', text: label.full }),
@@ -328,7 +431,7 @@ function createTimeLabelNode(kind) {
     ]);
 }
 
-function renderTimeHtml(kind, schedMs, realMs, delayMin) {
+function renderTimeHtml(kind: TimeKind, schedMs: unknown, realMs: unknown, delayMin: unknown): string {
     const sched = formatT(schedMs);
     const hasReal = hasTimestamp(realMs);
     const expectedMs = resolveExpectedTimestamp(schedMs, realMs, delayMin);
@@ -348,7 +451,7 @@ function renderTimeHtml(kind, schedMs, realMs, delayMin) {
     return `<div class="time-item time-item-${kind}"><span class="time-label"><span class="time-label-full">${label.full}</span><span class="time-label-short">${label.short}</span></span><span class="time-stack"><span class="time-primary-row"><span class="time-primary-value tabular-nums ${status}">${primary}</span>${statusLine}</span>${scheduledLine}</span></div>`;
 }
 
-function renderTimeNode(kind, schedMs, realMs, delayMin) {
+function renderTimeNode(kind: TimeKind, schedMs: unknown, realMs: unknown, delayMin: unknown): HTMLDivElement {
     const sched = formatT(schedMs);
     const hasReal = hasTimestamp(realMs);
     const expectedMs = resolveExpectedTimestamp(schedMs, realMs, delayMin);
@@ -397,7 +500,7 @@ function renderTimeNode(kind, schedMs, realMs, delayMin) {
     ]);
 }
 
-function normalizeStationMatchName(value) {
+function normalizeStationMatchName(value: unknown): string {
     return String(value || '')
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
@@ -408,7 +511,7 @@ function normalizeStationMatchName(value) {
         .toUpperCase();
 }
 
-function findStopIndexByName(stops, name) {
+function findStopIndexByName(stops: TrainStop[], name: unknown): number {
     const target = normalizeStationMatchName(name);
     if (!target) return -1;
 
@@ -422,7 +525,7 @@ function findStopIndexByName(stops, name) {
     return index;
 }
 
-function collectSuppressedStopNames(value, names = []) {
+function collectSuppressedStopNames(value: unknown, names: string[] = []): string[] {
     if (!value) return names;
     if (typeof value === 'string') {
         names.push(value);
@@ -433,14 +536,15 @@ function collectSuppressedStopNames(value, names = []) {
         return names;
     }
     if (typeof value === 'object') {
+        const record = asRecord(value);
         ['stazione', 'nome', 'name', 'descrizione', 'denominazione'].forEach((key) => {
-            if (typeof value[key] === 'string') names.push(value[key]);
+            if (typeof record[key] === 'string') names.push(record[key]);
         });
     }
     return names;
 }
 
-function partialStopLabel(kind) {
+function partialStopLabel(kind: PartialStopBoundary | 'cancelled'): string {
     const lang = window.currentLang || 'en';
     const labels = {
         zh: {
@@ -465,8 +569,8 @@ function partialStopLabel(kind) {
     return (labels[lang] || labels.en)[kind] || kind;
 }
 
-function buildPartialCancellationState(data, stops) {
-    const states = (Array.isArray(stops) ? stops : []).map((stop) => ({
+function buildPartialCancellationState(data: TrainData, stops: TrainStop[]): PartialCancellationState[] {
+    const states: PartialCancellationState[] = (Array.isArray(stops) ? stops : []).map((stop) => ({
         cancelled: Number(stop?.actualFermataType) === 3,
         boundary: ''
     }));
@@ -528,11 +632,26 @@ function buildPartialCancellationState(data, stops) {
 
 
 
-function saveRecentSearch(trainNumber, trainInfo) {
-    try {
-        let recentSearches = JSON.parse(localStorage.getItem('recentSearches') || '[]');
+function readRecentSearches(): RecentSearchItem[] {
+    const raw = JSON.parse(localStorage.getItem('recentSearches') || '[]');
+    if (!Array.isArray(raw)) return [];
+    return raw.filter((item): item is RecentSearchItem => {
+        const record = asRecord(item);
+        return typeof record.id === 'string'
+            && typeof record.name === 'string'
+            && (record.type === 'train' || record.type === 'station');
+    });
+}
 
-        const searchItem = {
+function writeRecentSearches(items: RecentSearchItem[]): void {
+    localStorage.setItem('recentSearches', JSON.stringify(items.slice(0, 5)));
+}
+
+function saveRecentSearch(trainNumber: string, trainInfo: TrainData): void {
+    try {
+        let recentSearches = readRecentSearches();
+
+        const searchItem: RecentSearchItem = {
             id: trainNumber,
             name: `${trainNumber} ${trainInfo.origine || ''} → ${trainInfo.destinazione || ''}`.trim(),
             type: 'train',
@@ -546,7 +665,7 @@ function saveRecentSearch(trainNumber, trainInfo) {
             recentSearches = recentSearches.slice(0, 5);
         }
 
-        localStorage.setItem('recentSearches', JSON.stringify(recentSearches));
+        writeRecentSearches(recentSearches);
         renderRecentSearches();
     } catch (err) {
         console.error('Failed to save recent search:', err);
@@ -554,25 +673,25 @@ function saveRecentSearch(trainNumber, trainInfo) {
 }
 
 
-function saveRecentStationSearch(stationId, stationName) {
+function saveRecentStationSearch(stationId: string | number, stationName: string): void {
     try {
-        let recentSearches = JSON.parse(localStorage.getItem('recentSearches') || '[]');
+        let recentSearches = readRecentSearches();
 
-        const searchItem = {
-            id: stationId,
+        const searchItem: RecentSearchItem = {
+            id: String(stationId),
             name: stationName,
             type: 'station',
             timestamp: Date.now()
         };
 
-        recentSearches = recentSearches.filter(item => !(item.type === 'station' && item.id === stationId));
+        recentSearches = recentSearches.filter(item => !(item.type === 'station' && item.id === String(stationId)));
         recentSearches.unshift(searchItem);
 
         if (recentSearches.length > 5) {
             recentSearches = recentSearches.slice(0, 5);
         }
 
-        localStorage.setItem('recentSearches', JSON.stringify(recentSearches));
+        writeRecentSearches(recentSearches);
         renderRecentSearches();
     } catch (err) {
         console.error('Failed to save recent station search:', err);
@@ -580,7 +699,7 @@ function saveRecentStationSearch(stationId, stationName) {
 }
 
 
-function loadRecentSearches() {
+function loadRecentSearches(): void {
     try {
 
         const oldData = localStorage.getItem('recentTrains');
@@ -596,7 +715,7 @@ function loadRecentSearches() {
             localStorage.removeItem('recentTrains');
         }
 
-        const recentSearches = JSON.parse(localStorage.getItem('recentSearches') || '[]');
+        const recentSearches = readRecentSearches();
         if (recentSearches.length > 0) {
             renderRecentSearches();
         }
@@ -606,11 +725,12 @@ function loadRecentSearches() {
 }
 
 
-function renderRecentSearches() {
+function renderRecentSearches(): void {
     try {
-        const recentSearches = JSON.parse(localStorage.getItem('recentSearches') || '[]');
+        const recentSearches = readRecentSearches();
         const container = document.getElementById('recentSearchesContainer');
         const chipsContainer = document.getElementById('recentSearchesChips');
+        if (!container || !chipsContainer) return;
 
         if (recentSearches.length === 0) {
             container.style.display = 'none';
@@ -634,16 +754,17 @@ function renderRecentSearches() {
                     createIcon('close')
                 ])
             );
-            chip.querySelector('.chip-remove').addEventListener('click', (e) => {
+            chip.querySelector('.chip-remove')?.addEventListener('click', (e) => {
                 removeRecentSearch(item.id, item.type, e);
             });
 
-            chip.querySelector('.chip-label').addEventListener('click', () => {
+            chip.querySelector('.chip-label')?.addEventListener('click', () => {
                 if (item.type === 'train') {
                     if (searchMode !== 'train') {
                         switchSearchMode('train');
                     }
-                    document.getElementById('trainSearch').value = item.id;
+                    const trainSearch = document.getElementById('trainSearch') as HTMLInputElement | null;
+                    if (trainSearch) trainSearch.value = item.id;
                     startSearch(item.id);
                 } else if (item.type === 'station') {
                     navigateToStationBoard(item.id, item.name);
@@ -658,15 +779,15 @@ function renderRecentSearches() {
 }
 
 
-function removeRecentSearch(id, type, event) {
+function removeRecentSearch(id: string, type: SearchMode, event?: Event): void {
     if (event) {
         event.stopPropagation();
     }
 
     try {
-        let recentSearches = JSON.parse(localStorage.getItem('recentSearches') || '[]');
+        let recentSearches = readRecentSearches();
         recentSearches = recentSearches.filter(item => !(item.id === id && item.type === type));
-        localStorage.setItem('recentSearches', JSON.stringify(recentSearches));
+        writeRecentSearches(recentSearches);
         renderRecentSearches();
     } catch (err) {
         console.error('Failed to remove recent search:', err);
@@ -675,7 +796,7 @@ function removeRecentSearch(id, type, event) {
 
 
 
-async function startSearch(input) {
+async function startSearch(input: string): Promise<void> {
     document.getElementById('results').style.display = 'none';
     document.getElementById('disambiguation').style.display = 'none';
 
@@ -745,12 +866,12 @@ async function startSearch(input) {
 
 
 
-function showDisambiguation(lines) {
+function showDisambiguation(lines: string[]): void {
     disambiguationData = lines;
     renderDisambiguation();
 }
 
-function renderDisambiguation() {
+function renderDisambiguation(): void {
     if (!disambiguationData) return;
 
     const list = document.getElementById('choicesList');
@@ -783,11 +904,11 @@ function renderDisambiguation() {
                 ` ${translations[window.currentLang].origin_station}: ${sID}`
             ])
         );
-        div.onclick = () => {
+        div.addEventListener('click', () => {
             panel.style.display = 'none';
             disambiguationData = null;
             fetchDetails(triple);
-        };
+        });
         list.appendChild(div);
     });
     panel.style.display = 'block';
@@ -795,7 +916,7 @@ function renderDisambiguation() {
 }
 
 
-function showStationDisambiguation(stations) {
+function showStationDisambiguation(stations: StationSearchResult[]): void {
     const list = document.getElementById('choicesList');
     const panel = document.getElementById('disambiguation');
     const panelTitle = panel.querySelector('h3');
@@ -827,11 +948,11 @@ function showStationDisambiguation(stations) {
                 })
             ])
         ]));
-        div.onclick = () => {
+        div.addEventListener('click', () => {
             panel.style.display = 'none';
             saveRecentStationSearch(station.id, station.nomeLungo);
             navigateToStationBoard(station.id, station.nomeLungo);
-        };
+        });
         list.appendChild(div);
     });
 
@@ -841,7 +962,7 @@ function showStationDisambiguation(stations) {
 
 
 
-async function fetchDetails(triple) {
+async function fetchDetails(triple: string): Promise<void> {
     currentTriple = triple;
     currentSmartCaringData = null;
     currentTrenordLineInfo = null;
@@ -877,7 +998,7 @@ async function fetchDetails(triple) {
     }
 }
 
-async function loadSwissFormation(data, triple, requestSeq) {
+async function loadSwissFormation(data: TrainData, triple: string, requestSeq: number): Promise<void> {
     if (!window.BelloSwiss || !window.BelloSwiss.shouldQuery(data, currentTrainCategory)) {
         if (window.BelloSwiss) window.BelloSwiss.hideFormationCard();
         return;
@@ -886,7 +1007,7 @@ async function loadSwissFormation(data, triple, requestSeq) {
     window.BelloSwiss.renderLoadingCard();
 
     try {
-        const swissData = await window.BelloSwiss.fetchSwissEc(data, currentTrainCategory);
+        const swissData = asRecord(await window.BelloSwiss.fetchSwissEc(data, currentTrainCategory)) as SwissFormationPayload;
         if (requestSeq !== swissRequestSeq || triple !== currentTriple) return;
 
         if (!swissData?.available) {
@@ -908,9 +1029,9 @@ async function loadSwissFormation(data, triple, requestSeq) {
 }
 
 
-async function refreshTrainData() {
+async function refreshTrainData(): Promise<void> {
     if (!currentTriple) return;
-    const refreshBtn = document.querySelector('.refresh-btn');
+    const refreshBtn = document.querySelector<HTMLElement>('.refresh-btn');
     if (refreshBtn) {
         refreshBtn.style.opacity = '0.5';
         refreshBtn.style.pointerEvents = 'none';
@@ -924,14 +1045,14 @@ async function refreshTrainData() {
     }
 }
 
-function getDefaultRouteDisplay(data) {
+function getDefaultRouteDisplay(data: TrainData): { origin: string | undefined; destination: string | undefined } {
     return {
         origin: (data.origineEstera && data.origineEstera !== data.destinazione) ? data.origineEstera : data.origine,
         destination: (data.destinazioneEstera && data.destinazioneEstera !== data.origine) ? data.destinazioneEstera : data.destinazione
     };
 }
 
-function resolveRouteDisplay(data, timelineStops) {
+function resolveRouteDisplay(data: TrainData, timelineStops: TrainStop[]): { origin: string | undefined; destination: string | undefined } {
     const fallback = getDefaultRouteDisplay(data);
     const stops = Array.isArray(timelineStops) ? timelineStops : [];
     const hasSwissData = currentSwissFormationData?.available && stops.some((stop) => stop.source === 'swiss' || stop.swissStop);
@@ -951,7 +1072,7 @@ function resolveRouteDisplay(data, timelineStops) {
     };
 }
 
-function resolveDurationDisplay(data, timelineStops) {
+function resolveDurationDisplay(data: TrainData, timelineStops: TrainStop[]): string {
     const fallback = formatDuration(data.compDurata);
     const stops = Array.isArray(timelineStops) ? timelineStops : [];
     const hasSwissData = currentSwissFormationData?.available && stops.some((stop) => stop.source === 'swiss' || stop.swissStop);
@@ -976,14 +1097,20 @@ function resolveDurationDisplay(data, timelineStops) {
 }
 
 
+function normalizeTrainStops(stops: unknown): TrainStop[] {
+    return Array.isArray(stops)
+        ? stops.map((stop) => asRecord(stop) as TrainStop)
+        : [];
+}
 
-function render(data) {
+
+function render(data: TrainData): void {
     document.getElementById('results').style.display = 'block';
     const card = document.getElementById('trainCard');
     const timeline = document.getElementById('timelineBody');
-    const timelineStops = window.BelloSwiss
+    const timelineStops = normalizeTrainStops(window.BelloSwiss
         ? window.BelloSwiss.mergeTimelineStops(data.fermate || [], currentSwissFormationData)
-        : (data.fermate || []);
+        : (data.fermate || []));
 
     if (window.BelloSwiss) {
         if (currentSwissFormationData?.available) {
@@ -1153,8 +1280,8 @@ function render(data) {
         const isLast = i === totalStations - 1;
         const isFirst = i === 0;
         const isSwissStop = f.source === 'swiss';
-        const partialState = partialCancellationStates[i] || {};
-        const nextPartialState = partialCancellationStates[i + 1] || {};
+        const partialState = partialCancellationStates[i] || { cancelled: false, boundary: '' };
+        const nextPartialState = partialCancellationStates[i + 1] || { cancelled: false, boundary: '' };
 
         let dotClass = 'dot-future';
         let lineClass = 'line-future';
@@ -1853,7 +1980,7 @@ function hideScTooltip() {
 }
 
 document.addEventListener('click', (e) => {
-    if (!e.target.closest('.sc-bar-col')) hideScTooltip();
+    if (!isElementTarget(e.target) || !e.target.closest('.sc-bar-col')) hideScTooltip();
 });
 window.addEventListener('scroll', hideScTooltip, { passive: true });
 window.addEventListener('resize', hideScTooltip);
@@ -1895,7 +2022,7 @@ document.addEventListener('astro:page-load', () => {
     if (trainInput) {
         trainInput.addEventListener('keydown', async (e) => {
             if (e.key === 'Enter') {
-                const input = e.target.value.trim();
+                const input = (e.currentTarget as HTMLInputElement).value.trim();
                 if (input) startSearch(input);
             }
         });
@@ -1905,7 +2032,7 @@ document.addEventListener('astro:page-load', () => {
         window._mainInitialized = true;
 
         document.addEventListener('click', (e) => {
-            if (!e.target.closest('.lang-switch') && !e.target.closest('.theme-switch')) {
+            if (!isElementTarget(e.target) || (!e.target.closest('.lang-switch') && !e.target.closest('.theme-switch'))) {
                 const langMenu = document.getElementById('langMenu');
                 const themeMenu = document.getElementById('themeMenu');
                 if (langMenu) langMenu.classList.remove('show');
@@ -1920,7 +2047,7 @@ document.addEventListener('astro:page-load', () => {
         });
 
         document.addEventListener('click', function (e) {
-            const stationLink = e.target.closest('.station-link');
+            const stationLink = isElementTarget(e.target) ? e.target.closest('.station-link') : null;
             if (stationLink) {
                 const stationId = stationLink.getAttribute('data-station-id');
                 const stationName = stationLink.getAttribute('data-station-name');
@@ -1938,7 +2065,7 @@ document.addEventListener('astro:page-load', () => {
     const trainParam = new URLSearchParams(window.location.search).get('train');
     if (!trainParam) return;
     const trainNumber = trainParam.trim();
-    const trainInput = document.getElementById('trainSearch');
+    const trainInput = document.getElementById('trainSearch') as HTMLInputElement | null;
     if (!trainInput) return;
     trainInput.value = trainNumber;
     // 短暂延迟确保 common.js 的 astro:page-load 回调（语言初始化）已先执行
