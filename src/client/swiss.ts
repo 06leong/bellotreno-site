@@ -1,8 +1,155 @@
-// @ts-nocheck
 export {};
 
 (function () {
-    const cache = new Map();
+    type JsonRecord = Record<string, unknown>;
+
+    interface TrainLike extends JsonRecord {
+        categoria?: string;
+        compNumeroTreno?: string;
+        dataPartenzaTreno?: number | string;
+        dataPartenzaTrenoAsDate?: string;
+        destinazione?: string;
+        destinazioneEstera?: string;
+        fermate?: TimelineStop[];
+        numeroTreno?: number | string;
+        origine?: string;
+        origineEstera?: string;
+        stazioneUltimoRilevamento?: string;
+    }
+
+    interface SwissStop extends JsonRecord {
+        arrivalTime?: string;
+        departureTime?: string;
+        formationShortString?: string;
+        name?: string;
+        stopType?: string;
+        track?: string;
+        uic?: number | string;
+    }
+
+    interface TimelineStop extends JsonRecord {
+        actualFermataType?: number | string;
+        arrivoReale?: number | null;
+        arrivo_teorico?: number | null;
+        binarioEffettivoArrivoDescrizione?: string;
+        binarioEffettivoPartenzaDescrizione?: string;
+        binarioProgrammatoArrivoDescrizione?: string;
+        binarioProgrammatoPartenzaDescrizione?: string;
+        id?: number | string;
+        partenzaReale?: number | null;
+        partenza_teorica?: number | null;
+        programmata?: number | null;
+        progressivo?: number | string;
+        ritardoArrivo?: number;
+        ritardoPartenza?: number;
+        source?: string;
+        stazione?: string;
+        swissStop?: SwissStop;
+    }
+
+    interface StopSector extends JsonRecord {
+        accessToPreviousVehicle?: boolean;
+        arrivalTime?: string;
+        departureTime?: string;
+        name?: string;
+        sectors?: string;
+        track?: string;
+        uic?: number | string;
+    }
+
+    interface VehicleSegment extends JsonRecord {
+        closed?: boolean;
+        fromStop?: string;
+        toStop?: string;
+        trolleyStatus?: string;
+        vehicleWillBePutAway?: boolean;
+    }
+
+    interface SwissVehicle extends JsonRecord {
+        bikeHooks?: number;
+        bikePicto?: boolean;
+        bikePlatform?: boolean;
+        buildTypeCode?: string;
+        businessZonePicto?: boolean;
+        checkNumber?: string;
+        climated?: boolean;
+        closed?: boolean;
+        countryCode?: string;
+        disabledCompartment?: boolean;
+        emergencyCallSystem?: boolean;
+        evn?: string;
+        familyZonePicto?: boolean;
+        firstClassSeats?: number;
+        fromStop?: string;
+        length?: number;
+        lowFloor?: boolean;
+        number?: number | string;
+        numberBeds?: number;
+        numberRestaurantSpace?: number;
+        parentEvn?: string;
+        position?: number;
+        secondClassSeats?: number;
+        segments?: VehicleSegment[];
+        stopSectors?: StopSector[];
+        strollerPicto?: boolean;
+        toStop?: string;
+        trolleyStatus?: string;
+        typeCode?: string;
+        typeCodeName?: string;
+        vehicleNumber?: string;
+        vehicleWillBePutAway?: boolean;
+        wheelchairAccessibleRestaurant?: boolean;
+        wheelchairBoardingPlatformHeight?: number;
+        wheelchairFoldingRamp?: boolean;
+        wheelchairGapBridging?: boolean;
+        wheelchairPicto?: boolean;
+        wheelchairSpaces?: number;
+        wheelchairSpacesFirstClass?: number;
+        wheelchairSpacesSecondClass?: number;
+        wheelchairToilet?: boolean;
+    }
+
+    interface SwissFormationData extends JsonRecord {
+        available?: boolean;
+        lastUpdate?: string;
+        operationDate?: string;
+        runs?: string;
+        stops?: SwissStop[];
+        trainNumber?: string;
+        vehicleCount?: number;
+        vehicles?: SwissVehicle[];
+    }
+
+    interface CoachToken extends JsonRecord {
+        classCode: string;
+        classLabel: string;
+        closed: boolean;
+        number: number | null;
+        raw: string;
+        sector: string;
+        services: string[];
+    }
+
+    interface VehicleStatus {
+        closed: boolean;
+        segment: VehicleSegment | null;
+        trolleyStatus: string;
+        vehicleWillBePutAway: boolean;
+    }
+
+    interface VehicleItem extends JsonRecord {
+        coach: CoachToken | null;
+        displayPosition?: number;
+        fallbackIndex?: number;
+        selectedSector: StopSector | null;
+        selectedStop: SwissStop | null;
+        sector: string;
+        status: VehicleStatus | null;
+        unitKey: string;
+        vehicle: SwissVehicle | null;
+    }
+
+    const cache = new Map<string, Promise<SwissFormationData>>();
     const SWISS_ENDPOINT = window.SWISS_FORMATION_BASE || window.SWISS_EC_BASE || "/api/swiss/formation";
     const ALWAYS_TRY_CATEGORIES = new Set(["EC", "EN"]);
     const HINTED_TRY_CATEGORIES = new Set(["REG", "RE", "RV", "S", "IR"]);
@@ -14,7 +161,7 @@ export {};
         "STABIO"
     ]);
 
-    function tr(key, fallback) {
+    function tr(key: string, fallback?: string): string {
         const dict = typeof translations !== "undefined" ? translations : window.translations;
         return (dict && dict[window.currentLang] && dict[window.currentLang][key])
             || (dict && dict.en && dict.en[key])
@@ -22,21 +169,25 @@ export {};
             || key;
     }
 
-    function esc(value) {
+    function esc(value: unknown): string {
         return window.escapeHtml ? window.escapeHtml(value) : String(value ?? "");
     }
 
-    function asArray(value) {
-        return Array.isArray(value) ? value : [];
+    function asRecord(value: unknown): JsonRecord {
+        return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {};
     }
 
-    function getTrainNumber(data) {
+    function asArray<T = JsonRecord>(value: unknown): T[] {
+        return Array.isArray(value) ? value as T[] : [];
+    }
+
+    function getTrainNumber(data: TrainLike): string {
         const direct = String(data?.numeroTreno || "").replace(/\D+/g, "");
         if (direct) return direct;
         return String(data?.compNumeroTreno || "").replace(/\D+/g, "");
     }
 
-    function getOperationDate(data) {
+    function getOperationDate(data: TrainLike): string | null {
         if (data?.dataPartenzaTrenoAsDate && /^\d{4}-\d{2}-\d{2}$/.test(data.dataPartenzaTrenoAsDate)) {
             return data.dataPartenzaTrenoAsDate;
         }
@@ -49,7 +200,7 @@ export {};
         return null;
     }
 
-    function getTodayInZurich() {
+    function getTodayInZurich(): string {
         return new Intl.DateTimeFormat("sv-SE", {
             timeZone: "Europe/Zurich",
             year: "numeric",
@@ -58,7 +209,7 @@ export {};
         }).format(new Date());
     }
 
-    function getCategory(data) {
+    function getCategory(data: TrainLike): string {
         const comp = String(data?.compNumeroTreno || data?.categoria || "").trim().toUpperCase();
         if (comp.includes("EC FR")) return "FR";
         const match = comp.match(/^([A-Z]+(?:\s+[A-Z]+)?)\s*\d*$/);
@@ -66,13 +217,13 @@ export {};
         return String(data?.categoria || "").trim().toUpperCase();
     }
 
-    function isSwissBoundaryName(name) {
+    function isSwissBoundaryName(name: unknown): boolean {
         const key = normalizeStationName(name);
         if (!key) return false;
         return SWISS_BORDER_HINTS.has(key);
     }
 
-    function hasSwissHint(data) {
+    function hasSwissHint(data: TrainLike): boolean {
         const directFields = [
             data?.origine,
             data?.destinazione,
@@ -85,10 +236,10 @@ export {};
         if (data?.origineEstera && data.origineEstera !== data.origine) return true;
         if (data?.destinazioneEstera && data.destinazioneEstera !== data.destinazione) return true;
 
-        return asArray(data?.fermate).some((stop) => isSwissBoundaryName(stop?.stazione));
+        return asArray<TimelineStop>(data?.fermate).some((stop) => isSwissBoundaryName(stop?.stazione));
     }
 
-    function shouldQuery(data, category) {
+    function shouldQuery(data: TrainLike, category?: string): boolean {
         const train = getTrainNumber(data);
         const operationDate = getOperationDate(data);
         if (!train || !operationDate || operationDate !== getTodayInZurich()) return false;
@@ -99,7 +250,7 @@ export {};
         return false;
     }
 
-    async function fetchSwissByTrainNumber(trainNumber, operationDate) {
+    async function fetchSwissByTrainNumber(trainNumber: unknown, operationDate: unknown): Promise<SwissFormationData> {
         const train = String(trainNumber || "").replace(/\D+/g, "");
         const date = String(operationDate || "").trim();
 
@@ -115,9 +266,9 @@ export {};
         if (!cache.has(key)) {
             const requestUrl = `${SWISS_ENDPOINT}?train=${encodeURIComponent(train)}&date=${encodeURIComponent(date)}`;
             cache.set(key, fetch(requestUrl).then(async (response) => {
-                let payload = null;
+                let payload: SwissFormationData | null = null;
                 try {
-                    payload = await response.json();
+                    payload = asRecord(await response.json()) as SwissFormationData;
                 } catch {
                     payload = null;
                 }
@@ -131,7 +282,7 @@ export {};
         return cache.get(key);
     }
 
-    async function fetchSwissEc(data, category) {
+    async function fetchSwissEc(data: TrainLike, category?: string): Promise<SwissFormationData> {
         const train = getTrainNumber(data);
         const operationDate = getOperationDate(data);
 
@@ -349,7 +500,7 @@ export {};
         if (!hasMatch) return mergeByBoundaryAnchor(sourceStops, vtEntries, swissEntries) || sourceStops;
 
         const merged = [];
-        const usedVtIndexes = new Set();
+        const usedVtIndexes = new Set<number>();
 
         for (const swissEntry of swissEntries) {
             const vtEntry = findVtEntryForSwiss(swissEntry, vtByName);
@@ -859,7 +1010,7 @@ export {};
     }
 
     function featureEntries(coach, vehicle, selectedSector, index = 0, status = null) {
-        const services = new Set(asArray(coach?.services));
+        const services = new Set(asArray<string>(coach?.services));
         const entries = [];
         if (vehicle?.lowFloor || services.has("NF")) entries.push({ id: "low_floor", icon: "accessible_forward", label: tr("swiss_low_floor", "Low floor") });
         if (vehicle?.wheelchairSpaces || vehicle?.wheelchairPicto || services.has("BHP")) entries.push({ id: "wheelchair", icon: "accessible", label: tr("swiss_wheelchair", "Wheelchair") });
@@ -1506,7 +1657,7 @@ export {};
             button?.setAttribute("aria-expanded", expanded ? "true" : "false");
             icon?.classList.toggle("swiss-rotated", expanded);
         });
-        card.querySelectorAll(".swiss-stop-tab").forEach((button) => {
+        card.querySelectorAll<HTMLElement>(".swiss-stop-tab").forEach((button) => {
             button.addEventListener("click", () => {
                 card.dataset.swissSelectedStop = button.dataset.swissStopIndex;
                 renderFormationCard(data);
