@@ -1,6 +1,8 @@
 // @ts-nocheck
 export {};
 
+const translations = window.translations || {};
+
 /**
  * BelloTreno Infomobilità 模块
  * 负责抓取、解析并展示 RFI RSS 实时公告

@@ -1,8 +1,5 @@
 (function () {
-    type StoredLanguage = 'zh' | 'en' | 'it';
-    type StoredTheme = 'dark' | 'light';
-
-    function readTheme(): StoredTheme {
+    function readTheme() {
         try {
             const savedTheme = localStorage.getItem('theme');
             if (savedTheme === 'dark' || savedTheme === 'light') {
@@ -14,7 +11,7 @@
         return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     }
 
-    function readLang(): StoredLanguage {
+    function readLang() {
         try {
             const savedLang = localStorage.getItem('language');
             if (savedLang === 'zh' || savedLang === 'en' || savedLang === 'it') {
@@ -27,12 +24,12 @@
         return bl.startsWith('zh') ? 'zh' : bl.startsWith('it') ? 'it' : 'en';
     }
 
-    function applyPreferences(targetRoot?: HTMLElement | null): void {
+    function applyPreferences(targetRoot) {
         if (!targetRoot) return;
 
         const theme = readTheme();
         const lang = readLang();
-        const langMap: Record<StoredLanguage, string> = { zh: 'zh-CN', en: 'en', it: 'it' };
+        const langMap = { zh: 'zh-CN', en: 'en', it: 'it' };
 
         targetRoot.setAttribute('data-theme', theme);
         targetRoot.setAttribute('data-lang', lang);
@@ -50,8 +47,8 @@
     if (!window.__btThemeSwapGuard) {
         window.__btThemeSwapGuard = true;
         document.addEventListener('astro:before-swap', function (event) {
-            const swapEvent = event as Event & { newDocument?: Document };
-            applyPreferences(swapEvent.newDocument?.documentElement);
+            const newDocument = Reflect.get(event, 'newDocument');
+            applyPreferences(newDocument && newDocument.documentElement);
         });
         document.addEventListener('astro:after-swap', function () {
             applyPreferences(document.documentElement);

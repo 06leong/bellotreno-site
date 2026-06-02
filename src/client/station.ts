@@ -7,6 +7,8 @@ import { navigateToStationBoard, registerStationNavigationGlobal } from './stati
 
 export {};
 
+const translations = window.translations || {};
+
 function getItalianTimeString() {
     const now = new Date();
 

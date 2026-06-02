@@ -6,6 +6,7 @@ export {};
 
 window.currentLang = window.currentLang || 'zh';
 window.currentTheme = 'auto';
+const translations = window.translations || {};
 
 // ========== Language Management ==========
 
