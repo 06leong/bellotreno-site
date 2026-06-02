@@ -51,11 +51,7 @@ declare global {
     currentLang?: BelloLanguage;
     currentTheme?: BelloTheme;
     escapeHtml?: (value: unknown) => string;
-    fetchStationBoard?: (stationId: string, type?: string) => Promise<unknown[]>;
-    formatArrivalData?: (train: unknown, lang: string, stationName: string) => unknown;
-    formatDepartureData?: (train: unknown, lang: string, stationName: string) => unknown;
     getBadgeClass?: (categoryCode: string) => string;
-    getItalianTimeString?: () => string;
     goHome?: () => void;
     goToStationBoard?: (stationId: string, stationName?: string, type?: string) => void;
     initLanguage?: () => void;
@@ -64,7 +60,6 @@ declare global {
     onLanguageChanged?: () => void;
     searchMode?: "train" | "station";
     switchSearchMode?: (mode: "train" | "station") => void;
-    switchBoardType?: (type: "partenze" | "arrivi") => void;
     translations?: TranslationDictionary;
     updateLanguage?: () => void;
     updateThemeDisplay?: () => void;

@@ -3,9 +3,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 ---
 
 <BaseLayout
-    title="Partenze & Arrivi — BelloTreno"
-    description="Tabellone partenze e arrivi in tempo reale delle stazioni ferroviarie italiane. Cerca la tua stazione e consulta i treni in orario e in ritardo."
-    pageScripts={["/scripts/swiss.js", "/scripts/station.js"]}>
+    title="Partenze & Arrivi - BelloTreno"
+    description="Tabellone partenze e arrivi in tempo reale delle stazioni ferroviarie italiane. Cerca la tua stazione e consulta i treni in orario e in ritardo.">
     <Fragment slot="scripts">
         <script>
             import '../client/swiss.ts';
@@ -26,12 +25,19 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                 </div>
             </div>
             <div class="flex justify-center mx-auto mb-4 w-[280px] bg-base-200/50 p-1 rounded-full border border-base-200 shadow-sm backdrop-blur">
-                <button class="board-tab active flex-1 flex items-center justify-center gap-1.5 py-2 px-4 text-sm font-medium rounded-full cursor-pointer transition-all" id="btnPartenze"
-                    onclick="switchBoardType('partenze')">
+                <button
+                    class="board-tab active flex-1 flex items-center justify-center gap-1.5 py-2 px-4 text-sm font-medium rounded-full cursor-pointer transition-all"
+                    id="btnPartenze"
+                    type="button"
+                    data-board-type="partenze">
                     <span class="material-symbols-outlined text-[1.25rem]">departure_board</span>
                     <span data-i18n="departures">离站</span>
                 </button>
-                <button class="board-tab flex-1 flex items-center justify-center gap-1.5 py-2 px-4 text-sm font-medium rounded-full cursor-pointer transition-all" id="btnArrivi" onclick="switchBoardType('arrivi')">
+                <button
+                    class="board-tab flex-1 flex items-center justify-center gap-1.5 py-2 px-4 text-sm font-medium rounded-full cursor-pointer transition-all"
+                    id="btnArrivi"
+                    type="button"
+                    data-board-type="arrivi">
                     <span class="material-symbols-outlined text-[1.25rem]">directions_railway</span>
                     <span data-i18n="arrivals">到站</span>
                 </button>
