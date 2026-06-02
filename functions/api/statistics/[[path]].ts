@@ -11,6 +11,7 @@ const ALLOWED_HOSTS = new Set([
 const ALLOWED_HOST_SUFFIXES = [
     ".bellotreno-site.pages.dev"
 ];
+const DEFAULT_STATISTICS_API_BASE_URL = "https://stats-api.bellotreno.org/v1";
 
 type StatisticsParams = { path?: string | string[] };
 type CorsHeaderMap = Record<string, string>;
@@ -100,7 +101,7 @@ export async function onRequestGet({ request, env, params }: PagesContext<Statis
         return json({ available: false, reason: "forbidden" }, 403, extraHeaders);
     }
 
-    const baseUrl = env.STATISTICS_API_BASE_URL;
+    const baseUrl = env.STATISTICS_API_BASE_URL || DEFAULT_STATISTICS_API_BASE_URL;
     if (!baseUrl) {
         return json({ available: false, reason: "not_configured" }, 503, extraHeaders);
     }
