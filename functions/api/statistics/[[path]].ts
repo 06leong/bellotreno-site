@@ -1,12 +1,16 @@
 const ALLOWED_HOSTS = new Set([
     "bellotreno.org",
     "real.bellotreno.org",
+    "bellotreno-site.pages.dev",
     "bellotreno.pages.dev",
     "localhost",
     "127.0.0.1",
     "::1",
     "[::1]"
 ]);
+const ALLOWED_HOST_SUFFIXES = [
+    ".bellotreno-site.pages.dev"
+];
 
 type StatisticsParams = { path?: string | string[] };
 type CorsHeaderMap = Record<string, string>;
@@ -36,7 +40,9 @@ function isLocalHost(hostname: string): boolean {
 }
 
 function isAllowedHost(hostname: string, requestHost: string): boolean {
-    return hostname === requestHost || ALLOWED_HOSTS.has(hostname);
+    return hostname === requestHost
+        || ALLOWED_HOSTS.has(hostname)
+        || ALLOWED_HOST_SUFFIXES.some((suffix) => hostname.endsWith(suffix));
 }
 
 function requestIsAllowed(request: Request): boolean {
