@@ -48,8 +48,6 @@ declare global {
     _commonInitialized?: boolean;
     _mainInitialized?: boolean;
     applyTheme?: () => void;
-    changeLang?: (lang: BelloLanguage) => void;
-    changeTheme?: (theme: BelloTheme) => void;
     currentLang?: BelloLanguage;
     currentTheme?: BelloTheme;
     escapeHtml?: (value: unknown) => string;
@@ -64,7 +62,6 @@ declare global {
     initTheme?: () => void;
     initVisitorCounter?: () => Promise<void>;
     onLanguageChanged?: () => void;
-    scrollToTop?: () => void;
     searchMode?: "train" | "station";
     switchSearchMode?: (mode: "train" | "station") => void;
     switchBoardType?: (type: "partenze" | "arrivi") => void;

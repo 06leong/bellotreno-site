@@ -8,6 +8,23 @@ window.currentLang = window.currentLang || 'zh';
 window.currentTheme = 'auto';
 const translations = window.translations || {};
 
+type Language = NonNullable<Window["currentLang"]>;
+type ThemePreference = NonNullable<Window["currentTheme"]>;
+
+function isLanguage(value: string | undefined): value is Language {
+    return value === 'zh' || value === 'en' || value === 'it';
+}
+
+function isThemePreference(value: string | undefined): value is ThemePreference {
+    return value === 'auto' || value === 'light' || value === 'dark';
+}
+
+function blurActiveElement() {
+    if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+    }
+}
+
 // ========== Language Management ==========
 
 function initLanguage() {
@@ -19,10 +36,10 @@ function initLanguage() {
 }
 
 function updateLanguage() {
-    const langNames = { zh: 'CN', en: 'EN', it: 'IT' };
+    const langNames: Record<Language, string> = { zh: 'CN', en: 'EN', it: 'IT' };
     const currentLangEl = document.getElementById('currentLang');
     if (currentLangEl) currentLangEl.textContent = langNames[window.currentLang];
-    const langMap = { zh: 'zh-CN', en: 'en', it: 'it' };
+    const langMap: Record<Language, string> = { zh: 'zh-CN', en: 'en', it: 'it' };
     document.documentElement.lang = langMap[window.currentLang] || window.currentLang;
 
     document.querySelectorAll('[data-i18n]').forEach(el => {
@@ -48,7 +65,7 @@ function updateLanguage() {
     document.documentElement.removeAttribute('data-lang-loading');
 }
 
-function changeLang(lang: NonNullable<Window["currentLang"]>) {
+function changeLang(lang: Language) {
     window.currentLang = lang;
     localStorage.setItem('language', lang);
     updateLanguage();
@@ -57,7 +74,8 @@ function changeLang(lang: NonNullable<Window["currentLang"]>) {
 // ========== Theme Management ==========
 
 function initTheme() {
-    const savedTheme = (localStorage.getItem('theme') || 'auto') as NonNullable<Window["currentTheme"]>;
+    const storedTheme = localStorage.getItem('theme') || 'auto';
+    const savedTheme = isThemePreference(storedTheme) ? storedTheme : 'auto';
     window.currentTheme = savedTheme;
     applyTheme();
     updateThemeDisplay();
@@ -78,14 +96,14 @@ function applyTheme() {
 }
 
 function updateThemeDisplay() {
-    const themeIcons = { 'auto': 'contrast', 'light': 'light_mode', 'dark': 'dark_mode' };
+    const themeIcons: Record<ThemePreference, string> = { 'auto': 'contrast', 'light': 'light_mode', 'dark': 'dark_mode' };
     const currentThemeIconEl = document.getElementById('currentThemeIcon');
     if (currentThemeIconEl) {
         currentThemeIconEl.textContent = themeIcons[window.currentTheme];
     }
 }
 
-function changeTheme(theme: NonNullable<Window["currentTheme"]>) {
+function changeTheme(theme: ThemePreference) {
     window.currentTheme = theme;
     localStorage.setItem('theme', theme);
     applyTheme();
@@ -96,6 +114,53 @@ function changeTheme(theme: NonNullable<Window["currentTheme"]>) {
 
 function scrollToTop() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function bindLanguageControls() {
+    document.querySelectorAll<HTMLElement>('[data-lang-option]').forEach((control) => {
+        if (control.dataset.btBound) return;
+        control.dataset.btBound = 'true';
+        control.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const lang = control.dataset.lang;
+            if (isLanguage(lang)) {
+                changeLang(lang);
+            }
+            blurActiveElement();
+        });
+    });
+}
+
+function bindThemeControls() {
+    document.querySelectorAll<HTMLElement>('[data-theme-option]').forEach((control) => {
+        if (control.dataset.btBound) return;
+        control.dataset.btBound = 'true';
+        control.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const theme = control.dataset.themeOption;
+            if (isThemePreference(theme)) {
+                changeTheme(theme);
+            }
+            blurActiveElement();
+        });
+    });
+}
+
+function bindBackToTopControl() {
+    const backToTop = document.querySelector<HTMLButtonElement>('.back-to-top');
+    if (!backToTop || backToTop.dataset.btBound) return;
+    backToTop.dataset.btBound = 'true';
+    backToTop.addEventListener('click', () => {
+        scrollToTop();
+    });
+}
+
+function bindGlobalControls() {
+    bindLanguageControls();
+    bindThemeControls();
+    bindBackToTopControl();
 }
 
 async function initVisitorCounter() {
@@ -120,12 +185,9 @@ async function initVisitorCounter() {
 // Export to global
 window.initLanguage = initLanguage;
 window.updateLanguage = updateLanguage;
-window.changeLang = changeLang;
 window.initTheme = initTheme;
 window.applyTheme = applyTheme;
 window.updateThemeDisplay = updateThemeDisplay;
-window.changeTheme = changeTheme;
-window.scrollToTop = scrollToTop;
 window.initVisitorCounter = initVisitorCounter;
 
 // ========== XSS: HTML 转义工具 ==========
@@ -145,6 +207,7 @@ document.addEventListener('astro:page-load', () => {
     initLanguage();
     initTheme();
     initVisitorCounter();
+    bindGlobalControls();
 
     if (!window._commonInitialized) {
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {

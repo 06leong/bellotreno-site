@@ -1,36 +1,33 @@
 ---
 ---
-<!-- Dev server HMR trigger -->
 
-<nav class="navbar fixed top-0 w-full z-50 bg-transparent flex items-center justify-between px-4 sm:px-6 min-h-0 h-16"
+<nav
+    class="navbar fixed top-0 w-full z-50 bg-transparent flex items-center justify-between px-4 sm:px-6 min-h-0 h-16"
     transition:persist="main-nav">
-    {/* transition:persist keeps this nav DOM node alive across ClientRouter page transitions,
-        preventing a brief "unstyled" window where a:visited purple can flash. */}
-    <!-- Premium Typographic Logo -->
+    {/* transition:persist keeps this nav DOM node alive across ClientRouter page transitions. */}
     <a href="/" class="text-base-content hover:opacity-75 transition-opacity outline-none flex items-center" style="text-decoration: none;">
         <span class="text-[1.4rem] sm:text-[1.6rem] tracking-tight text-base-content" style="font-family: var(--app-font-heading); font-weight: 800; letter-spacing: -1px;">
             Bello<span class="text-primary font-medium">Treno</span>
         </span>
     </a>
-    
-    <!-- Desktop Menu -->
+
     <div class="hidden sm:flex items-center gap-1 sm:gap-2">
         <a href="/statistics" data-i18n="nav_statistics" class="btn btn-ghost btn-sm rounded-btn text-[0.95rem] font-normal">统计</a>
         <a href="/infomobilita" data-i18n="nav_infomobilita" class="btn btn-ghost btn-sm rounded-btn text-[0.95rem] font-normal">出行信息</a>
         <a href="/about" data-i18n="nav_about" class="btn btn-ghost btn-sm rounded-btn text-[0.95rem] font-normal">关于</a>
-    
+
         <div class="dropdown dropdown-end">
             <div tabindex="0" role="button" class="btn btn-ghost btn-sm rounded-btn px-2">
                 <span class="material-symbols-outlined text-[1.25rem]">language</span>
                 <span id="currentLang" class="hidden">CN</span>
             </div>
             <ul tabindex="0" id="langMenu" class="dropdown-content menu bg-base-100/80 backdrop-blur-3xl rounded-box z-[1] min-w-max p-2 shadow-glass border border-base-content/10 mt-2">
-                <li><a class="justify-center text-center" data-lang="zh" onclick="changeLang('zh'); document.activeElement.blur(); event.stopPropagation();">Chinese</a></li>
-                <li><a class="justify-center text-center" data-lang="en" onclick="changeLang('en'); document.activeElement.blur(); event.stopPropagation();">English</a></li>
-                <li><a class="justify-center text-center" data-lang="it" onclick="changeLang('it'); document.activeElement.blur(); event.stopPropagation();">Italiano</a></li>
+                <li><a class="justify-center text-center" data-lang-option data-lang="zh">Chinese</a></li>
+                <li><a class="justify-center text-center" data-lang-option data-lang="en">English</a></li>
+                <li><a class="justify-center text-center" data-lang-option data-lang="it">Italiano</a></li>
             </ul>
         </div>
-        
+
         <div class="dropdown dropdown-end">
             <div tabindex="0" role="button" class="btn btn-ghost btn-sm rounded-btn px-2">
                 <span class="material-symbols-outlined text-[1.25rem]" id="currentThemeIcon"></span>
@@ -47,19 +44,19 @@
             </div>
             <ul tabindex="0" id="themeMenu" class="dropdown-content menu bg-base-100/80 backdrop-blur-3xl rounded-box z-[1] min-w-max p-2 shadow-glass border border-base-content/10 mt-2">
                 <li>
-                    <a onclick="changeTheme('auto'); document.activeElement.blur(); event.stopPropagation();" class="flex justify-center items-center gap-2">
+                    <a data-theme-option="auto" class="flex justify-center items-center gap-2">
                         <span class="material-symbols-outlined text-[1.1rem]">contrast</span>
                         <span data-i18n="theme_auto" class="text-center">跟随系统</span>
                     </a>
                 </li>
                 <li>
-                    <a onclick="changeTheme('light'); document.activeElement.blur(); event.stopPropagation();" class="flex justify-center items-center gap-2">
+                    <a data-theme-option="light" class="flex justify-center items-center gap-2">
                         <span class="material-symbols-outlined text-[1.1rem]">light_mode</span>
                         <span data-i18n="theme_light" class="text-center">浅色模式</span>
                     </a>
                 </li>
                 <li>
-                    <a onclick="changeTheme('dark'); document.activeElement.blur(); event.stopPropagation();" class="flex justify-center items-center gap-2">
+                    <a data-theme-option="dark" class="flex justify-center items-center gap-2">
                         <span class="material-symbols-outlined text-[1.1rem]">dark_mode</span>
                         <span data-i18n="theme_dark" class="text-center">深色模式</span>
                     </a>
@@ -68,7 +65,6 @@
         </div>
     </div>
 
-    <!-- Mobile Hamburger Menu -->
     <div class="dropdown dropdown-end sm:hidden">
         <div tabindex="0" role="button" class="btn btn-ghost btn-circle">
             <span class="material-symbols-outlined text-[1.5rem]">menu</span>
@@ -79,22 +75,22 @@
                 <li><a href="/infomobilita" data-i18n="nav_infomobilita" class="text-[1.05rem] py-3">出行信息</a></li>
                 <li><a href="/about" data-i18n="nav_about" class="text-[1.05rem] py-3">关于</a></li>
             </ul>
-            
+
             <div class="px-4 py-1">
                 <div class="text-[0.7rem] text-base-content/50 font-bold mb-1.5 uppercase tracking-wider">Language</div>
                 <div class="join w-full">
-                    <button class="join-item btn btn-sm border-base-content/10 flex-1 px-0" onclick="changeLang('zh'); document.activeElement.blur();">中</button>
-                    <button class="join-item btn btn-sm border-base-content/10 flex-1 px-0" onclick="changeLang('en'); document.activeElement.blur();">EN</button>
-                    <button class="join-item btn btn-sm border-base-content/10 flex-1 px-0" onclick="changeLang('it'); document.activeElement.blur();">IT</button>
+                    <button class="join-item btn btn-sm border-base-content/10 flex-1 px-0" type="button" data-lang-option data-lang="zh">中</button>
+                    <button class="join-item btn btn-sm border-base-content/10 flex-1 px-0" type="button" data-lang-option data-lang="en">EN</button>
+                    <button class="join-item btn btn-sm border-base-content/10 flex-1 px-0" type="button" data-lang-option data-lang="it">IT</button>
                 </div>
             </div>
-            
+
             <div class="px-4 py-2">
                 <div class="text-[0.7rem] text-base-content/50 font-bold mb-1.5 uppercase tracking-wider">Theme</div>
                 <div class="join w-full">
-                    <button class="join-item btn btn-sm border-base-content/10 flex-1 px-0" onclick="changeTheme('auto'); document.activeElement.blur();"><span class="material-symbols-outlined text-[1rem]">contrast</span></button>
-                    <button class="join-item btn btn-sm border-base-content/10 flex-1 px-0" onclick="changeTheme('light'); document.activeElement.blur();"><span class="material-symbols-outlined text-[1rem]">light_mode</span></button>
-                    <button class="join-item btn btn-sm border-base-content/10 flex-1 px-0" onclick="changeTheme('dark'); document.activeElement.blur();"><span class="material-symbols-outlined text-[1rem]">dark_mode</span></button>
+                    <button class="join-item btn btn-sm border-base-content/10 flex-1 px-0" type="button" data-theme-option="auto"><span class="material-symbols-outlined text-[1rem]">contrast</span></button>
+                    <button class="join-item btn btn-sm border-base-content/10 flex-1 px-0" type="button" data-theme-option="light"><span class="material-symbols-outlined text-[1rem]">light_mode</span></button>
+                    <button class="join-item btn btn-sm border-base-content/10 flex-1 px-0" type="button" data-theme-option="dark"><span class="material-symbols-outlined text-[1rem]">dark_mode</span></button>
                 </div>
             </div>
         </div>
