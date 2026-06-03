@@ -1,5 +1,196 @@
+export {};
+
 (function () {
-    const cache = new Map();
+    type JsonRecord = Record<string, unknown>;
+
+    interface TrainLike extends JsonRecord {
+        categoria?: string;
+        compNumeroTreno?: string;
+        dataPartenzaTreno?: number | string;
+        dataPartenzaTrenoAsDate?: string;
+        destinazione?: string;
+        destinazioneEstera?: string;
+        fermate?: TimelineStop[];
+        numeroTreno?: number | string;
+        origine?: string;
+        origineEstera?: string;
+        stazioneUltimoRilevamento?: string;
+    }
+
+    interface SwissStop extends JsonRecord {
+        arrivalTime?: string;
+        departureTime?: string;
+        formationShortString?: string;
+        name?: string;
+        stopType?: string;
+        track?: string;
+        uic?: number | string;
+    }
+
+    interface TimelineStop extends JsonRecord {
+        actualFermataType?: number | string;
+        arrivoReale?: number | null;
+        arrivo_teorico?: number | null;
+        binarioEffettivoArrivoDescrizione?: string;
+        binarioEffettivoPartenzaDescrizione?: string;
+        binarioProgrammatoArrivoDescrizione?: string;
+        binarioProgrammatoPartenzaDescrizione?: string;
+        id?: number | string;
+        partenzaReale?: number | null;
+        partenza_teorica?: number | null;
+        programmata?: number | null;
+        progressivo?: number | string;
+        ritardoArrivo?: number;
+        ritardoPartenza?: number;
+        source?: string;
+        stazione?: string;
+        swissStop?: SwissStop;
+    }
+
+    interface TimelineStopWithInternal extends TimelineStop {
+        __btVtIndex?: number;
+    }
+
+    interface VtTimelineEntry {
+        index: number;
+        key: string;
+        stop: TimelineStopWithInternal;
+    }
+
+    interface SwissTimelineEntry {
+        key: string;
+        stop: SwissStop;
+    }
+
+    interface StopSector extends JsonRecord {
+        accessToPreviousVehicle?: boolean;
+        arrivalTime?: string;
+        departureTime?: string;
+        name?: string;
+        sectors?: string;
+        track?: string;
+        uic?: number | string;
+    }
+
+    interface VehicleSegment extends JsonRecord {
+        closed?: boolean;
+        fromStop?: string;
+        toStop?: string;
+        trolleyStatus?: string;
+        vehicleWillBePutAway?: boolean;
+    }
+
+    interface SwissVehicle extends JsonRecord {
+        bikeHooks?: number;
+        bikePicto?: boolean;
+        bikePlatform?: boolean;
+        buildTypeCode?: string;
+        businessZonePicto?: boolean;
+        checkNumber?: string;
+        climated?: boolean;
+        closed?: boolean;
+        countryCode?: string;
+        disabledCompartment?: boolean;
+        emergencyCallSystem?: boolean;
+        evn?: string;
+        familyZonePicto?: boolean;
+        firstClassSeats?: number;
+        fromStop?: string;
+        length?: number;
+        lowFloor?: boolean;
+        number?: number | string;
+        numberBeds?: number;
+        numberRestaurantSpace?: number;
+        parentEvn?: string;
+        position?: number;
+        secondClassSeats?: number;
+        segments?: VehicleSegment[];
+        stopSectors?: StopSector[];
+        strollerPicto?: boolean;
+        toStop?: string;
+        trolleyStatus?: string;
+        typeCode?: string;
+        typeCodeName?: string;
+        vehicleNumber?: string;
+        vehicleWillBePutAway?: boolean;
+        wheelchairAccessibleRestaurant?: boolean;
+        wheelchairBoardingPlatformHeight?: number;
+        wheelchairFoldingRamp?: boolean;
+        wheelchairGapBridging?: boolean;
+        wheelchairPicto?: boolean;
+        wheelchairSpaces?: number;
+        wheelchairSpacesFirstClass?: number;
+        wheelchairSpacesSecondClass?: number;
+        wheelchairToilet?: boolean;
+    }
+
+    interface SwissFormationData extends JsonRecord {
+        available?: boolean;
+        lastUpdate?: string;
+        operationDate?: string;
+        runs?: string;
+        stops?: SwissStop[];
+        trainNumber?: string;
+        vehicleCount?: number;
+        vehicles?: SwissVehicle[];
+    }
+
+    interface CoachToken extends JsonRecord {
+        classCode: string;
+        classLabel: string;
+        closed: boolean;
+        number: number | null;
+        raw: string;
+        sector: string;
+        services: string[];
+    }
+
+    interface VehicleStatus {
+        closed: boolean;
+        segment: VehicleSegment | null;
+        trolleyStatus: string;
+        vehicleWillBePutAway: boolean;
+    }
+
+    interface VehicleItem extends JsonRecord {
+        coach: CoachToken | null;
+        displayPosition?: number;
+        fallbackIndex?: number;
+        selectedSector: StopSector | null;
+        selectedStop: SwissStop | null;
+        sector: string;
+        status: VehicleStatus | null;
+        unitKey: string;
+        vehicle: SwissVehicle | null;
+    }
+
+    interface FeatureEntry {
+        icon: string;
+        id: string;
+        label: string;
+    }
+
+    interface LegendEntry extends FeatureEntry {
+        badge?: string;
+    }
+
+    interface VehicleItemGroup {
+        firstIndex: number;
+        items: VehicleItem[];
+        key: string;
+        maxSector: number;
+        minPosition: number;
+        minSector: number;
+        unitSort: number;
+    }
+
+    interface StripGroup {
+        key: string;
+        length: number;
+        start: number;
+    }
+
+    const cache = new Map<string, Promise<SwissFormationData>>();
     const SWISS_ENDPOINT = window.SWISS_FORMATION_BASE || window.SWISS_EC_BASE || "/api/swiss/formation";
     const ALWAYS_TRY_CATEGORIES = new Set(["EC", "EN"]);
     const HINTED_TRY_CATEGORIES = new Set(["REG", "RE", "RV", "S", "IR"]);
@@ -11,7 +202,7 @@
         "STABIO"
     ]);
 
-    function tr(key, fallback) {
+    function tr(key: string, fallback?: string): string {
         const dict = typeof translations !== "undefined" ? translations : window.translations;
         return (dict && dict[window.currentLang] && dict[window.currentLang][key])
             || (dict && dict.en && dict.en[key])
@@ -19,21 +210,25 @@
             || key;
     }
 
-    function esc(value) {
+    function esc(value: unknown): string {
         return window.escapeHtml ? window.escapeHtml(value) : String(value ?? "");
     }
 
-    function asArray(value) {
-        return Array.isArray(value) ? value : [];
+    function asRecord(value: unknown): JsonRecord {
+        return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {};
     }
 
-    function getTrainNumber(data) {
+    function asArray<T = JsonRecord>(value: unknown): T[] {
+        return Array.isArray(value) ? value as T[] : [];
+    }
+
+    function getTrainNumber(data: TrainLike): string {
         const direct = String(data?.numeroTreno || "").replace(/\D+/g, "");
         if (direct) return direct;
         return String(data?.compNumeroTreno || "").replace(/\D+/g, "");
     }
 
-    function getOperationDate(data) {
+    function getOperationDate(data: TrainLike): string | null {
         if (data?.dataPartenzaTrenoAsDate && /^\d{4}-\d{2}-\d{2}$/.test(data.dataPartenzaTrenoAsDate)) {
             return data.dataPartenzaTrenoAsDate;
         }
@@ -46,7 +241,7 @@
         return null;
     }
 
-    function getTodayInZurich() {
+    function getTodayInZurich(): string {
         return new Intl.DateTimeFormat("sv-SE", {
             timeZone: "Europe/Zurich",
             year: "numeric",
@@ -55,7 +250,7 @@
         }).format(new Date());
     }
 
-    function getCategory(data) {
+    function getCategory(data: TrainLike): string {
         const comp = String(data?.compNumeroTreno || data?.categoria || "").trim().toUpperCase();
         if (comp.includes("EC FR")) return "FR";
         const match = comp.match(/^([A-Z]+(?:\s+[A-Z]+)?)\s*\d*$/);
@@ -63,13 +258,13 @@
         return String(data?.categoria || "").trim().toUpperCase();
     }
 
-    function isSwissBoundaryName(name) {
+    function isSwissBoundaryName(name: unknown): boolean {
         const key = normalizeStationName(name);
         if (!key) return false;
         return SWISS_BORDER_HINTS.has(key);
     }
 
-    function hasSwissHint(data) {
+    function hasSwissHint(data: TrainLike): boolean {
         const directFields = [
             data?.origine,
             data?.destinazione,
@@ -82,10 +277,10 @@
         if (data?.origineEstera && data.origineEstera !== data.origine) return true;
         if (data?.destinazioneEstera && data.destinazioneEstera !== data.destinazione) return true;
 
-        return asArray(data?.fermate).some((stop) => isSwissBoundaryName(stop?.stazione));
+        return asArray<TimelineStop>(data?.fermate).some((stop) => isSwissBoundaryName(stop?.stazione));
     }
 
-    function shouldQuery(data, category) {
+    function shouldQuery(data: TrainLike, category?: string): boolean {
         const train = getTrainNumber(data);
         const operationDate = getOperationDate(data);
         if (!train || !operationDate || operationDate !== getTodayInZurich()) return false;
@@ -96,7 +291,7 @@
         return false;
     }
 
-    async function fetchSwissByTrainNumber(trainNumber, operationDate) {
+    async function fetchSwissByTrainNumber(trainNumber: unknown, operationDate: unknown): Promise<SwissFormationData> {
         const train = String(trainNumber || "").replace(/\D+/g, "");
         const date = String(operationDate || "").trim();
 
@@ -112,9 +307,9 @@
         if (!cache.has(key)) {
             const requestUrl = `${SWISS_ENDPOINT}?train=${encodeURIComponent(train)}&date=${encodeURIComponent(date)}`;
             cache.set(key, fetch(requestUrl).then(async (response) => {
-                let payload = null;
+                let payload: SwissFormationData | null = null;
                 try {
-                    payload = await response.json();
+                    payload = asRecord(await response.json()) as SwissFormationData;
                 } catch {
                     payload = null;
                 }
@@ -125,10 +320,10 @@
             }).catch(() => ({ available: false, reason: "upstream_error" })));
         }
 
-        return cache.get(key);
+        return cache.get(key) ?? { available: false, reason: "cache_miss" };
     }
 
-    async function fetchSwissEc(data, category) {
+    async function fetchSwissEc(data: TrainLike, category?: string): Promise<SwissFormationData> {
         const train = getTrainNumber(data);
         const operationDate = getOperationDate(data);
 
@@ -143,7 +338,7 @@
         return fetchSwissByTrainNumber(train, operationDate);
     }
 
-    function normalizeStationName(name) {
+    function normalizeStationName(name: unknown): string {
         let text = String(name || "")
             .replace(/\((?:I|IT|CH)\)/gi, " ")
             .replace(/\b(?:I|IT|CH)\b$/gi, " ");
@@ -165,7 +360,7 @@
         return text.replace(/\b(?:I|IT|CH)\b$/g, "").trim();
     }
 
-    function isSimplonGalleryKey(key) {
+    function isSimplonGalleryKey(key: unknown): boolean {
         const text = String(key || "").toUpperCase();
         return text.includes("GALLERIA SEMPIONE")
             || text.includes("GALLERIE DU SIMPLON")
@@ -175,13 +370,13 @@
             || (text.includes("SIMPLON") && (text.includes("GALLERY") || text.includes("GALLERIE") || text.includes("GALERIE") || text.includes("TUNNEL")));
     }
 
-    function isTechnicalSwissStop(stop) {
+    function isTechnicalSwissStop(stop: SwissStop | TimelineStop | null | undefined): boolean {
         const key = normalizeStationName(stop?.name || stop?.stazione || "");
         const raw = String(stop?.name || stop?.stazione || "").toUpperCase();
         return key === "DOMODOSSOLA" && isSimplonGalleryKey(raw);
     }
 
-    function stationKeys(name) {
+    function stationKeys(name: unknown): string[] {
         const key = normalizeStationName(name);
         if (!key) return [];
         const keys = new Set([key]);
@@ -190,7 +385,7 @@
         return Array.from(keys);
     }
 
-    function findVtEntryForSwiss(swissEntry, vtByName) {
+    function findVtEntryForSwiss(swissEntry: SwissTimelineEntry, vtByName: Map<string, VtTimelineEntry>): VtTimelineEntry | null {
         for (const key of stationKeys(swissEntry.stop?.name)) {
             const exact = vtByName.get(key);
             if (exact) return exact;
@@ -208,19 +403,19 @@
         return null;
     }
 
-    function parseIsoMs(value) {
+    function parseIsoMs(value: unknown): number | null {
         if (!value) return null;
-        const ms = Date.parse(value);
+        const ms = Date.parse(String(value));
         return Number.isFinite(ms) ? ms : null;
     }
 
-    function cleanTrack(track) {
+    function cleanTrack(track: unknown): string {
         const value = String(track || "").trim();
         if (!value || value.toUpperCase() === "N/A") return "";
         return value;
     }
 
-    function toSwissTimelineStop(stop) {
+    function toSwissTimelineStop(stop: SwissStop): TimelineStop {
         const arrivalMs = parseIsoMs(stop.arrivalTime);
         const departureMs = parseIsoMs(stop.departureTime);
         const track = cleanTrack(stop.track);
@@ -247,7 +442,7 @@
         };
     }
 
-    function decorateVtStop(stop, swissStop, vtIndex) {
+    function decorateVtStop(stop: TimelineStop, swissStop: SwissStop, vtIndex: number): TimelineStopWithInternal {
         const copy = { ...stop, swissStop, __btVtIndex: vtIndex };
         const hasPlatform = stop.binarioProgrammatoPartenzaDescrizione
             || stop.binarioProgrammatoArrivoDescrizione
@@ -263,15 +458,20 @@
         return copy;
     }
 
-    function stripInternal(stop) {
+    function stripInternal(stop: TimelineStopWithInternal): TimelineStop {
         const copy = { ...stop };
         delete copy.__btVtIndex;
         return copy;
     }
 
-    function insertByVtIndex(merged, stop, vtIndex, anchorIndexes) {
-        const previousAnchors = anchorIndexes.filter((idx) => idx < vtIndex);
-        const nextAnchors = anchorIndexes.filter((idx) => idx > vtIndex);
+    function insertByVtIndex(
+        merged: TimelineStopWithInternal[],
+        stop: TimelineStop,
+        vtIndex: number,
+        anchorIndexes: number[]
+    ): void {
+        const previousAnchors = anchorIndexes.filter((idx: number) => idx < vtIndex);
+        const nextAnchors = anchorIndexes.filter((idx: number) => idx > vtIndex);
         const previous = previousAnchors.length ? previousAnchors[previousAnchors.length - 1] : null;
         const next = nextAnchors.length ? nextAnchors[0] : null;
 
@@ -288,7 +488,7 @@
         }
 
         if (next !== null) {
-            const pos = merged.findIndex((item) => item.__btVtIndex === next);
+            const pos = merged.findIndex((item: TimelineStopWithInternal) => item.__btVtIndex === next);
             merged.splice(pos >= 0 ? pos : 0, 0, { ...stop, __btVtIndex: vtIndex });
             return;
         }
@@ -296,13 +496,17 @@
         merged.push({ ...stop, __btVtIndex: vtIndex });
     }
 
-    function swissTimelineStops(swissEntries) {
+    function swissTimelineStops(swissEntries: SwissTimelineEntry[]): TimelineStop[] {
         return swissEntries
-            .filter((entry) => !isTechnicalSwissStop(entry.stop))
-            .map((entry) => toSwissTimelineStop(entry.stop));
+            .filter((entry: SwissTimelineEntry) => !isTechnicalSwissStop(entry.stop))
+            .map((entry: SwissTimelineEntry) => toSwissTimelineStop(entry.stop));
     }
 
-    function mergeByBoundaryAnchor(sourceStops, vtEntries, swissEntries) {
+    function mergeByBoundaryAnchor(
+        sourceStops: TimelineStop[],
+        vtEntries: VtTimelineEntry[],
+        swissEntries: SwissTimelineEntry[]
+    ): TimelineStop[] | null {
         const swissStops = swissTimelineStops(swissEntries);
         if (!sourceStops.length || !swissStops.length) return null;
 
@@ -320,33 +524,33 @@
         return null;
     }
 
-    function mergeTimelineStops(vtStops, swissData) {
-        const sourceStops = asArray(vtStops);
+    function mergeTimelineStops(vtStops: unknown[], swissData: SwissFormationData): TimelineStop[] {
+        const sourceStops = asArray<TimelineStop>(vtStops);
         if (!swissData?.available || !asArray(swissData.stops).length) return sourceStops;
 
-        const vtEntries = sourceStops.map((stop, index) => ({
+        const vtEntries: VtTimelineEntry[] = sourceStops.map((stop: TimelineStop, index: number) => ({
             stop,
             index,
             key: normalizeStationName(stop.stazione)
-        })).filter((entry) => entry.key);
+        })).filter((entry: VtTimelineEntry) => entry.key);
 
-        const vtByName = new Map();
+        const vtByName = new Map<string, VtTimelineEntry>();
         for (const entry of vtEntries) {
             for (const key of stationKeys(entry.stop?.stazione)) {
                 if (!vtByName.has(key)) vtByName.set(key, entry);
             }
         }
 
-        const swissEntries = asArray(swissData.stops).map((stop) => ({
+        const swissEntries: SwissTimelineEntry[] = asArray<SwissStop>(swissData.stops).map((stop: SwissStop) => ({
             stop,
             key: normalizeStationName(stop.name)
-        })).filter((entry) => entry.key);
+        })).filter((entry: SwissTimelineEntry) => entry.key);
 
-        const hasMatch = swissEntries.some((entry) => findVtEntryForSwiss(entry, vtByName));
+        const hasMatch = swissEntries.some((entry: SwissTimelineEntry) => findVtEntryForSwiss(entry, vtByName));
         if (!hasMatch) return mergeByBoundaryAnchor(sourceStops, vtEntries, swissEntries) || sourceStops;
 
-        const merged = [];
-        const usedVtIndexes = new Set();
+        const merged: TimelineStopWithInternal[] = [];
+        const usedVtIndexes = new Set<number>();
 
         for (const swissEntry of swissEntries) {
             const vtEntry = findVtEntryForSwiss(swissEntry, vtByName);
@@ -371,9 +575,9 @@
         return merged.map(stripInternal);
     }
 
-    function formatZurichDateTime(value) {
+    function formatZurichDateTime(value: unknown): string {
         if (!value) return "--";
-        const date = new Date(value);
+        const date = new Date(String(value));
         if (Number.isNaN(date.getTime())) return "--";
         return date.toLocaleString(window.currentLang === "it" ? "it-IT" : window.currentLang === "zh" ? "zh-CN" : "en-GB", {
             month: "short",
@@ -384,9 +588,9 @@
         });
     }
 
-    function formatZurichTime(value) {
+    function formatZurichTime(value: unknown): string {
         if (!value) return "--";
-        const date = new Date(value);
+        const date = new Date(String(value));
         if (Number.isNaN(date.getTime())) return "--";
         return date.toLocaleTimeString(window.currentLang === "it" ? "it-IT" : "en-GB", {
             hour: "2-digit",
@@ -395,7 +599,13 @@
         });
     }
 
-    function parseCoachToken(rawToken, sector, previousClass, insideGroup, hasExplicitGroup) {
+    function parseCoachToken(
+        rawToken: string,
+        sector: string,
+        previousClass: string,
+        insideGroup: boolean,
+        hasExplicitGroup: boolean
+    ): CoachToken | null {
         if (hasExplicitGroup && !insideGroup) return null;
 
         let token = rawToken.trim();
@@ -412,7 +622,7 @@
         if (!main) return null;
 
         let classCode = "";
-        let number = null;
+        let number: number | null = null;
         const parts = main.split(":");
         const kind = parts[0] || "";
         if (parts.length > 1 && parts[1]) {
@@ -444,17 +654,17 @@
             classLabel,
             number,
             closed,
-            services: servicePart ? servicePart.split(";").map((part) => part.trim()).filter(Boolean) : []
+            services: servicePart ? servicePart.split(";").map((part: string) => part.trim()).filter(Boolean) : []
         };
     }
 
-    function parseFormationShortString(value) {
+    function parseFormationShortString(value: unknown): CoachToken[] {
         const text = String(value || "");
         if (!text.trim()) return [];
 
         const hasExplicitGroup = text.includes("[");
         const sectorChunks = text.replace(/@/g, "|@").split("|").filter(Boolean);
-        const coaches = [];
+        const coaches: CoachToken[] = [];
         let previousClass = "";
 
         for (const chunk of sectorChunks) {
@@ -491,8 +701,8 @@
         return coaches;
     }
 
-    function sectorForVehicle(vehicle, selectedStop) {
-        const sectors = asArray(vehicle?.stopSectors);
+    function sectorForVehicle(vehicle: SwissVehicle, selectedStop: SwissStop | null): StopSector | null {
+        const sectors = asArray<StopSector>(vehicle?.stopSectors);
         if (!sectors.length) return null;
         if (selectedStop?.uic) {
             const exactMatches = sectors.filter((item) => item.uic === selectedStop.uic);
@@ -503,7 +713,7 @@
         return bestStopSector(sectors);
     }
 
-    function sectorRanks(value) {
+    function sectorRanks(value: unknown): number[] {
         const text = String(value || "").trim().toUpperCase();
         if (!text || ["TRAIN", "UNKNOWN", "--"].includes(text)) return [];
         const compact = text.replace(/[^A-Z]/g, "");
@@ -515,13 +725,13 @@
             .sort((a, b) => a - b);
     }
 
-    function canonicalSector(value) {
+    function canonicalSector(value: unknown): string {
         const ranks = sectorRanks(value);
         if (!ranks.length) return value ? String(value) : "";
         return ranks.map((rank) => String.fromCharCode(65 + rank)).join(",");
     }
 
-    function sectorSortRange(value) {
+    function sectorSortRange(value: unknown): { min: number; max: number; mid: number } {
         const ranks = sectorRanks(value);
         if (!ranks.length) {
             return { min: 999, max: 999, mid: 999 };
@@ -531,7 +741,7 @@
         return { min, max, mid: (min + max) / 2 };
     }
 
-    function normalizeStopSector(stopSector) {
+    function normalizeStopSector(stopSector: StopSector | null | undefined): StopSector | null {
         if (!stopSector) return null;
         return {
             ...stopSector,
@@ -539,11 +749,13 @@
         };
     }
 
-    function bestStopSector(stopSectors) {
-        const normalized = asArray(stopSectors).map(normalizeStopSector).filter(Boolean);
+    function bestStopSector(stopSectors: unknown): StopSector | null {
+        const normalized = asArray<StopSector>(stopSectors)
+            .map(normalizeStopSector)
+            .filter((item): item is StopSector => Boolean(item));
         if (!normalized.length) return null;
 
-        const sorted = normalized.slice().sort((left, right) => {
+        const sorted = normalized.slice().sort((left: StopSector, right: StopSector) => {
             const leftRange = sectorSortRange(left.sectors);
             const rightRange = sectorSortRange(right.sectors);
             return leftRange.min - rightRange.min
@@ -560,7 +772,7 @@
         };
     }
 
-    function vehicleUniqueKey(vehicle) {
+    function vehicleUniqueKey(vehicle: SwissVehicle): string {
         if (vehicle?.evn) return `evn:${vehicle.evn}`;
         const fullNumber = [
             vehicle?.buildTypeCode,
@@ -572,26 +784,26 @@
         return `fallback:${vehicle?.position || ""}:${vehicle?.number || ""}:${vehicle?.typeCodeName || ""}:${vehicle?.typeCode || ""}`;
     }
 
-    function mergeUniqueBy(list, keyFn) {
-        const map = new Map();
-        asArray(list).forEach((item) => {
+    function mergeUniqueBy<T>(list: T[] | unknown, keyFn: (item: T) => string): T[] {
+        const map = new Map<string, T>();
+        asArray<T>(list).forEach((item: T) => {
             const key = keyFn(item);
             if (!key || !map.has(key)) map.set(key || `item:${map.size}`, item);
         });
         return Array.from(map.values());
     }
 
-    function mergeStatusFlag(existing, incoming) {
+    function mergeStatusFlag(existing: unknown, incoming: unknown): boolean {
         return Boolean(existing && incoming);
     }
 
-    function preferTrolleyStatus(existing, incoming) {
+    function preferTrolleyStatus(existing: string | undefined, incoming: string | undefined): string | undefined {
         if (!existing || existing === "Normal") return existing || incoming;
         if (!incoming || incoming === "Normal") return incoming || existing;
         return existing;
     }
 
-    function mergeVehicle(existing, incoming) {
+    function mergeVehicle(existing: SwissVehicle, incoming: SwissVehicle): SwissVehicle {
         return {
             ...existing,
             position: Math.min(existing.position || incoming.position || 9999, incoming.position || existing.position || 9999),
@@ -652,38 +864,38 @@
         };
     }
 
-    function allVehicles(vehicles) {
-        const map = new Map();
-        asArray(vehicles).forEach((vehicle) => {
+    function allVehicles(vehicles: unknown): SwissVehicle[] {
+        const map = new Map<string, SwissVehicle>();
+        asArray<SwissVehicle>(vehicles).forEach((vehicle: SwissVehicle) => {
             const key = vehicleUniqueKey(vehicle);
-            if (map.has(key)) map.set(key, mergeVehicle(map.get(key), vehicle));
-            else map.set(key, vehicle);
+            const existing = map.get(key);
+            map.set(key, existing ? mergeVehicle(existing, vehicle) : vehicle);
         });
         return Array.from(map.values()).sort(compareVehiclesByPhysicalOrder);
     }
 
-    function compareVehiclesByPhysicalOrder(left, right) {
+    function compareVehiclesByPhysicalOrder(left: SwissVehicle, right: SwissVehicle): number {
         return vehicleUnitSortValue(left) - vehicleUnitSortValue(right)
-            || (left?.number || 9999) - (right?.number || 9999)
+            || Number(left?.number || 9999) - Number(right?.number || 9999)
             || (left?.position || 9999) - (right?.position || 9999)
             || String(left?.evn || left?.vehicleNumber || "").localeCompare(String(right?.evn || right?.vehicleNumber || ""));
     }
 
-    function vehiclesForFormation(vehicles) {
+    function vehiclesForFormation(vehicles: unknown): SwissVehicle[] {
         return allVehicles(vehicles).slice().sort(compareVehiclesByPhysicalOrder);
     }
 
-    function vehicleHasPassengerSeats(vehicle) {
+    function vehicleHasPassengerSeats(vehicle: SwissVehicle | null): boolean {
         return Number(vehicle?.firstClassSeats || 0) > 0 || Number(vehicle?.secondClassSeats || 0) > 0;
     }
 
-    function isLikelyLocomotive(vehicle) {
+    function isLikelyLocomotive(vehicle: SwissVehicle | null): boolean {
         if (vehicleHasPassengerSeats(vehicle)) return false;
         const type = String(vehicle?.typeCodeName || vehicle?.typeCode || "").toUpperCase();
         return /(^|[^A-Z])(LOK|LOCO|RE|AE|E[0-9]|BR|VECTRON)([^A-Z]|$)/.test(type);
     }
 
-    function vehicleClassLabel(vehicle, coach) {
+    function vehicleClassLabel(vehicle: SwissVehicle | null, coach: CoachToken | null): string {
         if (coach?.classLabel && coach.classLabel !== "?") return coach.classLabel;
         const first = Number(vehicle?.firstClassSeats || 0);
         const second = Number(vehicle?.secondClassSeats || 0);
@@ -693,33 +905,34 @@
         return isLikelyLocomotive(vehicle) ? tr("swiss_loco", "Loco") : tr("swiss_vehicle", "Vehicle");
     }
 
-    function coachTokenLooksLikeLoco(coach) {
+    function coachTokenLooksLikeLoco(coach: CoachToken | null): boolean {
         return ["LK"].includes(String(coach?.classCode || "").toUpperCase());
     }
 
-    function vehicleDisplayNumber(vehicle, coach) {
-        return vehicle?.number || coach?.number || vehicle?.vehicleNumber || vehicle?.position || "--";
+    function vehicleDisplayNumber(vehicle: SwissVehicle | null, coach: CoachToken | null): string {
+        return String(vehicle?.number || coach?.number || vehicle?.vehicleNumber || vehicle?.position || "--");
     }
 
-    function coachQueuesByNumber(coaches) {
-        const queues = new Map();
-        asArray(coaches).forEach((coach) => {
+    function coachQueuesByNumber(coaches: unknown): Map<string, CoachToken[]> {
+        const queues = new Map<string, CoachToken[]>();
+        asArray<CoachToken>(coaches).forEach((coach: CoachToken) => {
             if (!coach?.number) return;
             const key = String(coach.number);
             if (!queues.has(key)) queues.set(key, []);
-            queues.get(key).push(coach);
+            queues.get(key)?.push(coach);
         });
         return queues;
     }
 
-    function takeCoachForVehicle(vehicle, queues) {
+    function takeCoachForVehicle(vehicle: SwissVehicle, queues: Map<string, CoachToken[]>): CoachToken | null {
         const key = vehicle?.number ? String(vehicle.number) : "";
         if (!key || !queues.has(key)) return null;
         const queue = queues.get(key);
-        return queue.length ? queue.shift() : null;
+        if (!queue?.length) return null;
+        return queue.shift() ?? null;
     }
 
-    function buildVehicleItem(vehicle, coach, stop, stops) {
+    function buildVehicleItem(vehicle: SwissVehicle, coach: CoachToken | null, stop: SwissStop | null, stops: SwissStop[]): VehicleItem {
         const selectedSector = sectorForVehicle(vehicle, stop);
         const status = activeVehicleStatus(vehicle, stop, stops);
         return {
@@ -733,9 +946,14 @@
         };
     }
 
-    function buildVehicleItemsFromVehicles(orderedVehicles, coaches, stop, stops) {
+    function buildVehicleItemsFromVehicles(
+        orderedVehicles: SwissVehicle[],
+        coaches: CoachToken[],
+        stop: SwissStop | null,
+        stops: SwissStop[]
+    ): VehicleItem[] {
         const coachQueues = coachQueuesByNumber(coaches);
-        const items = asArray(orderedVehicles).map((vehicle) => buildVehicleItem(
+        const items = asArray<SwissVehicle>(orderedVehicles).map((vehicle: SwissVehicle) => buildVehicleItem(
             vehicle,
             takeCoachForVehicle(vehicle, coachQueues),
             stop,
@@ -744,8 +962,8 @@
         return orderVehicleItemsForStop(items);
     }
 
-    function fallbackCoachItems(coaches, stop) {
-        return asArray(coaches).map((coach, index) => ({
+    function fallbackCoachItems(coaches: CoachToken[], stop: SwissStop | null): VehicleItem[] {
+        return asArray<CoachToken>(coaches).map((coach: CoachToken, index: number): VehicleItem => ({
             vehicle: null,
             coach,
             selectedStop: stop,
@@ -758,29 +976,30 @@
         }));
     }
 
-    function shouldShowNoPassage(selectedSector, index) {
+    function shouldShowNoPassage(selectedSector: StopSector | null, index: number): boolean {
         return index > 0 && selectedSector?.accessToPreviousVehicle === false;
     }
 
-    function isClosedTrolleyStatus(value) {
+    function isClosedTrolleyStatus(value: unknown): boolean {
         return /geschlossen/i.test(String(value || ""));
     }
 
-    function stopKey(value) {
+    function stopKey(value: SwissStop | TimelineStop | string | null | undefined): string {
+        if (typeof value === "string") return normalizeStationName(value);
         return normalizeStationName(value?.name || value?.stazione || value || "");
     }
 
-    function stopIndexByKey(stops, key) {
+    function stopIndexByKey(stops: unknown, key: unknown): number {
         const normalized = normalizeStationName(key);
         if (!normalized) return -1;
-        return asArray(stops).findIndex((stop) => {
+        return asArray<SwissStop | TimelineStop>(stops).findIndex((stop: SwissStop | TimelineStop) => {
             const candidate = stopKey(stop);
             return candidate === normalized
                 || (candidate.length >= 5 && normalized.length >= 5 && (candidate.includes(normalized) || normalized.includes(candidate)));
         });
     }
 
-    function segmentContainsStop(segment, selectedKey, stops) {
+    function segmentContainsStop(segment: VehicleSegment, selectedKey: string, stops: unknown): boolean {
         const fromKey = stopKey(segment?.fromStop);
         const toKey = stopKey(segment?.toStop);
         if (fromKey === selectedKey || toKey === selectedKey) return true;
@@ -795,7 +1014,7 @@
         return selectedIndex >= start && selectedIndex <= end;
     }
 
-    function segmentStatus(segment) {
+    function segmentStatus(segment: VehicleSegment | null | undefined): VehicleStatus {
         const trolleyStatus = segment?.trolleyStatus || "";
         return {
             closed: Boolean(segment?.closed) || isClosedTrolleyStatus(trolleyStatus),
@@ -805,7 +1024,7 @@
         };
     }
 
-    function fallbackVehicleStatus(vehicle) {
+    function fallbackVehicleStatus(vehicle: SwissVehicle | null): VehicleStatus {
         const trolleyStatus = vehicle?.trolleyStatus || "";
         return {
             closed: Boolean(vehicle?.closed) || isClosedTrolleyStatus(trolleyStatus),
@@ -815,22 +1034,22 @@
         };
     }
 
-    function preferredDisplaySegment(segments) {
-        const list = asArray(segments);
-        return list.find((segment) => {
+    function preferredDisplaySegment(segments: unknown): VehicleSegment | null {
+        const list = asArray<VehicleSegment>(segments);
+        return list.find((segment: VehicleSegment) => {
             const status = segmentStatus(segment);
             return !status.closed && !status.vehicleWillBePutAway;
         }) || list[0] || null;
     }
 
-    function activeVehicleStatus(vehicle, selectedStop, stops) {
-        const segments = asArray(vehicle?.segments);
+    function activeVehicleStatus(vehicle: SwissVehicle | null, selectedStop: SwissStop | null, stops: unknown): VehicleStatus {
+        const segments = asArray<VehicleSegment>(vehicle?.segments);
         const selectedKey = stopKey(selectedStop);
         if (segments.length && selectedKey) {
-            const fromMatch = preferredDisplaySegment(segments.filter((segment) => stopKey(segment?.fromStop) === selectedKey));
+            const fromMatch = preferredDisplaySegment(segments.filter((segment: VehicleSegment) => stopKey(segment?.fromStop) === selectedKey));
             if (fromMatch) return segmentStatus(fromMatch);
 
-            const containingMatch = preferredDisplaySegment(segments.filter((segment) => segmentContainsStop(segment, selectedKey, stops)));
+            const containingMatch = preferredDisplaySegment(segments.filter((segment: VehicleSegment) => segmentContainsStop(segment, selectedKey, stops)));
             if (containingMatch) return segmentStatus(containingMatch);
         }
 
@@ -842,11 +1061,11 @@
         return fallbackVehicleStatus(vehicle);
     }
 
-    function vehicleIsClosedForDisplay(status, coach) {
+    function vehicleIsClosedForDisplay(status: VehicleStatus | null, coach: CoachToken | null): boolean {
         return Boolean(status?.closed || status?.vehicleWillBePutAway || (!status && coach?.closed));
     }
 
-    function trolleyStatusLabel(status) {
+    function trolleyStatusLabel(status: unknown): string {
         const value = String(status || "").trim();
         if (!value || value === "Normal") return "";
         if (/GeschlossenBetrieblich/i.test(value)) return tr("swiss_closed_operational", "Operationally closed");
@@ -855,9 +1074,15 @@
         return value;
     }
 
-    function featureEntries(coach, vehicle, selectedSector, index = 0, status = null) {
-        const services = new Set(asArray(coach?.services));
-        const entries = [];
+    function featureEntries(
+        coach: CoachToken | null,
+        vehicle: SwissVehicle | null,
+        selectedSector: StopSector | null,
+        index = 0,
+        status: VehicleStatus | null = null
+    ): FeatureEntry[] {
+        const services = new Set(asArray<string>(coach?.services));
+        const entries: FeatureEntry[] = [];
         if (vehicle?.lowFloor || services.has("NF")) entries.push({ id: "low_floor", icon: "accessible_forward", label: tr("swiss_low_floor", "Low floor") });
         if (vehicle?.wheelchairSpaces || vehicle?.wheelchairPicto || services.has("BHP")) entries.push({ id: "wheelchair", icon: "accessible", label: tr("swiss_wheelchair", "Wheelchair") });
         if (vehicle?.wheelchairToilet) entries.push({ id: "wheelchair_wc", icon: "wc", label: tr("swiss_wheelchair_wc", "Wheelchair WC") });
@@ -873,46 +1098,57 @@
         return entries;
     }
 
-    function renderFeatureIcons(coach, vehicle, selectedSector, index, status) {
+    function renderFeatureIcons(
+        coach: CoachToken | null,
+        vehicle: SwissVehicle | null,
+        selectedSector: StopSector | null,
+        index: number,
+        status: VehicleStatus | null
+    ): string {
         return featureEntries(coach, vehicle, selectedSector, index, status)
-            .map((entry) => `<span class="material-symbols-outlined" title="${esc(entry.label)}">${esc(entry.icon)}</span>`)
+            .map((entry: FeatureEntry) => `<span class="material-symbols-outlined" title="${esc(entry.label)}">${esc(entry.icon)}</span>`)
             .join("");
     }
 
-    function sectorLabel(sector) {
+    function sectorLabel(sector: unknown): string {
         if (!sector || sector === "TRAIN") return tr("swiss_train_segment", "Train");
         return `${tr("swiss_sector", "Sector")} ${sector}`;
     }
 
-    function vehicleSector(vehicle, coach, selectedStop, selectedSector = null) {
+    function vehicleSector(
+        vehicle: SwissVehicle,
+        coach: CoachToken | null,
+        selectedStop: SwissStop | null,
+        selectedSector: StopSector | null = null
+    ): string {
         const stopSector = selectedSector || sectorForVehicle(vehicle, selectedStop);
         return canonicalSector(stopSector?.sectors || coach?.sector || "TRAIN") || "TRAIN";
     }
 
-    function vehicleSortNumber(item) {
+    function vehicleSortNumber(item: VehicleItem): number {
         const parsed = Number.parseInt(vehicleDisplayNumber(item.vehicle, item.coach), 10);
         return Number.isFinite(parsed) ? parsed : 9999;
     }
 
-    function itemSectorRange(item) {
+    function itemSectorRange(item: VehicleItem): { min: number; max: number; mid: number } {
         return sectorSortRange(item.sector);
     }
 
-    function itemUnitSortValue(item) {
+    function itemUnitSortValue(item: VehicleItem): number {
         const key = item.unitKey || "";
         if (!key) return 9999;
         const parsed = Number.parseInt(key.split(":")[1] || "", 10);
         return Number.isFinite(parsed) ? parsed : 9999;
     }
 
-    function itemVehiclePosition(item) {
-        const parsed = Number.parseInt(item?.vehicle?.position, 10);
+    function itemVehiclePosition(item: VehicleItem): number {
+        const parsed = Number.parseInt(String(item?.vehicle?.position || ""), 10);
         return Number.isFinite(parsed) && parsed > 0 ? parsed : 9999;
     }
 
-    function unitDirectionFromEndpoints(items) {
-        const numbered = asArray(items)
-            .map((item) => ({
+    function unitDirectionFromEndpoints(items: VehicleItem[]): number {
+        const numbered = asArray<VehicleItem>(items)
+            .map((item: VehicleItem) => ({
                 number: vehicleSortNumber(item),
                 sector: itemSectorRange(item)
             }))
@@ -927,9 +1163,9 @@
         return first.sector.mid > last.sector.mid ? -1 : 1;
     }
 
-    function unitDirectionFromSectorTrend(items) {
+    function unitDirectionFromSectorTrend(items: VehicleItem[]): number {
         const ranked = items
-            .map((item) => ({
+            .map((item: VehicleItem) => ({
                 number: vehicleSortNumber(item),
                 sector: itemSectorRange(item).mid
             }))
@@ -953,32 +1189,32 @@
         return covariance < 0 ? -1 : 1;
     }
 
-    function directionForUnit(items) {
+    function directionForUnit(items: VehicleItem[]): number {
         return unitDirectionFromEndpoints(items)
             || unitDirectionFromSectorTrend(items)
             || 1;
     }
 
-    function shouldPreferNumberOrderForUnit(items) {
-        if (!asArray(items).some((item) => item.unitKey)) return false;
+    function shouldPreferNumberOrderForUnit(items: VehicleItem[]): boolean {
+        if (!asArray<VehicleItem>(items).some((item: VehicleItem) => item.unitKey)) return false;
 
-        const numbers = asArray(items)
+        const numbers = asArray<VehicleItem>(items)
             .map(vehicleSortNumber)
-            .filter((number) => number !== 9999);
-        const uniqueNumbers = Array.from(new Set(numbers)).sort((left, right) => left - right);
+            .filter((number: number) => number !== 9999);
+        const uniqueNumbers = Array.from(new Set(numbers)).sort((left: number, right: number) => left - right);
         if (uniqueNumbers.length < 2) return false;
 
         const span = uniqueNumbers[uniqueNumbers.length - 1] - uniqueNumbers[0] + 1;
         return span <= uniqueNumbers.length + 2;
     }
 
-    function directedNumberCompare(leftNumber, rightNumber, direction) {
+    function directedNumberCompare(leftNumber: number, rightNumber: number, direction: number): number {
         if (leftNumber === 9999 || rightNumber === 9999) return 0;
         return direction < 0 ? rightNumber - leftNumber : leftNumber - rightNumber;
     }
 
-    function compareItemsWithinUnit(direction, preferNumberOrder = false) {
-        return (left, right) => {
+    function compareItemsWithinUnit(direction: number, preferNumberOrder = false): (left: VehicleItem, right: VehicleItem) => number {
+        return (left: VehicleItem, right: VehicleItem) => {
             const leftRange = itemSectorRange(left);
             const rightRange = itemSectorRange(right);
             const leftNumber = vehicleSortNumber(left);
@@ -999,7 +1235,7 @@
         };
     }
 
-    function compareUnitGroups(left, right) {
+    function compareUnitGroups(left: VehicleItemGroup, right: VehicleItemGroup): number {
         const leftRangeKnown = left.minSector !== 999 && left.maxSector !== 999;
         const rightRangeKnown = right.minSector !== 999 && right.maxSector !== 999;
         if (leftRangeKnown && rightRangeKnown) {
@@ -1014,15 +1250,16 @@
             || left.firstIndex - right.firstIndex;
     }
 
-    function orderVehicleItemsForStop(items) {
-        const groups = [];
-        const byUnit = new Map();
+    function orderVehicleItemsForStop(items: VehicleItem[]): VehicleItem[] {
+        const groups: VehicleItemGroup[] = [];
+        const byUnit = new Map<string, VehicleItemGroup>();
 
-        items.forEach((item, index) => {
+        items.forEach((item: VehicleItem, index: number) => {
             const key = item.unitKey || `single:${index}`;
-            if (!byUnit.has(key)) {
-                const range = itemSectorRange(item);
-                const group = {
+            const range = itemSectorRange(item);
+            let group = byUnit.get(key);
+            if (!group) {
+                group = {
                     key,
                     firstIndex: index,
                     minSector: range.min,
@@ -1034,9 +1271,6 @@
                 byUnit.set(key, group);
                 groups.push(group);
             }
-
-            const group = byUnit.get(key);
-            const range = itemSectorRange(item);
             group.minSector = Math.min(group.minSector, range.min);
             group.maxSector = Math.max(group.maxSector, range.max);
             group.minPosition = Math.min(group.minPosition, itemVehiclePosition(item));
@@ -1049,7 +1283,7 @@
             .map((item, index) => ({ ...item, displayPosition: index + 1 }));
     }
 
-    function buildVehicleItems(stop, vehicles, stops = []) {
+    function buildVehicleItems(stop: SwissStop | null, vehicles: unknown, stops: SwissStop[] = []): VehicleItem[] {
         const orderedVehicles = vehiclesForFormation(vehicles);
         const coaches = parseFormationShortString(stop?.formationShortString);
 
@@ -1060,11 +1294,11 @@
         return fallbackCoachItems(coaches, stop);
     }
 
-    function vehiclesInDisplayOrder(stop, vehicles, stops = []) {
-        const seen = new Set();
+    function vehiclesInDisplayOrder(stop: SwissStop | null, vehicles: unknown, stops: SwissStop[] = []): SwissVehicle[] {
+        const seen = new Set<string>();
         return buildVehicleItems(stop, vehicles, stops)
-            .map((item) => item.vehicle)
-            .filter((vehicle) => {
+            .map((item: VehicleItem) => item.vehicle)
+            .filter((vehicle): vehicle is SwissVehicle => {
                 if (!vehicle) return false;
                 const key = vehicleUniqueKey(vehicle);
                 if (seen.has(key)) return false;
@@ -1073,22 +1307,22 @@
             });
     }
 
-    function vehicleItemsInDisplayOrder(stop, vehicles, stops = []) {
-        const seen = new Set();
+    function vehicleItemsInDisplayOrder(stop: SwissStop | null, vehicles: unknown, stops: SwissStop[] = []): VehicleItem[] {
+        const seen = new Set<string>();
         return buildVehicleItems(stop, vehicles, stops)
-            .filter((item) => {
+            .filter((item: VehicleItem) => {
                 if (!item.vehicle) return false;
                 const key = vehicleUniqueKey(item.vehicle);
                 if (seen.has(key)) return false;
                 seen.add(key);
                 return true;
             })
-            .map((item, index) => ({ ...item, displayPosition: index + 1 }));
+            .map((item: VehicleItem, index: number) => ({ ...item, displayPosition: index + 1 }));
     }
 
-    function buildSectorGroups(items) {
-        const groups = [];
-        items.forEach((item, index) => {
+    function buildSectorGroups(items: VehicleItem[]): StripGroup[] {
+        const groups: StripGroup[] = [];
+        items.forEach((item: VehicleItem, index: number) => {
             const key = canonicalSector(item.sector || "TRAIN") || "TRAIN";
             const last = groups[groups.length - 1];
             if (last && last.key === key) {
@@ -1100,30 +1334,30 @@
         return groups;
     }
 
-    function vehicleSeries(vehicle, coach = null) {
+    function vehicleSeries(vehicle: SwissVehicle | null, coach: CoachToken | null = null): string {
         const raw = String(vehicle?.typeCodeName || vehicle?.typeCode || coach?.classCode || "");
         const match = raw.match(/\((\d{3})\)/);
         return match ? match[1] : "";
     }
 
-    function vehicleTypeCodeName(vehicle, coach = null) {
+    function vehicleTypeCodeName(vehicle: SwissVehicle | null, coach: CoachToken | null = null): string {
         return String(vehicle?.typeCodeName || vehicle?.typeCode || coach?.classCode || "");
     }
 
-    function typeCodeBase(value) {
+    function typeCodeBase(value: unknown): string {
         return String(value || "")
             .replace(/\([^)]*\)/g, "")
             .replace(/-TI\b/i, "")
             .replace(/\d+$/g, "");
     }
 
-    function describeVehicleType(vehicle, coach = null) {
+    function describeVehicleType(vehicle: SwissVehicle | null, coach: CoachToken | null = null): string {
         const raw = vehicleTypeCodeName(vehicle, coach);
         if (!raw) return "";
 
         const base = typeCodeBase(raw);
         const baseUpper = base.toUpperCase();
-        const parts = [];
+        const parts: string[] = [];
         if (baseUpper.startsWith("WR")) parts.push(tr("swiss_type_restaurant_area", "Restaurant"));
         else if (baseUpper.startsWith("AB")) parts.push(tr("swiss_mixed_class", "Mixed 1st and 2nd class"));
         else if (baseUpper.startsWith("A")) parts.push(tr("swiss_type_first_area", "1st class"));
@@ -1133,10 +1367,10 @@
         if (series === "501") parts.push(tr("swiss_type_giruno", "RABe 501 Giruno"));
         else if (series === "610") parts.push(tr("swiss_type_etr610_short", "ETR 610"));
 
-        return mergeUniqueBy(parts.filter(Boolean), (part) => part).join(" · ");
+        return mergeUniqueBy<string>(parts.filter(Boolean), (part: string) => part).join(" · ");
     }
 
-    function unitKeyForVehicle(vehicle) {
+    function unitKeyForVehicle(vehicle: SwissVehicle | null): string {
         const series = vehicleSeries(vehicle);
         const number = Number(vehicle?.number || 0);
         if (series === "610" && number) return `${series}:${number >= 10 ? Math.ceil(number / 10) : 1}`;
@@ -1144,7 +1378,7 @@
         return "";
     }
 
-    function unitKeyForCoach(coach) {
+    function unitKeyForCoach(coach: CoachToken | null): string {
         const series = vehicleSeries(null, coach);
         const number = Number(coach?.number || 0);
         if (series === "610" && number) return `${series}:${number >= 10 ? Math.ceil(number / 10) : 1}`;
@@ -1152,7 +1386,7 @@
         return "";
     }
 
-    function vehicleUnitSortValue(vehicle) {
+    function vehicleUnitSortValue(vehicle: SwissVehicle): number {
         const key = unitKeyForVehicle(vehicle);
         if (!key) return 0;
         const [, group] = key.split(":");
@@ -1160,7 +1394,7 @@
         return Number.isFinite(parsed) ? parsed : 0;
     }
 
-    function unitLabel(key) {
+    function unitLabel(key: unknown): string {
         const [series, group] = String(key || "").split(":");
         if (!series || !group) return "";
         const trainType = series === "501"
@@ -1171,9 +1405,9 @@
         return `${tr("swiss_unit", "Unit")} ${group} · ${trainType}`;
     }
 
-    function buildUnitGroups(items) {
-        const groups = [];
-        items.forEach((item, index) => {
+    function buildUnitGroups(items: VehicleItem[]): StripGroup[] {
+        const groups: StripGroup[] = [];
+        items.forEach((item: VehicleItem, index: number) => {
             const key = item.unitKey || "";
             if (!key) return;
             const last = groups[groups.length - 1];
@@ -1186,7 +1420,7 @@
         return groups.length > 1 ? groups : [];
     }
 
-    function renderCoachCard(item, index) {
+    function renderCoachCard(item: VehicleItem, index: number): string {
         const { coach, vehicle, selectedSector, status } = item;
         const number = vehicleDisplayNumber(vehicle, coach);
         const classLabel = vehicleClassLabel(vehicle, coach);
@@ -1210,7 +1444,7 @@
         `;
     }
 
-    function addLegendEntry(map, id, label, icon = "", badge = "") {
+    function addLegendEntry(map: Map<string, LegendEntry>, id: string, label: string, icon = "", badge = ""): void {
         if (!map.has(id)) map.set(id, { id, label, icon, badge });
     }
 
@@ -1233,9 +1467,9 @@
         "loco"
     ];
 
-    function renderCoachLegend(items) {
-        const legend = new Map();
-        items.forEach((item, index) => {
+    function renderCoachLegend(items: VehicleItem[]): string {
+        const legend = new Map<string, LegendEntry>();
+        items.forEach((item: VehicleItem, index: number) => {
             const classLabel = vehicleClassLabel(item.vehicle, item.coach);
             if (classLabel === "1") addLegendEntry(legend, "class_1", tr("swiss_first_class", "1st class"), "", "1");
             else if (classLabel === "2") addLegendEntry(legend, "class_2", tr("swiss_second_class", "2nd class"), "", "2");
@@ -1243,7 +1477,7 @@
             if (isLikelyLocomotive(item.vehicle) || coachTokenLooksLikeLoco(item.coach)) {
                 addLegendEntry(legend, "loco", tr("swiss_loco", "Loco"), "train");
             }
-            featureEntries(item.coach, item.vehicle, item.selectedSector, index, item.status).forEach((entry) => {
+            featureEntries(item.coach, item.vehicle, item.selectedSector, index, item.status).forEach((entry: FeatureEntry) => {
                 addLegendEntry(legend, entry.id, entry.label, entry.icon);
             });
         });
@@ -1272,7 +1506,7 @@
         `;
     }
 
-    function renderCoachStrip(stop, vehicles, stops = []) {
+    function renderCoachStrip(stop: SwissStop | null, vehicles: unknown, stops: SwissStop[] = []): string {
         const items = buildVehicleItems(stop, vehicles, stops);
         if (!items.length) {
             return `<div class="swiss-empty">${esc(tr("swiss_no_coaches", "No coach layout available"))}</div>`;
@@ -1299,8 +1533,13 @@
         `;
     }
 
-    function renderVehicleChips(vehicle, selectedSector, index, status = null) {
-        const chips = [];
+    function renderVehicleChips(
+        vehicle: SwissVehicle,
+        selectedSector: StopSector | null,
+        index: number,
+        status: VehicleStatus | null = null
+    ): string {
+        const chips: string[] = [];
         chips.push(`${esc(tr("swiss_first_class", "1st"))}: ${vehicle.firstClassSeats || 0}`);
         chips.push(`${esc(tr("swiss_second_class", "2nd"))}: ${vehicle.secondClassSeats || 0}`);
         if (vehicle.bikeHooks) chips.push(`${esc(tr("swiss_bike", "Bike"))}: ${vehicle.bikeHooks}`);
@@ -1328,8 +1567,8 @@
         return chips.map((chip) => `<span class="swiss-vehicle-chip">${chip}</span>`).join("");
     }
 
-    function renderVehicleDiagnostics(vehicle) {
-        const parts = [];
+    function renderVehicleDiagnostics(vehicle: SwissVehicle): string {
+        const parts: string[] = [];
         if (vehicle.evn) parts.push(`${tr("swiss_evn", "EVN")}: ${vehicle.evn}`);
         if (vehicle.parentEvn) parts.push(`${tr("swiss_parent_evn", "Parent EVN")}: ${vehicle.parentEvn}`);
         if (vehicle.typeCode) parts.push(`${tr("swiss_type_code", "Type code")}: ${vehicle.typeCode}`);
@@ -1341,24 +1580,26 @@
             : "";
     }
 
-    function renderVehicleSegments(vehicle) {
-        const segments = asArray(vehicle.segments).length
-            ? vehicle.segments
+    function renderVehicleSegments(vehicle: SwissVehicle): string {
+        const vehicleSegments = asArray<VehicleSegment>(vehicle.segments);
+        const segments = vehicleSegments.length
+            ? vehicleSegments
             : (vehicle.fromStop || vehicle.toStop ? [{ fromStop: vehicle.fromStop, toStop: vehicle.toStop }] : []);
         const labels = segments
-            .map((segment) => `${esc(segment.fromStop || "--")} -> ${esc(segment.toStop || "--")}`)
+            .map((segment: VehicleSegment) => `${esc(segment.fromStop || "--")} -> ${esc(segment.toStop || "--")}`)
             .filter(Boolean);
         return labels.length ? labels.join("; ") : "";
     }
 
-    function renderVehicleDetails(data, selectedStop) {
+    function renderVehicleDetails(data: SwissFormationData, selectedStop: SwissStop | null): string {
         const items = vehicleItemsInDisplayOrder(selectedStop, data?.vehicles, data?.stops);
         if (!items.length) {
             return `<div class="swiss-empty">${esc(tr("swiss_unavailable", "Swiss data unavailable"))}</div>`;
         }
 
-        return items.map((item, index) => {
+        return items.map((item: VehicleItem, index: number) => {
             const vehicle = item.vehicle;
+            if (!vehicle) return "";
             const selectedSector = item.selectedSector || sectorForVehicle(vehicle, selectedStop);
             const status = item.status || activeVehicleStatus(vehicle, selectedStop, data?.stops);
             const fromTo = renderVehicleSegments(vehicle);
@@ -1382,12 +1623,12 @@
         }).join("");
     }
 
-    function runStatusLabel(runs) {
+    function runStatusLabel(runs: unknown): string {
         if (runs === "J") return tr("swiss_runs_J", "Runs");
         if (runs === "N") return tr("swiss_runs_N", "Does not run");
         if (runs === "T") return tr("swiss_runs_T", "Partially operated");
         if (runs === "L") return tr("swiss_runs_L", "Deleted");
-        return runs || "--";
+        return String(runs || "--");
     }
 
     function hideFormationCard() {
@@ -1405,7 +1646,7 @@
         card.style.display = "block";
     }
 
-    function renderFormationCard(data) {
+    function renderFormationCard(data: SwissFormationData): void {
         const card = document.getElementById("swissFormationCard");
         if (!card) return;
 
@@ -1503,7 +1744,7 @@
             button?.setAttribute("aria-expanded", expanded ? "true" : "false");
             icon?.classList.toggle("swiss-rotated", expanded);
         });
-        card.querySelectorAll(".swiss-stop-tab").forEach((button) => {
+        card.querySelectorAll<HTMLElement>(".swiss-stop-tab").forEach((button) => {
             button.addEventListener("click", () => {
                 card.dataset.swissSelectedStop = button.dataset.swissStopIndex;
                 renderFormationCard(data);

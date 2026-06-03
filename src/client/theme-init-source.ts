@@ -1,7 +1,8 @@
+const themeInitSource = String.raw`
 (function () {
     function readTheme() {
         try {
-            var savedTheme = localStorage.getItem('theme');
+            const savedTheme = localStorage.getItem('theme');
             if (savedTheme === 'dark' || savedTheme === 'light') {
                 return savedTheme;
             }
@@ -13,23 +14,23 @@
 
     function readLang() {
         try {
-            var savedLang = localStorage.getItem('language');
-            if (savedLang) {
+            const savedLang = localStorage.getItem('language');
+            if (savedLang === 'zh' || savedLang === 'en' || savedLang === 'it') {
                 return savedLang;
             }
         } catch (error) {
             // Ignore storage errors and fall back to the browser language.
         }
-        var bl = navigator.language.toLowerCase();
-        return bl.startsWith('zh') ? 'zh' : bl.startsWith('it') ? 'it' : 'en';
+        const browserLanguage = navigator.language.toLowerCase();
+        return browserLanguage.startsWith('zh') ? 'zh' : browserLanguage.startsWith('it') ? 'it' : 'en';
     }
 
     function applyPreferences(targetRoot) {
         if (!targetRoot) return;
 
-        var theme = readTheme();
-        var lang = readLang();
-        var langMap = { zh: 'zh-CN', en: 'en', it: 'it' };
+        const theme = readTheme();
+        const lang = readLang();
+        const langMap = { zh: 'zh-CN', en: 'en', it: 'it' };
 
         targetRoot.setAttribute('data-theme', theme);
         targetRoot.setAttribute('data-lang', lang);
@@ -47,10 +48,14 @@
     if (!window.__btThemeSwapGuard) {
         window.__btThemeSwapGuard = true;
         document.addEventListener('astro:before-swap', function (event) {
-            applyPreferences(event.newDocument && event.newDocument.documentElement);
+            const newDocument = Reflect.get(event, 'newDocument');
+            applyPreferences(newDocument && newDocument.documentElement);
         });
         document.addEventListener('astro:after-swap', function () {
             applyPreferences(document.documentElement);
         });
     }
 })();
+`;
+
+export default themeInitSource;

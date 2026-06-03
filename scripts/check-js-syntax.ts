@@ -2,11 +2,11 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
-const roots = ["public/scripts", "functions", "src/lib"];
+const roots = ["public/scripts"];
 
-function collectJsFiles(root) {
+function collectJsFiles(root: string): string[] {
   if (!existsSync(root)) return [];
-  const files = [];
+  const files: string[] = [];
   const entries = readdirSync(root);
   for (const entry of entries) {
     const fullPath = path.join(root, entry);
@@ -20,15 +20,26 @@ function collectJsFiles(root) {
   return files;
 }
 
+function getCommandOutput(error: unknown): string {
+  if (error && typeof error === "object") {
+    const processError = error as {
+      stderr?: Buffer | string;
+      stdout?: Buffer | string;
+      message?: string;
+    };
+    return processError.stderr?.toString() || processError.stdout?.toString() || processError.message || String(error);
+  }
+  return String(error);
+}
+
 const files = roots.flatMap(collectJsFiles).sort();
-const failures = [];
+const failures: string[] = [];
 
 for (const file of files) {
   try {
     execFileSync(process.execPath, ["--check", file], { stdio: "pipe" });
   } catch (error) {
-    const stderr = error.stderr?.toString() || error.stdout?.toString() || error.message;
-    failures.push(`${file}\n${stderr.trim()}`);
+    failures.push(`${file}\n${getCommandOutput(error).trim()}`);
   }
 }
 
@@ -38,4 +49,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(`JavaScript syntax check passed for ${files.length} file(s).`);
+console.log(`Raw JavaScript syntax check passed for ${files.length} file(s).`);

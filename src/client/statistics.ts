@@ -1,10 +1,123 @@
+export {};
+
 (function () {
+    type StatisticsView = "trains" | "stations" | "relations" | "ranking";
+    type StatusKind = "info" | "warning";
+    type JsonRecord = Record<string, unknown>;
+    type QueryParamValue = string | number | boolean | null | undefined;
+    type QueryParams = Record<string, QueryParamValue>;
+    type TableColumn = "rank" | "train" | "route" | "category" | "operator" | "delay" | "status" | "station" | "code" | "relation" | "monitored" | "avgDelay" | "cancelled";
+    type TableColumnDefinition = readonly [TableColumn, string];
+    type VoidFunctionWithArgs<T extends unknown[]> = (...args: T) => void;
+
+    interface StatisticsDay extends JsonRecord {
+        date: string;
+        label?: string;
+        finalized?: boolean;
+    }
+
+    interface StatisticsTableItem extends JsonRecord {
+        arrivalDelay?: number;
+        averageDelay?: number;
+        avgDelay?: number;
+        cancelled?: boolean | number;
+        category?: string;
+        client?: string | number;
+        code?: string;
+        count?: number;
+        delay?: number;
+        delayAverage?: number;
+        departureDelay?: number;
+        destination?: string;
+        from?: string;
+        id?: string;
+        monitored?: number;
+        name?: string;
+        notDeparted?: boolean;
+        number?: string | number;
+        operator?: string | number;
+        origin?: string;
+        relation?: string;
+        route?: string;
+        state?: string;
+        station?: string;
+        stationCode?: string;
+        stationName?: string;
+        status?: string;
+        to?: string;
+        total?: number;
+        totalDelay?: number;
+        train?: string | number;
+        trainCategory?: string;
+        trainNumber?: string | number;
+    }
+
+    interface StatisticsState {
+        activeView: StatisticsView;
+        date: string;
+        days: StatisticsDay[];
+        loading: boolean;
+        page: number;
+        pageSize: number;
+        summary: JsonRecord | null;
+        tableItems: StatisticsTableItem[];
+        tableLoading: boolean;
+        timeseries: JsonRecord | null;
+        total: number;
+    }
+
+    interface ChartDatum extends JsonRecord {
+        category?: string;
+        code?: string;
+        color?: string;
+        count?: number;
+        label?: string;
+        name?: string;
+        running?: number;
+        time?: string;
+        timestamp?: string;
+        total?: number;
+        treniCircolanti?: number;
+        value?: number;
+        x?: string;
+        y?: number;
+    }
+
+    interface DonutSegment {
+        color?: string;
+        label: string;
+        value: number;
+    }
+
+    interface SummaryCounts {
+        arrivalDelayed: number;
+        arrivalEarly: number;
+        arrivalOnTime: number;
+        avgDelay: number;
+        cancelled: number;
+        circulated: number;
+        counts: JsonRecord;
+        coverage: JsonRecord;
+        delayed: number;
+        delayTotals: JsonRecord;
+        departureDelayed: number;
+        departureOnTime: number;
+        indexedStations: number | null;
+        monitored: number;
+        notDeparted: number;
+        punctuality: JsonRecord;
+        regular: number;
+        rescheduled: number;
+        running: number;
+        worstTrain: StatisticsTableItem | null;
+    }
+
     const API_BASE = "/api/statistics";
     const PAGE_SIZE = 25;
     const CATEGORY_ORDER = ["REG", "MET", "FR", "EC FR", "FA", "FB", "IC", "ICN", "EC", "EN", "EXP", "NCL", "IR", "TS"];
     const CATEGORY_OPTIONS = [...CATEGORY_ORDER];
 
-    const state = {
+    const state: StatisticsState = {
         date: "",
         days: [],
         summary: null,
@@ -19,7 +132,7 @@
     };
 
     const palette = ["#65bfc0", "#5b9ee4", "#ec6685", "#f4b35d", "#83c77f", "#a78bfa", "#f78fb3", "#7dd3fc"];
-    const CATEGORY_COLORS = {
+    const CATEGORY_COLORS: Record<string, string> = {
         REG: "#70a84a",
         RE: "#70a84a",
         RV: "#70a84a",
@@ -38,68 +151,81 @@
         IR: "#69737f"
     };
 
-    function tr(key, fallback) {
-        const dict = typeof translations !== "undefined" ? translations : window.translations;
+    function tr(key: string, fallback?: string): string {
+        const dict = window.translations;
         return (dict && dict[window.currentLang] && dict[window.currentLang][key])
             || (dict && dict.en && dict.en[key])
             || fallback
             || key;
     }
 
-    function esc(value) {
+    function esc(value: unknown): string {
         return window.escapeHtml ? window.escapeHtml(value) : String(value ?? "");
     }
 
-    function $(id) {
-        return document.getElementById(id);
+    function $<T extends HTMLElement = HTMLElement>(id: string): T | null {
+        return document.getElementById(id) as T | null;
     }
 
-    function asArray(value) {
-        return Array.isArray(value) ? value : [];
+    function asRecord(value: unknown): JsonRecord {
+        return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {};
     }
 
-    function asNumber(value, fallback = 0) {
+    function asArray(value: unknown): JsonRecord[] {
+        return Array.isArray(value) ? value.filter((item): item is JsonRecord => item !== null && typeof item === "object") : [];
+    }
+
+    function asNumber(value: unknown, fallback = 0): number {
         const parsed = Number(value);
         return Number.isFinite(parsed) ? parsed : fallback;
     }
 
-    function pct(value, digits = 1) {
+    function asString(value: unknown, fallback = ""): string {
+        if (value === undefined || value === null) return fallback;
+        return String(value);
+    }
+
+    function errorReason(error: unknown): string {
+        return error instanceof Error ? error.message : asString(error);
+    }
+
+    function pct(value: unknown, digits = 1): string {
         const num = asNumber(value, 0);
         return `${num.toFixed(digits)}%`;
     }
 
-    function formatNumber(value) {
+    function formatNumber(value: unknown): string {
         return asNumber(value, 0).toLocaleString(window.currentLang === "zh" ? "zh-CN" : window.currentLang === "it" ? "it-IT" : "en-GB");
     }
 
-    function formatMinutes(value) {
+    function formatMinutes(value: unknown): string {
         const minutes = asNumber(value, 0);
         return `${minutes.toLocaleString(window.currentLang === "zh" ? "zh-CN" : "en-GB")} ${tr("minutes", "min")}`;
     }
 
-    function categoryCode(value) {
+    function categoryCode(value: unknown): string {
         const raw = String(value || "").trim().toUpperCase();
         if (!raw) return "";
         if (raw === "ECFR" || raw.replace(/[-_]+/g, " ") === "EC FR") return "EC FR";
         return raw;
     }
 
-    function chartCategoryCode(value) {
+    function chartCategoryCode(value: unknown): string {
         const cat = categoryCode(value);
         if (cat === "RV" || cat === "RE") return "REG";
         return cat;
     }
 
-    function categoryColor(value) {
+    function categoryColor(value: unknown): string {
         return CATEGORY_COLORS[categoryCode(value)] || palette[0];
     }
 
-    function categorySortIndex(value) {
+    function categorySortIndex(value: unknown): number {
         const index = CATEGORY_ORDER.indexOf(categoryCode(value));
         return index === -1 ? Number.MAX_SAFE_INTEGER : index;
     }
 
-    function categoryBadgeHtml(value) {
+    function categoryBadgeHtml(value: unknown): string {
         const cat = categoryCode(value);
         if (!cat || cat === "--") return "--";
         const badgeKey = cat === "EC FR" ? "FR" : cat;
@@ -107,7 +233,7 @@
         return `<span class="train-badge statistics-category-badge ${esc(badgeClass)}">${esc(cat)}</span>`;
     }
 
-    function categoryBadgeElement(value) {
+    function categoryBadgeElement(value: unknown): Text | HTMLSpanElement {
         const cat = categoryCode(value);
         if (!cat || cat === "--") return document.createTextNode("--");
         const badgeKey = cat === "EC FR" ? "FR" : cat;
@@ -119,7 +245,7 @@
         return badge;
     }
 
-    function operatorName(value) {
+    function operatorName(value: unknown): string {
         const raw = String(value ?? "").trim();
         if (!raw) return "--";
         const map = window.CLIENT_MAP || {};
@@ -127,21 +253,21 @@
         return mapped || raw;
     }
 
-    function buildTrainHref(item) {
+    function buildTrainHref(item: StatisticsTableItem): string {
         const number = item?.trainNumber || item?.train_number || item?.number || item?.train || "";
         const cleanNumber = String(number).replace(/[^\d]/g, "") || String(number).trim();
         return cleanNumber ? `/?train=${encodeURIComponent(cleanNumber)}` : "";
     }
 
-    function buildStationHref(item) {
-        const code = item?.code || item?.stationCode || item?.station_code || item?.id || "";
-        const name = item?.name || item?.station || item?.stationName || item?.station_name || "";
+    function buildStationHref(item: StatisticsTableItem): string {
+        const code = asString(item?.code || item?.stationCode || item?.station_code || item?.id);
+        const name = asString(item?.name || item?.station || item?.stationName || item?.station_name);
         if (!code || !name) return "";
         const params = new URLSearchParams({ id: code, name, type: "partenze" });
         return `/station?${params.toString()}`;
     }
 
-    function todayRome() {
+    function todayRome(): string {
         return new Intl.DateTimeFormat("sv-SE", {
             timeZone: "Europe/Rome",
             year: "numeric",
@@ -150,10 +276,13 @@
         }).format(new Date());
     }
 
-    function formatDateTime(value) {
+    function formatDateTime(value: unknown): string {
         if (!value) return "--";
-        const date = new Date(value);
-        if (!Number.isFinite(date.getTime())) return String(value);
+        const raw = value instanceof Date || typeof value === "string" || typeof value === "number"
+            ? value
+            : asString(value);
+        const date = new Date(raw);
+        if (!Number.isFinite(date.getTime())) return asString(value);
         return new Intl.DateTimeFormat(window.currentLang === "zh" ? "zh-CN" : window.currentLang === "it" ? "it-IT" : "en-GB", {
             timeZone: "Europe/Rome",
             dateStyle: "medium",
@@ -161,23 +290,23 @@
         }).format(date);
     }
 
-    function getPath(source, paths, fallback = null) {
+    function getPath(source: JsonRecord | null | undefined, paths: string[], fallback: unknown = null): unknown {
         for (const path of paths) {
-            const value = String(path).split(".").reduce((current, key) => current?.[key], source);
+            const value = String(path).split(".").reduce<unknown>((current, key) => asRecord(current)[key], source);
             if (value !== undefined && value !== null && value !== "") return value;
         }
         return fallback;
     }
 
-    function paramsString(params) {
+    function paramsString(params: QueryParams): string {
         const search = new URLSearchParams();
         Object.entries(params || {}).forEach(([key, value]) => {
-            if (value !== undefined && value !== null && value !== "") search.set(key, value);
+            if (value !== undefined && value !== null && value !== "") search.set(key, String(value));
         });
         return search.toString();
     }
 
-    async function fetchJson(path, params = {}) {
+    async function fetchJson(path: string, params: QueryParams = {}): Promise<unknown> {
         const query = paramsString(params);
         const response = await fetch(`${API_BASE}${path}${query ? `?${query}` : ""}`, {
             headers: { "accept": "application/json" }
@@ -195,7 +324,7 @@
         return payload;
     }
 
-    function setStatus(message, kind = "info") {
+    function setStatus(message: string, kind: StatusKind = "info"): void {
         const el = $("statisticsStatus");
         if (!el) return;
         if (!message) {
@@ -209,45 +338,49 @@
         el.textContent = message;
     }
 
-    function setTableStatus(message) {
+    function setTableStatus(message: string): void {
         const el = $("statisticsTableStatus");
         if (el) el.textContent = message || "";
     }
 
-    function normalizeDays(payload) {
-        const raw = asArray(payload?.days || payload);
-        return raw.map((item) => typeof item === "string" ? { date: item } : item)
-            .filter((item) => item?.date)
+    function normalizeDays(payload: unknown): StatisticsDay[] {
+        const record = asRecord(payload);
+        const raw = Array.isArray(record.days) ? record.days : Array.isArray(payload) ? payload : [];
+        return raw.map((item) => typeof item === "string" ? { date: item } : asRecord(item))
+            .filter((item): item is StatisticsDay => typeof item.date === "string" && item.date.length > 0)
             .slice(0, 30);
     }
 
-    function normalizeSummary(payload) {
-        return payload?.summary || payload || {};
+    function normalizeSummary(payload: unknown): JsonRecord {
+        const record = asRecord(payload);
+        return asRecord(record.summary || record);
     }
 
-    function normalizeTimeseries(payload) {
-        return payload?.timeseries || payload || {};
+    function normalizeTimeseries(payload: unknown): JsonRecord {
+        const record = asRecord(payload);
+        return asRecord(record.timeseries || record);
     }
 
-    function normalizeItems(payload) {
-        const items = asArray(payload?.items || payload?.trains || payload?.stations || payload?.relations || payload?.ranking || payload);
-        const total = asNumber(payload?.total || payload?.count || items.length, items.length);
+    function normalizeItems(payload: unknown): { items: StatisticsTableItem[]; total: number } {
+        const record = asRecord(payload);
+        const items = asArray(record.items || record.trains || record.stations || record.relations || record.ranking || payload) as StatisticsTableItem[];
+        const total = asNumber(record.total || record.count || items.length, items.length);
         return { items, total };
     }
 
-    function fillDateSelect() {
-        const select = $("statisticsDate");
+    function fillDateSelect(): void {
+        const select = $<HTMLSelectElement>("statisticsDate");
         if (!select) return;
         const days = state.days.length ? state.days : [{ date: state.date || todayRome() }];
         select.innerHTML = days.map((day) => `
             <option value="${esc(day.date)}"${day.date === state.date ? " selected" : ""}>
-                ${esc(day.label || day.date)}${day.finalized ? "" : ` · ${tr("statistics_live", "live")}`}
+                ${esc(day.label || day.date)}${day.finalized ? "" : ` - ${tr("statistics_live", "live")}`}
             </option>
         `).join("");
     }
 
-    function fillCategorySelect() {
-        const select = $("statisticsCategory");
+    function fillCategorySelect(): void {
+        const select = $<HTMLSelectElement>("statisticsCategory");
         if (!select) return;
         const current = select.value;
         select.innerHTML = `<option value="">${esc(tr("statistics_all_categories", "All categories"))}</option>`
@@ -255,7 +388,7 @@
         select.value = current;
     }
 
-    function metricCard(id, icon, label, value, note = "") {
+    function metricCard(id: string, icon: string, label: string, value: string, note = ""): string {
         return `
             <div class="statistics-metric" data-stat-metric="${esc(id)}">
                 <span class="material-symbols-outlined">${esc(icon)}</span>
@@ -268,28 +401,30 @@
         `;
     }
 
-    function summaryCounts() {
+    function summaryCounts(): SummaryCounts {
         const summary = state.summary || {};
-        const counts = summary.counts || {};
-        const punctuality = summary.punctuality || {};
-        const delayTotals = summary.delayTotals || summary.delays || {};
-        const coverage = summary.coverage || summary.completeness || {};
-        const monitored = getPath(summary, ["counts.monitored", "monitored", "trains.monitored"], 0);
-        const circulated = getPath(summary, ["counts.circulated", "counts.treniGiorno", "treniGiorno", "circulated"], 0);
-        const running = getPath(summary, ["counts.running", "counts.treniCircolanti", "treniCircolanti", "running"], 0);
-        const regular = getPath(summary, ["counts.regular", "regular"], 0);
-        const delayed = getPath(summary, ["counts.delayed", "delayed"], 0);
-        const cancelled = getPath(summary, ["counts.cancelled", "cancelled"], 0);
-        const rescheduled = getPath(summary, ["counts.rescheduled", "rescheduled", "counts.reprogrammed"], 0);
-        const notDeparted = getPath(summary, ["counts.notDeparted", "notDeparted", "counts.not_departed"], 0);
-        const avgDelay = getPath(summary, ["delayTotals.average", "delayTotals.avg", "avgDelay", "averageDelay"], 0);
-        const indexedStations = getPath(summary, ["coverage.stations", "stationsIndexed", "stationCount"], null);
-        const departureDelayed = getPath(summary, ["punctuality.departure.delayed", "departure.delayed"], 0);
-        const departureOnTime = getPath(summary, ["punctuality.departure.onTime", "departure.onTime"], 0);
-        const arrivalDelayed = getPath(summary, ["punctuality.arrival.delayed", "arrival.delayed"], 0);
-        const arrivalOnTime = getPath(summary, ["punctuality.arrival.onTime", "arrival.onTime"], 0);
-        const arrivalEarly = getPath(summary, ["punctuality.arrival.early", "arrival.early"], 0);
-        const worstTrain = summary.worstTrain || summary.worst || null;
+        const counts = asRecord(summary.counts);
+        const punctuality = asRecord(summary.punctuality);
+        const delayTotals = asRecord(summary.delayTotals || summary.delays);
+        const coverage = asRecord(summary.coverage || summary.completeness);
+        const monitored = asNumber(getPath(summary, ["counts.monitored", "monitored", "trains.monitored"], 0));
+        const circulated = asNumber(getPath(summary, ["counts.circulated", "counts.treniGiorno", "treniGiorno", "circulated"], 0));
+        const running = asNumber(getPath(summary, ["counts.running", "counts.treniCircolanti", "treniCircolanti", "running"], 0));
+        const regular = asNumber(getPath(summary, ["counts.regular", "regular"], 0));
+        const delayed = asNumber(getPath(summary, ["counts.delayed", "delayed"], 0));
+        const cancelled = asNumber(getPath(summary, ["counts.cancelled", "cancelled"], 0));
+        const rescheduled = asNumber(getPath(summary, ["counts.rescheduled", "rescheduled", "counts.reprogrammed"], 0));
+        const notDeparted = asNumber(getPath(summary, ["counts.notDeparted", "notDeparted", "counts.not_departed"], 0));
+        const avgDelay = asNumber(getPath(summary, ["delayTotals.average", "delayTotals.avg", "avgDelay", "averageDelay"], 0));
+        const indexedStationsRaw = getPath(summary, ["coverage.stations", "stationsIndexed", "stationCount"], null);
+        const indexedStations = indexedStationsRaw === null ? null : asNumber(indexedStationsRaw);
+        const departureDelayed = asNumber(getPath(summary, ["punctuality.departure.delayed", "departure.delayed"], 0));
+        const departureOnTime = asNumber(getPath(summary, ["punctuality.departure.onTime", "departure.onTime"], 0));
+        const arrivalDelayed = asNumber(getPath(summary, ["punctuality.arrival.delayed", "arrival.delayed"], 0));
+        const arrivalOnTime = asNumber(getPath(summary, ["punctuality.arrival.onTime", "arrival.onTime"], 0));
+        const arrivalEarly = asNumber(getPath(summary, ["punctuality.arrival.early", "arrival.early"], 0));
+        const worstTrainRecord = asRecord(summary.worstTrain || summary.worst);
+        const worstTrain = Object.keys(worstTrainRecord).length ? worstTrainRecord as StatisticsTableItem : null;
         return {
             counts,
             punctuality,
@@ -314,7 +449,7 @@
         };
     }
 
-    function renderMeta() {
+    function renderMeta(): void {
         const summary = state.summary || {};
         const values = summaryCounts();
         const completedAt = getPath(summary, ["collectionCompletedAt", "lastUpdated", "ultimoAggiornamento", "updatedAt"], null);
@@ -342,7 +477,7 @@
         if (coverageEl) coverageEl.textContent = stationValue;
     }
 
-    function renderMetrics() {
+    function renderMetrics(): void {
         const el = $("statisticsMetrics");
         if (!el) return;
         const values = summaryCounts();
@@ -367,16 +502,16 @@
         ].join("");
     }
 
-    function emptyChart(message = tr("statistics_no_chart_data", "No chart data")) {
+    function emptyChart(message = tr("statistics_no_chart_data", "No chart data")): string {
         return `<div class="statistics-empty-chart">${esc(message)}</div>`;
     }
 
-    function pointValue(point) {
+    function pointValue(point: JsonRecord): number {
         return asNumber(point.value ?? point.running ?? point.treniCircolanti ?? point.count ?? point.y, 0);
     }
 
-    function pointLabel(point) {
-        const raw = point.label || point.time || point.timestamp || point.x || "";
+    function pointLabel(point: JsonRecord): string {
+        const raw = asString(point.label || point.time || point.timestamp || point.x);
         if (!raw) return "";
         const date = new Date(raw);
         if (Number.isFinite(date.getTime())) {
@@ -389,7 +524,7 @@
         return String(raw);
     }
 
-    function renderLineChart(points) {
+    function renderLineChart(points: unknown): string {
         const data = asArray(points).filter(Boolean);
         if (!data.length) return emptyChart();
         const values = data.map(pointValue);
@@ -403,7 +538,7 @@
         const plotWidth = width - padLeft - padRight;
         const plotHeight = height - padTop - padBottom;
         const step = data.length > 1 ? plotWidth / (data.length - 1) : 0;
-        const coords = data.map((point, index) => {
+        const coords = data.map((point, index): [number, number] => {
             const x = padLeft + step * index;
             const y = height - padBottom - (pointValue(point) / max) * plotHeight;
             return [x, y];
@@ -450,12 +585,12 @@
         `;
     }
 
-    function bindRunningChartEvents() {
+    function bindRunningChartEvents(): void {
         const chart = $("statisticsRunningChart");
         if (!chart || chart.dataset.bound === "1") return;
         chart.dataset.bound = "1";
-        const showPoint = (point) => {
-            const tooltip = chart.querySelector(".statistics-chart-tooltip");
+        const showPoint = (point: HTMLElement) => {
+            const tooltip = chart.querySelector<HTMLElement>(".statistics-chart-tooltip");
             if (!tooltip) return;
             const label = point.dataset.label || "";
             const value = point.dataset.value || "";
@@ -465,19 +600,23 @@
             tooltip.hidden = false;
         };
         chart.addEventListener("click", (event) => {
-            const point = event.target.closest?.(".statistics-chart-point");
+            const point = event.target instanceof Element
+                ? event.target.closest<HTMLElement>(".statistics-chart-point")
+                : null;
             if (point) showPoint(point);
         });
-        chart.addEventListener("keydown", (event) => {
+        chart.addEventListener("keydown", (event: KeyboardEvent) => {
             if (event.key !== "Enter" && event.key !== " ") return;
-            const point = event.target.closest?.(".statistics-chart-point");
+            const point = event.target instanceof Element
+                ? event.target.closest<HTMLElement>(".statistics-chart-point")
+                : null;
             if (!point) return;
             event.preventDefault();
             showPoint(point);
         });
     }
 
-    function renderDonut(segments, title) {
+    function renderDonut(segments: DonutSegment[], title: string): string {
         const filtered = segments.filter((segment) => asNumber(segment.value) > 0);
         if (!filtered.length) return emptyChart();
         const total = filtered.reduce((sum, item) => sum + asNumber(item.value), 0);
@@ -495,14 +634,14 @@
                 </div>
                 <div class="statistics-legend">
                     ${filtered.map((item, index) => `
-                        <div><span style="background:${esc(item.color || palette[index % palette.length])}"></span><b>${esc(item.label)}</b><em>${esc(formatNumber(item.value))} · ${esc(pct((asNumber(item.value) / total) * 100))}</em></div>
+                        <div><span style="background:${esc(item.color || palette[index % palette.length])}"></span><b>${esc(item.label)}</b><em>${esc(formatNumber(item.value))} - ${esc(pct((asNumber(item.value) / total) * 100))}</em></div>
                     `).join("")}
                 </div>
             </div>
         `;
     }
 
-    function renderInteractiveDonut(segments, title) {
+    function renderInteractiveDonut(segments: DonutSegment[], title: string): string {
         const filtered = segments.filter((segment) => asNumber(segment.value) > 0);
         if (!filtered.length) return emptyChart();
         const total = filtered.reduce((sum, item) => sum + asNumber(item.value), 0);
@@ -549,30 +688,34 @@
         `;
     }
 
-    function bindDonutChartEvents() {
-        document.querySelectorAll(".statistics-chart-box").forEach((chart) => {
+    function bindDonutChartEvents(): void {
+        document.querySelectorAll<HTMLElement>(".statistics-chart-box").forEach((chart) => {
             if (chart.dataset.donutBound === "1") return;
             chart.dataset.donutBound = "1";
-            const showSegment = (target) => {
+            const showSegment = (target: HTMLElement) => {
                 const wrap = target.closest(".statistics-donut-wrap");
-                const selected = wrap?.querySelector(".statistics-donut-selected");
-                if (!selected) return;
+                const selected = wrap?.querySelector<HTMLElement>(".statistics-donut-selected");
+                if (!wrap || !selected) return;
                 const label = target.dataset.label || "";
                 const value = target.dataset.value || "";
                 const percent = target.dataset.percent || "";
                 selected.hidden = false;
                 selected.innerHTML = `<b>${esc(label)}</b><strong>${esc(value)}</strong><span>${esc(percent)}</span>`;
-                wrap.querySelectorAll(".statistics-donut-segment, .statistics-legend-row").forEach((item) => {
+                wrap.querySelectorAll<HTMLElement>(".statistics-donut-segment, .statistics-legend-row").forEach((item) => {
                     item.classList.toggle("active", item.dataset.label === label);
                 });
             };
             chart.addEventListener("click", (event) => {
-                const target = event.target.closest?.(".statistics-donut-segment, .statistics-legend-row");
+                const target = event.target instanceof Element
+                    ? event.target.closest<HTMLElement>(".statistics-donut-segment, .statistics-legend-row")
+                    : null;
                 if (target) showSegment(target);
             });
-            chart.addEventListener("keydown", (event) => {
+            chart.addEventListener("keydown", (event: KeyboardEvent) => {
                 if (event.key !== "Enter" && event.key !== " ") return;
-                const target = event.target.closest?.(".statistics-donut-segment, .statistics-legend-row");
+                const target = event.target instanceof Element
+                    ? event.target.closest<HTMLElement>(".statistics-donut-segment, .statistics-legend-row")
+                    : null;
                 if (!target) return;
                 event.preventDefault();
                 showSegment(target);
@@ -580,8 +723,8 @@
         });
     }
 
-    function renderCategoryChart(categories) {
-        const buckets = new Map();
+    function renderCategoryChart(categories: unknown): string {
+        const buckets = new Map<string, number>();
         asArray(categories).forEach((item) => {
             const label = chartCategoryCode(item.label || item.category || item.name || item.code || "--");
             const value = asNumber(item.value ?? item.count ?? item.total, 0);
@@ -609,22 +752,25 @@
         `;
     }
 
-    function renderCharts() {
+    function renderCharts(): void {
         const summary = state.summary || {};
         const values = summaryCounts();
         const series = normalizeTimeseries(state.timeseries);
         const runningPoints = asArray(series.points || series.running || series.trains || series.treniCircolanti);
-        if ($("statisticsRunningChart")) $("statisticsRunningChart").innerHTML = renderLineChart(runningPoints);
-        if ($("statisticsRegularityChart")) {
-            $("statisticsRegularityChart").innerHTML = renderInteractiveDonut([
+        const runningChart = $("statisticsRunningChart");
+        if (runningChart) runningChart.innerHTML = renderLineChart(runningPoints);
+        const regularityChart = $("statisticsRegularityChart");
+        if (regularityChart) {
+            regularityChart.innerHTML = renderInteractiveDonut([
                 { label: tr("statistics_regular", "Regular"), value: values.regular, color: "#65bfc0" },
                 { label: tr("statistics_status_delayed", "Delayed"), value: values.delayed, color: "#5b9ee4" },
                 { label: tr("statistics_rescheduled", "Rescheduled"), value: values.rescheduled, color: "#f4b35d" },
                 { label: tr("statistics_cancelled", "Cancelled"), value: values.cancelled, color: "#ec6685" }
             ], tr("statistics_trains", "trains"));
         }
-        if ($("statisticsPunctualityChart")) {
-            $("statisticsPunctualityChart").innerHTML = `
+        const punctualityChart = $("statisticsPunctualityChart");
+        if (punctualityChart) {
+            punctualityChart.innerHTML = `
                 <div class="statistics-dual-donut">
                     <div>
                         <h3>${esc(tr("statistics_departure_punctuality", "Departure punctuality"))}</h3>
@@ -644,12 +790,13 @@
                 </div>
             `;
         }
-        if ($("statisticsCategoryChart")) {
-            $("statisticsCategoryChart").innerHTML = renderCategoryChart(summary.categories || summary.categoryCounts || []);
+        const categoryChart = $("statisticsCategoryChart");
+        if (categoryChart) {
+            categoryChart.innerHTML = renderCategoryChart(summary.categories || summary.categoryCounts || []);
         }
     }
 
-    function renderAll() {
+    function renderAll(): void {
         fillDateSelect();
         fillCategorySelect();
         renderMeta();
@@ -658,38 +805,42 @@
         renderTable();
     }
 
-    function setActiveView(view, shouldLoad = true) {
+    function isStatisticsView(value: string | undefined): value is StatisticsView {
+        return value === "trains" || value === "stations" || value === "relations" || value === "ranking";
+    }
+
+    function setActiveView(view: StatisticsView, shouldLoad = true): void {
         state.activeView = view;
         state.page = 1;
-        document.querySelectorAll(".statistics-tab").forEach((tab) => {
+        document.querySelectorAll<HTMLElement>(".statistics-tab").forEach((tab) => {
             tab.classList.toggle("active", tab.dataset.statView === view);
         });
-        const category = $("statisticsCategory");
-        const status = $("statisticsStatusFilter");
+        const category = $<HTMLSelectElement>("statisticsCategory");
+        const status = $<HTMLSelectElement>("statisticsStatusFilter");
         if (category) category.style.display = view === "trains" ? "" : "none";
         if (status) status.style.display = view === "trains" ? "" : "none";
         if (shouldLoad) loadTable();
     }
 
-    function queryValue() {
-        return $("statisticsSearch")?.value.trim() || "";
+    function queryValue(): string {
+        return $<HTMLInputElement>("statisticsSearch")?.value.trim() || "";
     }
 
-    function relationParams(query) {
-        const parts = query.split(/\s*(?:->|→|-|–|—|>)\s*/).map((item) => item.trim()).filter(Boolean);
+    function relationParams(query: string): QueryParams {
+        const parts = query.split(/\s*(?:->|-|>)\s*/).map((item) => item.trim()).filter(Boolean);
         return parts.length >= 2 ? { from: parts[0], to: parts.slice(1).join(" ") } : { q: query };
     }
 
-    async function loadTable() {
+    async function loadTable(): Promise<void> {
         if (!state.date) return;
         state.tableLoading = true;
         setTableStatus(tr("loading", "Loading..."));
         renderTable();
         const q = queryValue();
-        const category = $("statisticsCategory")?.value || "";
-        const status = $("statisticsStatusFilter")?.value || "";
+        const category = $<HTMLSelectElement>("statisticsCategory")?.value || "";
+        const status = $<HTMLSelectElement>("statisticsStatusFilter")?.value || "";
         let path = "/trains";
-        let params = { date: state.date, page: state.page, pageSize: state.pageSize };
+        let params: QueryParams = { date: state.date, page: state.page, pageSize: state.pageSize };
 
         if (state.activeView === "trains") {
             params = { ...params, q, category, status };
@@ -713,21 +864,21 @@
         } catch (error) {
             state.tableItems = [];
             state.total = 0;
-            setTableStatus(reasonMessage(error.message));
+            setTableStatus(reasonMessage(errorReason(error)));
         } finally {
             state.tableLoading = false;
             renderTable();
         }
     }
 
-    function reasonMessage(reason) {
+    function reasonMessage(reason: string): string {
         if (reason === "not_configured") return tr("statistics_not_configured", "Statistics API is not configured yet.");
         if (reason === "forbidden") return tr("statistics_forbidden", "Statistics API access denied.");
         if (reason === "upstream_error") return tr("statistics_upstream_error", "Statistics service is unavailable.");
         return tr("load_error", "Failed to load, please try again later");
     }
 
-    function tableColumns() {
+    function tableColumns(): TableColumnDefinition[] {
         if (state.activeView === "stations") {
             return [
                 ["station", tr("statistics_station", "Station")],
@@ -754,24 +905,24 @@
         ];
     }
 
-    function itemValue(item, column, index) {
+    function itemValue(item: StatisticsTableItem, column: TableColumn, index: number): string {
         if (column === "rank") return String(index + 1 + (state.page - 1) * state.pageSize);
         if (column === "train") return `${item.category || item.trainCategory || ""} ${item.trainNumber || item.number || item.train || ""}`.trim() || "--";
-        if (column === "route") return item.route || [item.origin || item.from, item.destination || item.to].filter(Boolean).join(" → ") || "--";
+        if (column === "route") return item.route || [item.origin || item.from, item.destination || item.to].filter(Boolean).join(" -> ") || "--";
         if (column === "station") return item.name || item.station || item.stationName || "--";
         if (column === "code") return item.code || item.stationCode || item.id || "--";
-        if (column === "relation") return item.relation || [item.from, item.to].filter(Boolean).join(" → ") || "--";
+        if (column === "relation") return item.relation || [item.from, item.to].filter(Boolean).join(" -> ") || "--";
         if (column === "category") return item.category || item.trainCategory || "--";
         if (column === "operator") return operatorName(item.operator || item.client);
         if (column === "delay") return formatMinutes(item.delay ?? item.totalDelay ?? item.arrivalDelay ?? item.departureDelay);
         if (column === "avgDelay") return formatMinutes(item.avgDelay ?? item.averageDelay ?? item.delayAverage);
         if (column === "monitored") return formatNumber(item.monitored ?? item.count ?? item.total);
         if (column === "cancelled") return formatNumber(item.cancelled);
-        if (column === "status") return statusLabel(item.status || item.state || (item.notDeparted ? "not_departed" : item.cancelled ? "cancelled" : item.delay > 5 ? "delayed" : "regular"));
-        return item[column] ?? "--";
+        if (column === "status") return statusLabel(item.status || item.state || (item.notDeparted ? "not_departed" : item.cancelled ? "cancelled" : (item.delay ?? 0) > 5 ? "delayed" : "regular"));
+        return asString(item[column], "--");
     }
 
-    function appendItemCellContent(cell, item, column, index) {
+    function appendItemCellContent(cell: HTMLTableCellElement, item: StatisticsTableItem, column: TableColumn, index: number): void {
         const value = itemValue(item, column, index);
         if (column === "train") {
             const href = buildTrainHref(item);
@@ -802,7 +953,7 @@
         cell.textContent = value;
     }
 
-    function replaceChildrenSafe(element, children) {
+    function replaceChildrenSafe(element: HTMLElement, children: Node[]): void {
         if (typeof element.replaceChildren === "function") {
             element.replaceChildren(...children);
             return;
@@ -811,7 +962,7 @@
         children.forEach((child) => element.appendChild(child));
     }
 
-    function buildTableMessageRow(message, colspan) {
+    function buildTableMessageRow(message: string, colspan: number): HTMLTableRowElement {
         const row = document.createElement("tr");
         const cell = document.createElement("td");
         cell.colSpan = colspan;
@@ -820,7 +971,7 @@
         return row;
     }
 
-    function statusLabel(status) {
+    function statusLabel(status: unknown): string {
         const normalized = String(status || "").toLowerCase();
         if (normalized.includes("cancel")) return tr("statistics_status_cancelled", "Cancelled");
         if (normalized.includes("not_departed") || normalized.includes("not departed") || normalized.includes("non_partito") || normalized.includes("nonpartito")) return tr("statistics_status_not_departed", tr("not_departed", "Not Departed"));
@@ -829,7 +980,7 @@
         return tr("statistics_status_regular", "Regular");
     }
 
-    function renderTable() {
+    function renderTable(): void {
         const head = $("statisticsTableHead");
         const body = $("statisticsTableBody");
         if (!head || !body) return;
@@ -864,13 +1015,15 @@
         const totalPages = Math.max(1, Math.ceil(state.total / state.pageSize));
         if (pageInfo) {
             const totalLabel = tr("statistics_table_total", "total");
-            pageInfo.textContent = `${state.page} / ${totalPages} · ${totalLabel} ${formatNumber(state.total)}`;
+            pageInfo.textContent = `${state.page} / ${totalPages} - ${totalLabel} ${formatNumber(state.total)}`;
         }
-        if ($("statisticsPrev")) $("statisticsPrev").disabled = state.page <= 1 || state.tableLoading;
-        if ($("statisticsNext")) $("statisticsNext").disabled = state.page >= totalPages || state.tableLoading;
+        const previousButton = $<HTMLButtonElement>("statisticsPrev");
+        const nextButton = $<HTMLButtonElement>("statisticsNext");
+        if (previousButton) previousButton.disabled = state.page <= 1 || state.tableLoading;
+        if (nextButton) nextButton.disabled = state.page >= totalPages || state.tableLoading;
     }
 
-    async function loadCore() {
+    async function loadCore(): Promise<void> {
         state.loading = true;
         setStatus(tr("statistics_loading", "Loading statistics..."), "info");
         try {
@@ -882,7 +1035,7 @@
             state.days = [{ date: state.date || todayRome(), label: state.date || todayRome() }];
             state.date = state.date || todayRome();
             fillDateSelect();
-            setStatus(reasonMessage(error.message), "warning");
+            setStatus(reasonMessage(errorReason(error)), "warning");
         }
 
         try {
@@ -896,7 +1049,7 @@
         } catch (error) {
             state.summary = null;
             state.timeseries = null;
-            setStatus(reasonMessage(error.message), "warning");
+            setStatus(reasonMessage(errorReason(error)), "warning");
         } finally {
             state.loading = false;
             renderAll();
@@ -904,50 +1057,52 @@
         }
     }
 
-    function downloadCsv() {
+    function downloadCsv(): void {
         if (!state.date) return;
         const view = state.activeView;
         const query = paramsString({
             date: state.date,
             view,
             q: queryValue(),
-            category: $("statisticsCategory")?.value || "",
-            status: $("statisticsStatusFilter")?.value || ""
+            category: $<HTMLSelectElement>("statisticsCategory")?.value || "",
+            status: $<HTMLSelectElement>("statisticsStatusFilter")?.value || ""
         });
         window.location.href = `${API_BASE}/export.csv?${query}`;
     }
 
-    function debounce(fn, delay = 350) {
-        let timer = null;
-        return (...args) => {
+    function debounce<T extends unknown[]>(fn: VoidFunctionWithArgs<T>, delay = 350): VoidFunctionWithArgs<T> {
+        let timer: number | undefined;
+        return (...args: T) => {
             window.clearTimeout(timer);
             timer = window.setTimeout(() => fn(...args), delay);
         };
     }
 
-    function bindEvents() {
-        $("statisticsDate")?.addEventListener("change", (event) => {
-            state.date = event.target.value;
+    function bindEvents(): void {
+        $<HTMLSelectElement>("statisticsDate")?.addEventListener("change", (event) => {
+            state.date = (event.currentTarget as HTMLSelectElement).value;
             state.page = 1;
             loadCore();
         });
-        document.querySelectorAll(".statistics-tab").forEach((tab) => {
-            tab.addEventListener("click", () => setActiveView(tab.dataset.statView || "trains"));
+        document.querySelectorAll<HTMLElement>(".statistics-tab").forEach((tab) => {
+            tab.addEventListener("click", () => {
+                setActiveView(isStatisticsView(tab.dataset.statView) ? tab.dataset.statView : "trains");
+            });
         });
         const reloadTable = debounce(() => {
             state.page = 1;
             loadTable();
         });
-        $("statisticsSearch")?.addEventListener("input", reloadTable);
-        $("statisticsCategory")?.addEventListener("change", reloadTable);
-        $("statisticsStatusFilter")?.addEventListener("change", reloadTable);
-        $("statisticsCsv")?.addEventListener("click", downloadCsv);
-        $("statisticsPrev")?.addEventListener("click", () => {
+        $<HTMLInputElement>("statisticsSearch")?.addEventListener("input", reloadTable);
+        $<HTMLSelectElement>("statisticsCategory")?.addEventListener("change", reloadTable);
+        $<HTMLSelectElement>("statisticsStatusFilter")?.addEventListener("change", reloadTable);
+        $<HTMLButtonElement>("statisticsCsv")?.addEventListener("click", downloadCsv);
+        $<HTMLButtonElement>("statisticsPrev")?.addEventListener("click", () => {
             if (state.page <= 1) return;
             state.page -= 1;
             loadTable();
         });
-        $("statisticsNext")?.addEventListener("click", () => {
+        $<HTMLButtonElement>("statisticsNext")?.addEventListener("click", () => {
             const totalPages = Math.max(1, Math.ceil(state.total / state.pageSize));
             if (state.page >= totalPages) return;
             state.page += 1;
@@ -957,7 +1112,7 @@
         bindDonutChartEvents();
     }
 
-    function initStatisticsPage() {
+    function initStatisticsPage(): void {
         if (!$("statisticsMetrics")) return;
         state.date = todayRome();
         bindEvents();

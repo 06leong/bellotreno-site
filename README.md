@@ -3,7 +3,7 @@
 ![BelloTreno project banner](public/readme-banner.svg)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Astro](https://img.shields.io/badge/Astro-5.x-orange.svg)](https://astro.build/)
+[![Astro](https://img.shields.io/badge/Astro-6.x-orange.svg)](https://astro.build/)
 [![Cloudflare Pages](https://img.shields.io/badge/Cloudflare-Pages-f38020.svg)](https://pages.cloudflare.com/)
 [![CI](https://github.com/06leong/bellotreno-site/actions/workflows/ci.yml/badge.svg)](https://github.com/06leong/bellotreno-site/actions/workflows/ci.yml)
 [![Docker Images](https://github.com/06leong/bellotreno-site/actions/workflows/docker-images.yml/badge.svg)](https://github.com/06leong/bellotreno-site/actions/workflows/docker-images.yml)
@@ -98,7 +98,10 @@ on observable data rather than official full-network reports.
 Detailed implementation notes live in the `doc/` directory:
 
 - [Project guide](doc/PROJECT_GUIDE.md)
+- [Project guide (zh-CN)](doc/PROJECT_GUIDE.zh-CN.md)
 - [Agent/developer notes](doc/AGENTS.md)
+- [TypeScript migration audit](doc/typescript-migration-audit.md)
+- [innerHTML audit notes](doc/innerhtml-audit.md)
 - [ViaggiaTreno API notes](doc/blog-viaggiatreno-api.md)
 - [Swiss Open Data integration guide](doc/swiss-open-data-integration-guide.md)
 - [Swiss Open Data API guide, Chinese](doc/swiss-open-data-api-guide.zh-CN.md)
@@ -110,12 +113,20 @@ VPS-side service notes are in [rfi-proxy/README.md](rfi-proxy/README.md).
 ```bash
 npm install
 npm run dev
+npm run check
 npm run build
 ```
 
-The frontend is an Astro static site. Production deployment is currently designed
-for Cloudflare Pages, with Pages Functions used for token-protected server-side
-API calls.
+The frontend is an Astro static site with strict TypeScript browser modules
+under `src/client/`, typed Cloudflare Pages Functions under `functions/api/`,
+shared normalizers under `src/lib/normalizers/`, and typed maintenance scripts
+under `scripts/`. Production deployment is designed for Cloudflare Pages, with
+Pages Functions used for token-protected server-side API calls.
+
+Runtime JavaScript source should not be added under `public/scripts/`. Browser
+code is authored as TypeScript and bundled by Astro/Vite into hashed assets.
+Fonts are configured through Astro's Fonts API so generated font files are served
+from the built site instead of loading Google Fonts at page runtime.
 
 ## Disclaimer
 

@@ -1,24 +1,31 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
-const roots = ["public/scripts", "functions"];
+const roots = ["src/client", "functions"];
+const auditedExtensions = [".js", ".ts"];
 
-function collectFiles(root) {
+interface InnerHtmlFinding {
+  file: string;
+  line: number;
+  text: string;
+}
+
+function collectFiles(root: string): string[] {
   if (!existsSync(root)) return [];
-  const files = [];
+  const files: string[] = [];
   for (const entry of readdirSync(root)) {
     const fullPath = path.join(root, entry);
     const stat = statSync(fullPath);
     if (stat.isDirectory()) {
       files.push(...collectFiles(fullPath));
-    } else if (stat.isFile() && fullPath.endsWith(".js")) {
+    } else if (stat.isFile() && auditedExtensions.some((extension) => fullPath.endsWith(extension))) {
       files.push(fullPath);
     }
   }
   return files;
 }
 
-const findings = [];
+const findings: InnerHtmlFinding[] = [];
 for (const file of roots.flatMap(collectFiles).sort()) {
   const lines = readFileSync(file, "utf8").split(/\r?\n/);
   lines.forEach((line, index) => {

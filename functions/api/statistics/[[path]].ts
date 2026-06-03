@@ -1,14 +1,22 @@
 const ALLOWED_HOSTS = new Set([
     "bellotreno.org",
     "real.bellotreno.org",
+    "bellotreno-site.pages.dev",
     "bellotreno.pages.dev",
     "localhost",
     "127.0.0.1",
     "::1",
     "[::1]"
 ]);
+const ALLOWED_HOST_SUFFIXES = [
+    ".bellotreno-site.pages.dev"
+];
+const DEFAULT_STATISTICS_API_BASE_URL = "https://stats-api.bellotreno.org/v1";
 
-function json(data, status = 200, extraHeaders = {}) {
+type StatisticsParams = { path?: string | string[] };
+type CorsHeaderMap = Record<string, string>;
+
+function json(data: unknown, status = 200, extraHeaders: HeadersInit = {}): Response {
     return new Response(JSON.stringify(data), {
         status,
         headers: {
@@ -20,7 +28,7 @@ function json(data, status = 200, extraHeaders = {}) {
     });
 }
 
-function getUrlHostname(value) {
+function getUrlHostname(value: string): string {
     try {
         return new URL(value).hostname;
     } catch {
@@ -28,15 +36,17 @@ function getUrlHostname(value) {
     }
 }
 
-function isLocalHost(hostname) {
+function isLocalHost(hostname: string): boolean {
     return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]";
 }
 
-function isAllowedHost(hostname, requestHost) {
-    return hostname === requestHost || ALLOWED_HOSTS.has(hostname);
+function isAllowedHost(hostname: string, requestHost: string): boolean {
+    return hostname === requestHost
+        || ALLOWED_HOSTS.has(hostname)
+        || ALLOWED_HOST_SUFFIXES.some((suffix) => hostname.endsWith(suffix));
 }
 
-function requestIsAllowed(request) {
+function requestIsAllowed(request: Request): boolean {
     const requestUrl = new URL(request.url);
     const requestHost = requestUrl.hostname;
     const origin = request.headers.get("origin");
@@ -47,7 +57,7 @@ function requestIsAllowed(request) {
     return isLocalHost(requestHost);
 }
 
-function corsHeaders(request) {
+function corsHeaders(request: Request): CorsHeaderMap {
     const origin = request.headers.get("origin");
     if (!origin) return {};
     const requestHost = new URL(request.url).hostname;
@@ -61,7 +71,7 @@ function corsHeaders(request) {
     };
 }
 
-function routePath(params) {
+function routePath(params: StatisticsParams): string {
     const rawPath = params?.path;
     const path = Array.isArray(rawPath) ? rawPath.join("/") : String(rawPath || "");
     const cleanPath = path
@@ -71,27 +81,27 @@ function routePath(params) {
     return cleanPath;
 }
 
-function buildUpstreamUrl(baseUrl, path, requestUrl) {
+function buildUpstreamUrl(baseUrl: string, path: string, requestUrl: URL): URL {
     const base = String(baseUrl || "").trim().replace(/\/+$/, "");
     const upstream = new URL(`${base}/${path}`.replace(/\/+$/, ""));
     upstream.search = requestUrl.search;
     return upstream;
 }
 
-export async function onRequestOptions({ request }) {
+export async function onRequestOptions({ request }: PagesContext<StatisticsParams>): Promise<Response> {
     return new Response(null, {
         status: 204,
         headers: corsHeaders(request)
     });
 }
 
-export async function onRequestGet({ request, env, params }) {
+export async function onRequestGet({ request, env, params }: PagesContext<StatisticsParams>): Promise<Response> {
     const extraHeaders = corsHeaders(request);
     if (!requestIsAllowed(request)) {
         return json({ available: false, reason: "forbidden" }, 403, extraHeaders);
     }
 
-    const baseUrl = env.STATISTICS_API_BASE_URL;
+    const baseUrl = env.STATISTICS_API_BASE_URL || DEFAULT_STATISTICS_API_BASE_URL;
     if (!baseUrl) {
         return json({ available: false, reason: "not_configured" }, 503, extraHeaders);
     }
@@ -133,6 +143,6 @@ export async function onRequestGet({ request, env, params }) {
     }
 }
 
-export async function onRequest({ request }) {
+export async function onRequest({ request }: PagesContext<StatisticsParams>): Promise<Response> {
     return json({ available: false, reason: "method_not_allowed" }, 405, corsHeaders(request));
 }

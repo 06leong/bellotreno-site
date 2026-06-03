@@ -1,3 +1,5 @@
+export {};
+
 /**
  * BelloTreno Configuration
  */

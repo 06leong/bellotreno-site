@@ -1,3 +1,5 @@
+export {};
+
 /**
  * BelloTreno 国际化翻译文件
  * 支持中文、英文、意大利语
@@ -17,7 +19,7 @@ const translations = {
         recent_searches: "最近搜索",
         mode_train: "车次",
         mode_station: "车站",
-        search_label_train: "输入车次号 (如 FR9292, RV2025)",
+        search_label_train: "输入车次号 (如 FR9651, RV2025)",
         search_label_station: "输入车站名 (如 Milano, Venezia)",
         no_station_found: "未找到匹配车站",
         disambiguation_title: "检测到多个班次，请选择：",
@@ -261,7 +263,7 @@ const translations = {
         recent_searches: "Recent Searches",
         mode_train: "Train",
         mode_station: "Station",
-        search_label_train: "Enter train number (e.g. FR9292, RV2025)",
+        search_label_train: "Enter train number (e.g. FR9651, RV2025)",
         search_label_station: "Enter station name (e.g. Milano, Venezia)",
         no_station_found: "No stations found",
         disambiguation_title: "Multiple trains detected, please select:",
@@ -505,7 +507,7 @@ const translations = {
         recent_searches: "Ricerche Recenti",
         mode_train: "Treno",
         mode_station: "Stazione",
-        search_label_train: "Inserisci numero treno (es. FR9292, RV2025)",
+        search_label_train: "Inserisci numero treno (es. FR9651, RV2025)",
         search_label_station: "Inserisci nome stazione (es. Milano, Venezia)",
         no_station_found: "Nessuna stazione trovata",
         disambiguation_title: "Rilevati più treni, seleziona:",
@@ -737,3 +739,5 @@ const translations = {
         footer: "Queste informazioni sono solo di riferimento. Controllare i display delle stazioni per informazioni ufficiali. | © 2026 BelloTreno"
     }
 };
+
+window.translations = translations;

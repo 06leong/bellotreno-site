@@ -1,23 +1,186 @@
+import { navigateToStationBoard, registerStationNavigationGlobal } from './station-navigation.js';
+
+export {};
+
+type SearchMode = 'train' | 'station';
+type JsonRecord = Record<string, unknown>;
+type Language = NonNullable<Window["currentLang"]>;
+type TimeKind = 'arrival' | 'departure';
+type TimeStatus = '' | 'early' | 'late' | 'on-time';
+type PartialStopBoundary = '' | 'actualStart' | 'actualEnd' | 'replacementStart';
+
+interface NodeOptions {
+    attrs?: Record<string, unknown>;
+    className?: string;
+    dataset?: Record<string, unknown>;
+    href?: string;
+    rel?: string;
+    style?: Partial<CSSStyleDeclaration>;
+    target?: string;
+    text?: unknown;
+    title?: string;
+    type?: string;
+}
+
+type NodeChild = Node | string | number | boolean | null | undefined;
+
+interface RecentSearchItem {
+    id: string;
+    name: string;
+    timestamp: number;
+    type: SearchMode;
+}
+
+interface StationSearchResult {
+    id: string | number;
+    nomeLungo: string;
+}
+
+interface TrainStop extends JsonRecord {
+    actualFermataType?: number | string | null;
+    arrivoReale?: number | null;
+    arrivo_teorico?: number | null;
+    binarioEffettivoArrivoDescrizione?: string | null;
+    binarioEffettivoPartenzaDescrizione?: string | null;
+    binarioProgrammatoArrivoDescrizione?: string | null;
+    binarioProgrammatoPartenzaDescrizione?: string | null;
+    id?: string | number | null;
+    orientamento?: string | null;
+    partenzaReale?: number | null;
+    partenza_teorica?: number | null;
+    programmata?: number | null;
+    progressivo?: number | string | null;
+    ritardoArrivo?: number | string | null;
+    ritardoPartenza?: number | string | null;
+    source?: string;
+    stazione?: string;
+    swissStop?: unknown;
+}
+
+interface TrainData extends JsonRecord {
+    categoria?: string;
+    categoriaDescrizione?: string;
+    codiceCliente?: string | number;
+    compCategoria?: string;
+    compDurata?: string;
+    compNumeroTreno?: string;
+    compRitardoAndamento?: string[];
+    dataPartenzaTreno?: number | string;
+    dataPartenzaTrenoAsDate?: string;
+    destinazione?: string;
+    destinazioneEstera?: string;
+    fermate?: TrainStop[];
+    fermateSoppresse?: unknown;
+    nonPartito?: boolean;
+    numeroTreno?: string | number;
+    origine?: string;
+    origineEstera?: string;
+    provvedimento?: number | string | null;
+    stazioneUltimoRilevamento?: string;
+    subTitle?: string;
+}
+
+interface PartialCancellationState {
+    boundary: PartialStopBoundary;
+    cancelled: boolean;
+}
+
+interface SwissFormationPayload extends JsonRecord {
+    available?: boolean;
+}
+
+interface StatisticsPayload {
+    treniCircolanti?: number;
+    treniGiorno?: number;
+}
+
+interface TrenordLineInfo {
+    date: string;
+    line: string;
+    trainNumber: string;
+}
+
+interface TrenordTrafficNotice extends JsonRecord {
+    date?: string;
+    description?: string;
+    severityDescription?: string;
+    severityLevel?: string;
+    urls?: unknown[];
+}
+
+interface TrenordTrafficPayload extends JsonRecord {
+    available?: boolean;
+    direttrice?: string;
+    direttriceDescription?: string;
+    line?: string;
+    notices?: TrenordTrafficNotice[];
+    provider?: 'trenord-traffic';
+    reason?: string;
+}
+
+interface SmartCaringNotice extends JsonRecord {
+    infoNote?: string;
+    insertTimestamp: string | number;
+}
+
+interface SmartCaringHistoryDay extends JsonRecord {
+    date: string;
+    maxDelay?: number;
+    notifications?: number;
+    reasons?: string[];
+}
+
+interface SmartCaringStats extends JsonRecord {
+    avgDelay?: number;
+    disruptedDays?: number;
+    maxDelay?: number;
+    onTimeRate?: number;
+    totalDays?: number;
+}
+
+interface SmartCaringPayload extends JsonRecord {
+    error?: string;
+    history?: SmartCaringHistoryDay[];
+    noData?: boolean;
+    recent?: SmartCaringNotice[];
+    stats?: SmartCaringStats;
+    today?: SmartCaringNotice[];
+}
+
+function isElementTarget(target: EventTarget | null): target is Element {
+    return target instanceof Element;
+}
+
+function asRecord(value: unknown): JsonRecord {
+    return value && typeof value === 'object' && !Array.isArray(value) ? value as JsonRecord : {};
+}
+
 /**
  * BelloTreno 主应用逻辑
  * 包含所有核心功能和事件处理
  */
 
 
-let currentTrainData = null;
-let currentTriple = null;
-let searchMode = 'train';
-let disambiguationData = null;
-let currentSmartCaringData = null;
+let currentTrainData: TrainData | null = null;
+let currentTriple: string | null = null;
+let searchMode: SearchMode = 'train';
+window.searchMode = searchMode;
+let disambiguationData: string[] | null = null;
+let currentSmartCaringData: JsonRecord | null = null;
 let currentTrainCategory = '';
-let currentSwissFormationData = null;
+let currentSwissFormationData: SwissFormationPayload | null = null;
 let swissRequestSeq = 0;
-let currentTrenordLineInfo = null;
+let currentTrenordLineInfo: TrenordLineInfo | null = null;
 
 
 const API_BASE = window.API_BASE;
 const NOTIFY_BASE = window.NOTIFY_BASE;
 const TRENORD_TRAFFIC_BASE = window.TRENORD_TRAFFIC_BASE || "/api/trenord/traffic";
+const translations = window.translations || {};
+const CLIENT_MAP = window.CLIENT_MAP || {};
+const CLIENT_LINK_MAP = window.CLIENT_LINK_MAP || {};
+const CAT_MAP = window.CAT_MAP || {};
+const CAT_IMAGE_MAP = window.CAT_IMAGE_MAP || {};
 const DARK_MODE_CONTRAST_LOGOS = new Set([
     'regn.png',
     'rj.png',
@@ -25,7 +188,7 @@ const DARK_MODE_CONTRAST_LOGOS = new Set([
     'en.png',
     'espresso.png'
 ]);
-const TRENORD_LINE_COLORS = Object.freeze({
+const TRENORD_LINE_COLORS: Readonly<Record<string, string>> = Object.freeze({
     RE: "#c02e25",
     RE80: "#205099",
     MXP: "#c02826",
@@ -47,24 +210,28 @@ const TRENORD_LINE_COLORS = Object.freeze({
     S40: "#85bb7d",
     S50: "#754917"
 });
-const TRENORD_LINE_ALIASES = Object.freeze({
+const TRENORD_LINE_ALIASES: Readonly<Record<string, string>> = Object.freeze({
     RE51: "MXP2",
     RE54: "MXP1"
 });
 
-function clearNode(node) {
+function clearNode(node: Element | null): void {
     if (node) node.replaceChildren();
 }
 
-function createNode(tagName, options = {}, children = []) {
+function createNode<K extends keyof HTMLElementTagNameMap>(
+    tagName: K,
+    options: NodeOptions = {},
+    children: NodeChild | NodeChild[] = []
+): HTMLElementTagNameMap[K] {
     const node = document.createElement(tagName);
     if (options.className) node.className = options.className;
     if (options.text !== undefined) node.textContent = String(options.text);
     if (options.title) node.title = options.title;
-    if (options.type) node.type = options.type;
-    if (options.href) node.href = options.href;
-    if (options.target) node.target = options.target;
-    if (options.rel) node.rel = options.rel;
+    if (options.type) node.setAttribute('type', options.type);
+    if (options.href) node.setAttribute('href', options.href);
+    if (options.target) node.setAttribute('target', options.target);
+    if (options.rel) node.setAttribute('rel', options.rel);
     if (options.style) Object.assign(node.style, options.style);
     if (options.attrs) {
         Object.entries(options.attrs).forEach(([key, value]) => {
@@ -84,7 +251,7 @@ function createNode(tagName, options = {}, children = []) {
     return node;
 }
 
-function createIcon(name, className = 'material-symbols-outlined', options = {}) {
+function createIcon(name: string, className = 'material-symbols-outlined', options: Pick<NodeOptions, 'attrs' | 'style'> = {}): HTMLSpanElement {
     return createNode('span', {
         className,
         text: name,
@@ -93,7 +260,7 @@ function createIcon(name, className = 'material-symbols-outlined', options = {})
     });
 }
 
-function getCategoryLogoClass(src) {
+function getCategoryLogoClass(src: unknown): string {
     const fileName = String(src || '').split('/').pop()?.toLowerCase() || '';
     return DARK_MODE_CONTRAST_LOGOS.has(fileName)
         ? 'category-logo category-logo-needs-contrast'
@@ -104,12 +271,12 @@ async function fetchStatistiche() {
     try {
         const res = await fetch(API_BASE + '/statistiche/0');
         if (!res.ok) return;
-        const data = await res.json();
+        const data = await res.json() as StatisticsPayload;
         const circolanti = document.getElementById('statsCircolanti');
         const giorno = document.getElementById('statsGiorno');
         const bar = document.getElementById('statsBar');
-        if (circolanti) circolanti.textContent = data.treniCircolanti.toLocaleString();
-        if (giorno) giorno.textContent = data.treniGiorno.toLocaleString();
+        if (circolanti) circolanti.textContent = Number(data.treniCircolanti || 0).toLocaleString();
+        if (giorno) giorno.textContent = Number(data.treniGiorno || 0).toLocaleString();
         if (bar) bar.classList.remove('opacity-0');
     } catch (e) {
         console.error('Stats fetch failed:', e);
@@ -120,7 +287,7 @@ async function fetchStatistiche() {
 
 
 function updateSearchLabel() {
-    const trainSearch = document.getElementById('trainSearch');
+    const trainSearch = document.getElementById('trainSearch') as HTMLInputElement | null;
     const searchIcon = document.getElementById('searchIcon');
     if (!trainSearch) return;
 
@@ -134,13 +301,14 @@ function updateSearchLabel() {
 }
 
 
-function switchSearchMode(mode) {
+function switchSearchMode(mode: SearchMode) {
     searchMode = mode;
+    window.searchMode = searchMode;
 
     updateSearchLabel();
 
 
-    const trainSearch = document.getElementById('trainSearch');
+    const trainSearch = document.getElementById('trainSearch') as HTMLInputElement | null;
     if (trainSearch) trainSearch.value = '';
 
 
@@ -184,10 +352,14 @@ function goHome() {
     window.location.href = '/';
 }
 
+window.switchSearchMode = switchSearchMode;
+window.goHome = goHome;
+registerStationNavigationGlobal();
 
 
 
-function formatDuration(duration) {
+
+function formatDuration(duration: string | null | undefined): string {
     if (!duration) return 'N/A';
     const parts = duration.split(':');
     if (parts.length === 2) {
@@ -199,7 +371,7 @@ function formatDuration(duration) {
     return duration;
 }
 
-function formatDurationMinutes(totalMinutes) {
+function formatDurationMinutes(totalMinutes: number): string {
     if (!Number.isFinite(totalMinutes) || totalMinutes < 0) return 'N/A';
     const hours = Math.floor(totalMinutes / 60);
     const mins = totalMinutes % 60;
@@ -210,7 +382,7 @@ function formatDurationMinutes(totalMinutes) {
 }
 
 
-function translateStatus(text) {
+function translateStatus(text: string): string {
     if (!text) return "";
 
     // Global cleanup: remove trailing dot from "min."
@@ -238,29 +410,30 @@ function translateStatus(text) {
     return text;
 }
 
-function formatT(ms) {
+function formatT(ms: unknown): string | null {
     if (!ms) return null;
-    return new Date(ms).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' });
+    const raw = typeof ms === 'string' || typeof ms === 'number' || ms instanceof Date ? ms : String(ms);
+    return new Date(raw).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' });
 }
 
-function hasTimestamp(ms) {
+function hasTimestamp(ms: unknown): boolean {
     const value = Number(ms);
     return Number.isFinite(value) && value > 0;
 }
 
-function resolveExpectedTimestamp(schedMs, realMs, delayMin) {
+function resolveExpectedTimestamp(schedMs: unknown, realMs: unknown, delayMin: unknown): number | null {
     if (!hasTimestamp(schedMs) || hasTimestamp(realMs)) return null;
     const delay = Number(delayMin);
     if (!Number.isFinite(delay) || delay === 0) return null;
     return Number(schedMs) + delay * 60000;
 }
 
-function sameDisplayedMinute(left, right) {
+function sameDisplayedMinute(left: unknown, right: unknown): boolean {
     if (!hasTimestamp(left) || !hasTimestamp(right)) return false;
     return formatT(left) === formatT(right);
 }
 
-function resolveTimeStatusClass(delayMin) {
+function resolveTimeStatusClass(delayMin: unknown): Exclude<TimeStatus, 'on-time'> {
     const delay = Number(delayMin);
     if (!Number.isFinite(delay)) return '';
     if (delay > 0) return 'late';
@@ -268,7 +441,7 @@ function resolveTimeStatusClass(delayMin) {
     return '';
 }
 
-function formatTimeStatusText(status, delayMin) {
+function formatTimeStatusText(status: TimeStatus, delayMin: unknown): string {
     const delay = Math.abs(Math.round(Number(delayMin) || 0));
     if (status === 'late') {
         return `+${delay} min`;
@@ -277,12 +450,12 @@ function formatTimeStatusText(status, delayMin) {
         return `-${delay} min`;
     }
     if (status === 'on-time') {
-        return translations[currentLang].time_on_time || translations[currentLang].on_time || 'On time';
+        return translations[window.currentLang].time_on_time || translations[window.currentLang].on_time || 'On time';
     }
     return '';
 }
 
-function resolveTimeStatus(delayMin, primaryMs, schedMs) {
+function resolveTimeStatus(delayMin: unknown, primaryMs: unknown, schedMs: unknown): TimeStatus {
     const status = resolveTimeStatusClass(delayMin);
     if (status) return status;
     const delay = Number(delayMin);
@@ -291,20 +464,20 @@ function resolveTimeStatus(delayMin, primaryMs, schedMs) {
     return '';
 }
 
-function getTimeLabelParts(kind) {
+function getTimeLabelParts(kind: TimeKind): { full: string; short: string } {
     if (kind === 'arrival') {
         return {
-            full: translations[currentLang].arrival,
-            short: translations[currentLang].arrival_short || translations[currentLang].arrival
+            full: translations[window.currentLang].arrival,
+            short: translations[window.currentLang].arrival_short || translations[window.currentLang].arrival
         };
     }
     return {
-        full: translations[currentLang].departure,
-        short: translations[currentLang].departure_short || translations[currentLang].departure
+        full: translations[window.currentLang].departure,
+        short: translations[window.currentLang].departure_short || translations[window.currentLang].departure
     };
 }
 
-function createTimeLabelNode(kind) {
+function createTimeLabelNode(kind: TimeKind): HTMLSpanElement {
     const label = getTimeLabelParts(kind);
     return createNode('span', { className: 'time-label' }, [
         createNode('span', { className: 'time-label-full', text: label.full }),
@@ -312,7 +485,7 @@ function createTimeLabelNode(kind) {
     ]);
 }
 
-function renderTimeHtml(kind, schedMs, realMs, delayMin) {
+function renderTimeHtml(kind: TimeKind, schedMs: unknown, realMs: unknown, delayMin: unknown): string {
     const sched = formatT(schedMs);
     const hasReal = hasTimestamp(realMs);
     const expectedMs = resolveExpectedTimestamp(schedMs, realMs, delayMin);
@@ -322,7 +495,7 @@ function renderTimeHtml(kind, schedMs, realMs, delayMin) {
     const status = resolveTimeStatus(delayMin, primaryMs, schedMs);
     const statusText = formatTimeStatusText(status, delayMin);
     const label = getTimeLabelParts(kind);
-    const scheduledLabel = translations[currentLang].scheduled_short || translations[currentLang].scheduled;
+    const scheduledLabel = translations[window.currentLang].scheduled_short || translations[window.currentLang].scheduled;
     const scheduledLine = sched
         ? `<span class="time-scheduled-row"><span class="time-scheduled-label">${scheduledLabel}</span><span class="time-scheduled-value tabular-nums">${sched}</span></span>`
         : '';
@@ -332,7 +505,7 @@ function renderTimeHtml(kind, schedMs, realMs, delayMin) {
     return `<div class="time-item time-item-${kind}"><span class="time-label"><span class="time-label-full">${label.full}</span><span class="time-label-short">${label.short}</span></span><span class="time-stack"><span class="time-primary-row"><span class="time-primary-value tabular-nums ${status}">${primary}</span>${statusLine}</span>${scheduledLine}</span></div>`;
 }
 
-function renderTimeNode(kind, schedMs, realMs, delayMin) {
+function renderTimeNode(kind: TimeKind, schedMs: unknown, realMs: unknown, delayMin: unknown): HTMLDivElement {
     const sched = formatT(schedMs);
     const hasReal = hasTimestamp(realMs);
     const expectedMs = resolveExpectedTimestamp(schedMs, realMs, delayMin);
@@ -366,7 +539,7 @@ function renderTimeNode(kind, schedMs, realMs, delayMin) {
         }, [
             createNode('span', {
                 className: 'time-scheduled-label',
-                text: translations[currentLang].scheduled_short || translations[currentLang].scheduled
+                text: translations[window.currentLang].scheduled_short || translations[window.currentLang].scheduled
             }),
             createNode('span', {
                 className: 'time-scheduled-value tabular-nums',
@@ -381,7 +554,7 @@ function renderTimeNode(kind, schedMs, realMs, delayMin) {
     ]);
 }
 
-function normalizeStationMatchName(value) {
+function normalizeStationMatchName(value: unknown): string {
     return String(value || '')
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
@@ -392,7 +565,7 @@ function normalizeStationMatchName(value) {
         .toUpperCase();
 }
 
-function findStopIndexByName(stops, name) {
+function findStopIndexByName(stops: TrainStop[], name: unknown): number {
     const target = normalizeStationMatchName(name);
     if (!target) return -1;
 
@@ -406,7 +579,7 @@ function findStopIndexByName(stops, name) {
     return index;
 }
 
-function collectSuppressedStopNames(value, names = []) {
+function collectSuppressedStopNames(value: unknown, names: string[] = []): string[] {
     if (!value) return names;
     if (typeof value === 'string') {
         names.push(value);
@@ -417,14 +590,16 @@ function collectSuppressedStopNames(value, names = []) {
         return names;
     }
     if (typeof value === 'object') {
+        const record = asRecord(value);
         ['stazione', 'nome', 'name', 'descrizione', 'denominazione'].forEach((key) => {
-            if (typeof value[key] === 'string') names.push(value[key]);
+            if (typeof record[key] === 'string') names.push(record[key]);
         });
     }
     return names;
 }
 
-function partialStopLabel(kind) {
+function partialStopLabel(kind: PartialStopBoundary | 'cancelled'): string {
+    if (!kind) return '';
     const lang = window.currentLang || 'en';
     const labels = {
         zh: {
@@ -449,8 +624,8 @@ function partialStopLabel(kind) {
     return (labels[lang] || labels.en)[kind] || kind;
 }
 
-function buildPartialCancellationState(data, stops) {
-    const states = (Array.isArray(stops) ? stops : []).map((stop) => ({
+function buildPartialCancellationState(data: TrainData, stops: TrainStop[]): PartialCancellationState[] {
+    const states: PartialCancellationState[] = (Array.isArray(stops) ? stops : []).map((stop) => ({
         cancelled: Number(stop?.actualFermataType) === 3,
         boundary: ''
     }));
@@ -512,11 +687,26 @@ function buildPartialCancellationState(data, stops) {
 
 
 
-function saveRecentSearch(trainNumber, trainInfo) {
-    try {
-        let recentSearches = JSON.parse(localStorage.getItem('recentSearches') || '[]');
+function readRecentSearches(): RecentSearchItem[] {
+    const raw = JSON.parse(localStorage.getItem('recentSearches') || '[]');
+    if (!Array.isArray(raw)) return [];
+    return raw.filter((item): item is RecentSearchItem => {
+        const record = asRecord(item);
+        return typeof record.id === 'string'
+            && typeof record.name === 'string'
+            && (record.type === 'train' || record.type === 'station');
+    });
+}
 
-        const searchItem = {
+function writeRecentSearches(items: RecentSearchItem[]): void {
+    localStorage.setItem('recentSearches', JSON.stringify(items.slice(0, 5)));
+}
+
+function saveRecentSearch(trainNumber: string, trainInfo: TrainData): void {
+    try {
+        let recentSearches = readRecentSearches();
+
+        const searchItem: RecentSearchItem = {
             id: trainNumber,
             name: `${trainNumber} ${trainInfo.origine || ''} → ${trainInfo.destinazione || ''}`.trim(),
             type: 'train',
@@ -530,7 +720,7 @@ function saveRecentSearch(trainNumber, trainInfo) {
             recentSearches = recentSearches.slice(0, 5);
         }
 
-        localStorage.setItem('recentSearches', JSON.stringify(recentSearches));
+        writeRecentSearches(recentSearches);
         renderRecentSearches();
     } catch (err) {
         console.error('Failed to save recent search:', err);
@@ -538,25 +728,25 @@ function saveRecentSearch(trainNumber, trainInfo) {
 }
 
 
-function saveRecentStationSearch(stationId, stationName) {
+function saveRecentStationSearch(stationId: string | number, stationName: string): void {
     try {
-        let recentSearches = JSON.parse(localStorage.getItem('recentSearches') || '[]');
+        let recentSearches = readRecentSearches();
 
-        const searchItem = {
-            id: stationId,
+        const searchItem: RecentSearchItem = {
+            id: String(stationId),
             name: stationName,
             type: 'station',
             timestamp: Date.now()
         };
 
-        recentSearches = recentSearches.filter(item => !(item.type === 'station' && item.id === stationId));
+        recentSearches = recentSearches.filter(item => !(item.type === 'station' && item.id === String(stationId)));
         recentSearches.unshift(searchItem);
 
         if (recentSearches.length > 5) {
             recentSearches = recentSearches.slice(0, 5);
         }
 
-        localStorage.setItem('recentSearches', JSON.stringify(recentSearches));
+        writeRecentSearches(recentSearches);
         renderRecentSearches();
     } catch (err) {
         console.error('Failed to save recent station search:', err);
@@ -564,23 +754,26 @@ function saveRecentStationSearch(stationId, stationName) {
 }
 
 
-function loadRecentSearches() {
+function loadRecentSearches(): void {
     try {
 
         const oldData = localStorage.getItem('recentTrains');
         if (oldData && !localStorage.getItem('recentSearches')) {
             const oldSearches = JSON.parse(oldData);
-            const newSearches = oldSearches.map(item => ({
-                id: item.number,
-                name: `${item.number} ${item.origin || ''} → ${item.destination || ''}`.trim(),
-                type: 'train',
-                timestamp: item.timestamp
-            }));
+            const newSearches = (Array.isArray(oldSearches) ? oldSearches : []).map((item: unknown) => {
+                const record = asRecord(item);
+                return {
+                    id: record.number,
+                    name: `${record.number || ''} ${record.origin || ''} → ${record.destination || ''}`.trim(),
+                    type: 'train',
+                    timestamp: record.timestamp
+                };
+            });
             localStorage.setItem('recentSearches', JSON.stringify(newSearches));
             localStorage.removeItem('recentTrains');
         }
 
-        const recentSearches = JSON.parse(localStorage.getItem('recentSearches') || '[]');
+        const recentSearches = readRecentSearches();
         if (recentSearches.length > 0) {
             renderRecentSearches();
         }
@@ -590,11 +783,12 @@ function loadRecentSearches() {
 }
 
 
-function renderRecentSearches() {
+function renderRecentSearches(): void {
     try {
-        const recentSearches = JSON.parse(localStorage.getItem('recentSearches') || '[]');
+        const recentSearches = readRecentSearches();
         const container = document.getElementById('recentSearchesContainer');
         const chipsContainer = document.getElementById('recentSearchesChips');
+        if (!container || !chipsContainer) return;
 
         if (recentSearches.length === 0) {
             container.style.display = 'none';
@@ -618,19 +812,20 @@ function renderRecentSearches() {
                     createIcon('close')
                 ])
             );
-            chip.querySelector('.chip-remove').addEventListener('click', (e) => {
+            chip.querySelector('.chip-remove')?.addEventListener('click', (e) => {
                 removeRecentSearch(item.id, item.type, e);
             });
 
-            chip.querySelector('.chip-label').addEventListener('click', () => {
+            chip.querySelector('.chip-label')?.addEventListener('click', () => {
                 if (item.type === 'train') {
                     if (searchMode !== 'train') {
                         switchSearchMode('train');
                     }
-                    document.getElementById('trainSearch').value = item.id;
+                    const trainSearch = document.getElementById('trainSearch') as HTMLInputElement | null;
+                    if (trainSearch) trainSearch.value = item.id;
                     startSearch(item.id);
                 } else if (item.type === 'station') {
-                    goToStationBoard(item.id, item.name);
+                    navigateToStationBoard(item.id, item.name);
                 }
             });
 
@@ -642,15 +837,15 @@ function renderRecentSearches() {
 }
 
 
-function removeRecentSearch(id, type, event) {
+function removeRecentSearch(id: string, type: SearchMode, event?: Event): void {
     if (event) {
         event.stopPropagation();
     }
 
     try {
-        let recentSearches = JSON.parse(localStorage.getItem('recentSearches') || '[]');
+        let recentSearches = readRecentSearches();
         recentSearches = recentSearches.filter(item => !(item.id === id && item.type === type));
-        localStorage.setItem('recentSearches', JSON.stringify(recentSearches));
+        writeRecentSearches(recentSearches);
         renderRecentSearches();
     } catch (err) {
         console.error('Failed to remove recent search:', err);
@@ -659,17 +854,19 @@ function removeRecentSearch(id, type, event) {
 
 
 
-async function startSearch(input) {
-    document.getElementById('results').style.display = 'none';
-    document.getElementById('disambiguation').style.display = 'none';
+async function startSearch(input: string): Promise<void> {
+    const resultsPanel = document.getElementById('results');
+    const disambiguationPanel = document.getElementById('disambiguation');
+    if (resultsPanel) resultsPanel.style.display = 'none';
+    if (disambiguationPanel) disambiguationPanel.style.display = 'none';
 
     if (searchMode === 'train') {
 
         const trainNumber = input.replace(/\D+/g, '').trim();
 
         if (!trainNumber) {
-            const msg = currentLang === 'zh' ? "请输入有效的车次号" :
-                currentLang === 'it' ? "Inserire un numero di treno valido" :
+            const msg = window.currentLang === 'zh' ? "请输入有效的车次号" :
+                window.currentLang === 'it' ? "Inserire un numero di treno valido" :
                     "Please enter a valid train number";
             return alert(msg);
         }
@@ -691,8 +888,8 @@ async function startSearch(input) {
                 fetchDetails(lines[0].split('|')[1]);
             }
         } catch (err) {
-            const msg = currentLang === 'zh' ? "搜索失败" :
-                currentLang === 'it' ? "Ricerca fallita" :
+            const msg = window.currentLang === 'zh' ? "搜索失败" :
+                window.currentLang === 'it' ? "Ricerca fallita" :
                     "Search failed";
             alert(msg);
         }
@@ -729,16 +926,17 @@ async function startSearch(input) {
 
 
 
-function showDisambiguation(lines) {
+function showDisambiguation(lines: string[]): void {
     disambiguationData = lines;
     renderDisambiguation();
 }
 
-function renderDisambiguation() {
+function renderDisambiguation(): void {
     if (!disambiguationData) return;
 
     const list = document.getElementById('choicesList');
     const panel = document.getElementById('disambiguation');
+    if (!list || !panel) return;
     clearNode(list);
 
     disambiguationData.forEach(line => {
@@ -760,18 +958,18 @@ function renderDisambiguation() {
                 createIcon('calendar_month', 'material-symbols-outlined', {
                     style: { fontSize: '14px', verticalAlign: 'middle' }
                 }),
-                ` ${translations[currentLang].depart_date}: ${dateStr} | `,
+                ` ${translations[window.currentLang].depart_date}: ${dateStr} | `,
                 createIcon('location_on', 'material-symbols-outlined', {
                     style: { fontSize: '14px', verticalAlign: 'middle' }
                 }),
-                ` ${translations[currentLang].origin_station}: ${sID}`
+                ` ${translations[window.currentLang].origin_station}: ${sID}`
             ])
         );
-        div.onclick = () => {
+        div.addEventListener('click', () => {
             panel.style.display = 'none';
             disambiguationData = null;
             fetchDetails(triple);
-        };
+        });
         list.appendChild(div);
     });
     panel.style.display = 'block';
@@ -779,15 +977,16 @@ function renderDisambiguation() {
 }
 
 
-function showStationDisambiguation(stations) {
+function showStationDisambiguation(stations: StationSearchResult[]): void {
     const list = document.getElementById('choicesList');
     const panel = document.getElementById('disambiguation');
+    if (!list || !panel) return;
     const panelTitle = panel.querySelector('h3');
 
-    const titleText = currentLang === 'zh' ? '选择车站：' :
-        currentLang === 'it' ? 'Seleziona stazione:' :
+    const titleText = window.currentLang === 'zh' ? '选择车站：' :
+        window.currentLang === 'it' ? 'Seleziona stazione:' :
             'Select station:';
-    panelTitle.textContent = titleText;
+    if (panelTitle) panelTitle.textContent = titleText;
 
     clearNode(list);
 
@@ -811,11 +1010,11 @@ function showStationDisambiguation(stations) {
                 })
             ])
         ]));
-        div.onclick = () => {
+        div.addEventListener('click', () => {
             panel.style.display = 'none';
             saveRecentStationSearch(station.id, station.nomeLungo);
-            goToStationBoard(station.id, station.nomeLungo);
-        };
+            navigateToStationBoard(station.id, station.nomeLungo);
+        });
         list.appendChild(div);
     });
 
@@ -825,7 +1024,7 @@ function showStationDisambiguation(stations) {
 
 
 
-async function fetchDetails(triple) {
+async function fetchDetails(triple: string): Promise<void> {
     currentTriple = triple;
     currentSmartCaringData = null;
     currentTrenordLineInfo = null;
@@ -838,12 +1037,12 @@ async function fetchDetails(triple) {
     try {
         const res = await fetch(`${API_BASE}/andamentoTreno/${originID}/${tNum}/${ts}`);
         if (res.status === 204) {
-            const msg = currentLang === 'zh' ? "该班次暂无实时数据（可能已过期或尚未生成）" :
-                currentLang === 'it' ? "Nessun dato in tempo reale per questo treno (potrebbe essere scaduto o non ancora generato)" :
+            const msg = window.currentLang === 'zh' ? "该班次暂无实时数据（可能已过期或尚未生成）" :
+                window.currentLang === 'it' ? "Nessun dato in tempo reale per questo treno (potrebbe essere scaduto o non ancora generato)" :
                     "No real-time data for this train (may be expired or not yet generated)";
             return alert(msg);
         }
-        const data = await res.json();
+        const data = asRecord(await res.json()) as TrainData;
         currentTrainData = data;
         currentTrainCategory = resolveTrainCategory(data);
         render(data);
@@ -854,15 +1053,15 @@ async function fetchDetails(triple) {
         const trainNumber = `${data.compCategoria || ''} ${data.numeroTreno || tNum}`.trim();
         saveRecentSearch(trainNumber, data);
     } catch (err) {
-        const msg = currentLang === 'zh' ? "详情加载失败" :
-            currentLang === 'it' ? "Impossibile caricare i dettagli" :
+        const msg = window.currentLang === 'zh' ? "详情加载失败" :
+            window.currentLang === 'it' ? "Impossibile caricare i dettagli" :
                 "Failed to load details";
         alert(msg);
     }
 }
 
-async function loadSwissFormation(data, triple, requestSeq) {
-    if (!window.BelloSwiss || !window.BelloSwiss.shouldQuery(data, currentTrainCategory)) {
+async function loadSwissFormation(data: TrainData, triple: string, requestSeq: number): Promise<void> {
+    if (!window.BelloSwiss || !window.BelloSwiss.fetchSwissEc || !window.BelloSwiss.shouldQuery(data, currentTrainCategory)) {
         if (window.BelloSwiss) window.BelloSwiss.hideFormationCard();
         return;
     }
@@ -870,31 +1069,31 @@ async function loadSwissFormation(data, triple, requestSeq) {
     window.BelloSwiss.renderLoadingCard();
 
     try {
-        const swissData = await window.BelloSwiss.fetchSwissEc(data, currentTrainCategory);
+        const swissData = asRecord(await window.BelloSwiss.fetchSwissEc(data, currentTrainCategory)) as SwissFormationPayload;
         if (requestSeq !== swissRequestSeq || triple !== currentTriple) return;
 
         if (!swissData?.available) {
             currentSwissFormationData = null;
             window.BelloSwiss.hideFormationCard();
-            render(currentTrainData);
+            if (currentTrainData) render(currentTrainData);
             return;
         }
 
         currentSwissFormationData = swissData;
-        render(currentTrainData);
+        if (currentTrainData) render(currentTrainData);
     } catch (err) {
         if (requestSeq !== swissRequestSeq || triple !== currentTriple) return;
         console.error('Swiss formation fetch failed:', err);
         currentSwissFormationData = null;
         if (window.BelloSwiss) window.BelloSwiss.hideFormationCard();
-        render(currentTrainData);
+        if (currentTrainData) render(currentTrainData);
     }
 }
 
 
-async function refreshTrainData() {
+async function refreshTrainData(): Promise<void> {
     if (!currentTriple) return;
-    const refreshBtn = document.querySelector('.refresh-btn');
+    const refreshBtn = document.querySelector<HTMLElement>('.refresh-btn');
     if (refreshBtn) {
         refreshBtn.style.opacity = '0.5';
         refreshBtn.style.pointerEvents = 'none';
@@ -908,14 +1107,14 @@ async function refreshTrainData() {
     }
 }
 
-function getDefaultRouteDisplay(data) {
+function getDefaultRouteDisplay(data: TrainData): { origin: string | undefined; destination: string | undefined } {
     return {
         origin: (data.origineEstera && data.origineEstera !== data.destinazione) ? data.origineEstera : data.origine,
         destination: (data.destinazioneEstera && data.destinazioneEstera !== data.origine) ? data.destinazioneEstera : data.destinazione
     };
 }
 
-function resolveRouteDisplay(data, timelineStops) {
+function resolveRouteDisplay(data: TrainData, timelineStops: TrainStop[]): { origin: string | undefined; destination: string | undefined } {
     const fallback = getDefaultRouteDisplay(data);
     const stops = Array.isArray(timelineStops) ? timelineStops : [];
     const hasSwissData = currentSwissFormationData?.available && stops.some((stop) => stop.source === 'swiss' || stop.swissStop);
@@ -923,7 +1122,8 @@ function resolveRouteDisplay(data, timelineStops) {
 
     const displayableStops = stops.filter((stop) => {
         if (!stop?.stazione) return false;
-        return !(window.BelloSwiss?.isTechnicalSwissStop && window.BelloSwiss.isTechnicalSwissStop(stop.swissStop || stop));
+        const swissStop = asRecord(stop.swissStop || stop);
+        return !(window.BelloSwiss?.isTechnicalSwissStop && window.BelloSwiss.isTechnicalSwissStop(swissStop));
     });
 
     const first = displayableStops[0] || stops[0];
@@ -935,7 +1135,7 @@ function resolveRouteDisplay(data, timelineStops) {
     };
 }
 
-function resolveDurationDisplay(data, timelineStops) {
+function resolveDurationDisplay(data: TrainData, timelineStops: TrainStop[]): string {
     const fallback = formatDuration(data.compDurata);
     const stops = Array.isArray(timelineStops) ? timelineStops : [];
     const hasSwissData = currentSwissFormationData?.available && stops.some((stop) => stop.source === 'swiss' || stop.swissStop);
@@ -943,7 +1143,8 @@ function resolveDurationDisplay(data, timelineStops) {
 
     const displayableStops = stops.filter((stop) => {
         if (!stop?.stazione) return false;
-        return !(window.BelloSwiss?.isTechnicalSwissStop && window.BelloSwiss.isTechnicalSwissStop(stop.swissStop || stop));
+        const swissStop = asRecord(stop.swissStop || stop);
+        return !(window.BelloSwiss?.isTechnicalSwissStop && window.BelloSwiss.isTechnicalSwissStop(swissStop));
     });
 
     const first = displayableStops[0];
@@ -960,14 +1161,23 @@ function resolveDurationDisplay(data, timelineStops) {
 }
 
 
+function normalizeTrainStops(stops: unknown): TrainStop[] {
+    return Array.isArray(stops)
+        ? stops.map((stop) => asRecord(stop) as TrainStop)
+        : [];
+}
 
-function render(data) {
-    document.getElementById('results').style.display = 'block';
+
+function render(data: TrainData): void {
+    const resultsPanel = document.getElementById('results');
     const card = document.getElementById('trainCard');
     const timeline = document.getElementById('timelineBody');
-    const timelineStops = window.BelloSwiss
+    if (!resultsPanel || !card || !timeline) return;
+
+    resultsPanel.style.display = 'block';
+    const timelineStops = normalizeTrainStops(window.BelloSwiss && currentSwissFormationData?.available
         ? window.BelloSwiss.mergeTimelineStops(data.fermate || [], currentSwissFormationData)
-        : (data.fermate || []);
+        : (data.fermate || []));
 
     if (window.BelloSwiss) {
         if (currentSwissFormationData?.available) {
@@ -995,7 +1205,8 @@ function render(data) {
         catCode = "TS";
     }
 
-    let operator = CLIENT_MAP[data.codiceCliente] || "Other";
+    const clientCode = String(data.codiceCliente ?? '');
+    let operator = CLIENT_MAP[clientCode] || "Other";
     let operatorLink = CLIENT_LINK_MAP[operator] || "#";
 
 
@@ -1022,8 +1233,8 @@ function render(data) {
     const displayOrigin = routeDisplay.origin;
     const displayDest = routeDisplay.destination;
     const delayMsg = translateStatus((data.compRitardoAndamento ?? [])[0] ?? '');
-    const isEarly = delayMsg.includes(translations[currentLang].early_by) ||
-        delayMsg.includes(translations[currentLang].on_time) ||
+    const isEarly = delayMsg.includes(translations[window.currentLang].early_by) ||
+        delayMsg.includes(translations[window.currentLang].on_time) ||
         delayMsg.toLowerCase().includes("anticipo") ||
         delayMsg.toLowerCase().includes("orario") ||
         delayMsg.toLowerCase().includes("early");
@@ -1037,7 +1248,7 @@ function render(data) {
 
     const refreshBtn = createNode('button', {
         className: 'refresh-btn',
-        title: currentLang === 'zh' ? '刷新' : currentLang === 'it' ? 'Aggiorna' : 'Refresh',
+        title: window.currentLang === 'zh' ? '刷新' : window.currentLang === 'it' ? 'Aggiorna' : 'Refresh',
         type: 'button'
     }, [createIcon('refresh')]);
     refreshBtn.addEventListener('click', refreshTrainData);
@@ -1073,7 +1284,7 @@ function render(data) {
         : createNode('b', { text: data.compNumeroTreno });
 
     const trainNumberChildren = [
-        createNode('span', { className: 'train-meta-label', text: `${translations[currentLang].train_num}: ` }),
+        createNode('span', { className: 'train-meta-label', text: `${translations[window.currentLang].train_num}: ` }),
         trainNumBadge
     ];
     const trenordLineBadge = createTrenordLineBadge(getCurrentTrenordLineForTrain(data));
@@ -1137,8 +1348,8 @@ function render(data) {
         const isLast = i === totalStations - 1;
         const isFirst = i === 0;
         const isSwissStop = f.source === 'swiss';
-        const partialState = partialCancellationStates[i] || {};
-        const nextPartialState = partialCancellationStates[i + 1] || {};
+        const partialState = partialCancellationStates[i] || { cancelled: false, boundary: '' };
+        const nextPartialState = partialCancellationStates[i + 1] || { cancelled: false, boundary: '' };
 
         let dotClass = 'dot-future';
         let lineClass = 'line-future';
@@ -1169,15 +1380,15 @@ function render(data) {
         const platformNode = createNode('span', { className: 'plat-normal', text: ePlat || pPlat || "--" });
 
         const stayMinutes = (f.partenza_teorica && f.arrivo_teorico) ? Math.round((f.partenza_teorica - f.arrivo_teorico) / 60000) : null;
-        const stayTime = stayMinutes ? `${stayMinutes} ${translations[currentLang].minutes}` : "N/A";
+        const stayTime = stayMinutes ? `${stayMinutes} ${translations[window.currentLang].minutes}` : "N/A";
 
         let directionBadge = null;
         if (f.orientamento) {
             let directionText = '';
             if (f.orientamento === 'A') {
-                directionText = `Executive ${translations[currentLang].in_tail}`;
+                directionText = `Executive ${translations[window.currentLang].in_tail}`;
             } else if (f.orientamento === 'B') {
-                directionText = `Executive ${translations[currentLang].in_head}`;
+                directionText = `Executive ${translations[window.currentLang].in_head}`;
             } else {
                 directionText = f.orientamento;
             }
@@ -1185,7 +1396,7 @@ function render(data) {
         }
 
         const sourceBadge = isSwissStop
-            ? createNode('span', { className: 'source-badge source-badge-swiss', text: translations[currentLang].swiss_source || 'CH' })
+            ? createNode('span', { className: 'source-badge source-badge-swiss', text: translations[window.currentLang].swiss_source || 'CH' })
             : null;
         const stationNameNode = isSwissStop
             ? createNode('span', { className: 'station-name-static', text: f.stazione })
@@ -1238,7 +1449,7 @@ function render(data) {
             ]));
         }
         platformChildren.push(
-            createNode('div', { className: 'text-[0.8rem] uppercase tracking-wider font-semibold opacity-60 mb-1.5', text: translations[currentLang].platform }),
+            createNode('div', { className: 'text-[0.8rem] uppercase tracking-wider font-semibold opacity-60 mb-1.5', text: translations[window.currentLang].platform }),
             createNode('div', { className: 'text-2xl' }, [platformNode]),
             isSwissStop
                 ? createNode('div', {
@@ -1275,14 +1486,14 @@ function render(data) {
 
 const SC_SKIP_CATS = ['IC', 'ICN', 'EC', 'EN'];
 const SC_FULL_CATS = ['FR', 'FA', 'FB'];
-const DESC_TO_CAT = {
+const DESC_TO_CAT: Record<string, string> = {
     'FRECCIAROSSA': 'FR', 'FRECCIARGENTO': 'FA', 'FRECCIABIANCA': 'FB',
     'INTERCITY': 'IC', 'INTERCITY NOTTE': 'ICN',
     'REGIONALE': 'REG', 'REGIONALE VELOCE': 'RV', 'METROPOLITANO': 'MET',
     'EUROCITY': 'EC', 'EURONIGHT': 'EN'
 };
 
-function resolveTrainCategory(data) {
+function resolveTrainCategory(data: TrainData): string {
     const comp = (data.compNumeroTreno || '').trim().toUpperCase();
     if (comp.includes('EC FR')) return 'FR';
     if (comp.includes('TS')) return 'TS';
@@ -1302,22 +1513,24 @@ function resolveTrainCategory(data) {
     return '';
 }
 
-function isTrenordTrain(data) {
+function isTrenordTrain(data: TrainData | null): boolean {
+    if (!data) return false;
     if (Number(data?.codiceCliente) === 63) return true;
     const clientMap = window.CLIENT_MAP || {};
-    const operator = clientMap[data?.codiceCliente] || clientMap[Number(data?.codiceCliente)];
+    const clientCode = String(data.codiceCliente ?? '');
+    const operator = clientMap[clientCode];
     return String(operator || '').toUpperCase() === 'TRENORD';
 }
 
-function getCurrentTrainNumber(data) {
+function getCurrentTrainNumber(data: TrainData | null): string {
     return String(data?.numeroTreno || '').replace(/\D+/g, '');
 }
 
-function normalizeTrenordLineCode(line) {
+function normalizeTrenordLineCode(line: unknown): string {
     return String(line || '').trim().toUpperCase().replace(/\s+/g, '').replace(/-/g, '_');
 }
 
-function resolveTrenordLineBadgeSpec(line) {
+function resolveTrenordLineBadgeSpec(line: unknown): { label: string; color: string; textColor: string } | null {
     const rawCode = normalizeTrenordLineCode(line);
     if (!rawCode) return null;
 
@@ -1343,7 +1556,7 @@ function resolveTrenordLineBadgeSpec(line) {
     };
 }
 
-function getReadableBadgeTextColor(hexColor) {
+function getReadableBadgeTextColor(hexColor: unknown): string {
     const hex = String(hexColor || '').replace('#', '');
     if (!/^[\da-f]{6}$/i.test(hex)) return '#ffffff';
     const red = parseInt(hex.slice(0, 2), 16);
@@ -1353,7 +1566,7 @@ function getReadableBadgeTextColor(hexColor) {
     return luminance > 150 ? '#111827' : '#ffffff';
 }
 
-function createTrenordLineBadge(line) {
+function createTrenordLineBadge(line: unknown): HTMLSpanElement | null {
     const spec = resolveTrenordLineBadgeSpec(line);
     if (!spec) return null;
     return createNode('span', {
@@ -1368,7 +1581,7 @@ function createTrenordLineBadge(line) {
     });
 }
 
-function getCurrentTrenordLineForTrain(data) {
+function getCurrentTrenordLineForTrain(data: TrainData): string | null {
     if (!isTrenordTrain(data)) return null;
     const trainNumber = getCurrentTrainNumber(data);
     if (!trainNumber || currentTrenordLineInfo?.trainNumber !== trainNumber) return null;
@@ -1376,14 +1589,14 @@ function getCurrentTrenordLineForTrain(data) {
     return currentTrenordLineInfo.line || null;
 }
 
-function rememberTrenordLine(trainNumber, date, line) {
+function rememberTrenordLine(trainNumber: string, date: string, line: unknown): void {
     const lineCode = normalizeTrenordLineCode(line);
     if (!trainNumber || !lineCode) return;
     currentTrenordLineInfo = { trainNumber, date, line: lineCode };
     upsertTrenordLineBadge(lineCode);
 }
 
-function upsertTrenordLineBadge(line) {
+function upsertTrenordLineBadge(line: unknown): void {
     const meta = document.querySelector('.train-number-meta');
     if (!meta) return;
 
@@ -1394,7 +1607,7 @@ function upsertTrenordLineBadge(line) {
     if (badge) meta.append(badge);
 }
 
-function todayInRome() {
+function todayInRome(): string {
     return new Intl.DateTimeFormat('sv-SE', {
         timeZone: 'Europe/Rome',
         year: 'numeric',
@@ -1403,7 +1616,7 @@ function todayInRome() {
     }).format(new Date());
 }
 
-function getTrainOperationDate(data) {
+function getTrainOperationDate(data: TrainData): string {
     if (data?.dataPartenzaTrenoAsDate && /^\d{4}-\d{2}-\d{2}$/.test(data.dataPartenzaTrenoAsDate)) {
         return data.dataPartenzaTrenoAsDate;
     }
@@ -1416,7 +1629,7 @@ function getTrainOperationDate(data) {
     return todayInRome();
 }
 
-function fetchTrafficInformation(data) {
+function fetchTrafficInformation(data: TrainData): void {
     if (isTrenordTrain(data)) {
         fetchTrenordTrafficInformation(data);
         return;
@@ -1424,14 +1637,14 @@ function fetchTrafficInformation(data) {
     fetchSmartCaring(data.numeroTreno);
 }
 
-async function fetchTrenordTrafficInformation(trainData) {
+async function fetchTrenordTrafficInformation(trainData: TrainData): Promise<void> {
     const card = document.getElementById('smartCaringCard');
     const trainNumber = getCurrentTrainNumber(trainData);
     const date = getTrainOperationDate(trainData);
     if (!card || !TRENORD_TRAFFIC_BASE || !trainNumber || !date) return;
 
     card.style.display = 'block';
-    const t = translations[currentLang];
+    const t = translations[window.currentLang];
     clearNode(card);
     card.append(createNode('div', { className: 'sc-loading' }, [
         createNode('span', { className: 'loading loading-spinner loading-sm text-primary' }),
@@ -1441,7 +1654,7 @@ async function fetchTrenordTrafficInformation(trainData) {
     try {
         const requestUrl = `${TRENORD_TRAFFIC_BASE}?train=${encodeURIComponent(trainNumber)}&date=${encodeURIComponent(date)}`;
         const res = await fetch(requestUrl, { headers: { accept: 'application/json' } });
-        const data = await res.json();
+        const data = asRecord(await res.json()) as TrenordTrafficPayload;
 
         if (getCurrentTrainNumber(currentTrainData) !== trainNumber) return;
         if (data?.line) rememberTrenordLine(trainNumber, date, data.line);
@@ -1468,7 +1681,7 @@ async function fetchTrenordTrafficInformation(trainData) {
     }
 }
 
-async function fetchSmartCaring(trainNumber) {
+async function fetchSmartCaring(trainNumber: string | number | null | undefined): Promise<void> {
     const card = document.getElementById('smartCaringCard');
     if (!card || !NOTIFY_BASE) return;
 
@@ -1479,7 +1692,7 @@ async function fetchSmartCaring(trainNumber) {
     }
 
     card.style.display = 'block';
-    const t = translations[currentLang];
+    const t = translations[window.currentLang];
     clearNode(card);
     card.append(createNode('div', { className: 'sc-loading' }, [
         createNode('span', { className: 'loading loading-spinner loading-sm text-primary' }),
@@ -1489,7 +1702,7 @@ async function fetchSmartCaring(trainNumber) {
     try {
         const res = await fetch(`${NOTIFY_BASE}?train=${trainNumber}`);
         if (!res.ok) throw new Error('API error');
-        const data = await res.json();
+        const data = asRecord(await res.json()) as SmartCaringPayload;
         if (data.error) throw new Error(data.error);
         const isFullMode = SC_FULL_CATS.includes(currentTrainCategory);
         const hasNotifications = data.today?.length || data.recent?.length;
@@ -1505,7 +1718,7 @@ async function fetchSmartCaring(trainNumber) {
     }
 }
 
-function getShortMonth(date, lang) {
+function getShortMonth(date: Date, lang: Language): string {
     const m = date.getMonth();
     if (lang === 'zh') return `${m + 1}月`;
     const en = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -1513,14 +1726,14 @@ function getShortMonth(date, lang) {
     return lang === 'it' ? it[m] : en[m];
 }
 
-function formatTrenordTrafficTitle(data) {
-    const t = translations[currentLang];
+function formatTrenordTrafficTitle(data: TrenordTrafficPayload): string {
+    const t = translations[window.currentLang];
     const line = data?.direttriceDescription || data?.direttrice || 'Trenord';
     return String(t.trenord_traffic_title || '{line} line notices').replace('{line}', line);
 }
 
-function createTrenordTrafficTitleNodes(data) {
-    const t = translations[currentLang];
+function createTrenordTrafficTitleNodes(data: TrenordTrafficPayload): NodeChild[] {
+    const t = translations[window.currentLang];
     const line = data?.direttriceDescription || data?.direttrice || 'Trenord';
     const template = String(t.trenord_traffic_title || 'Traffic information · {line}');
     if (!template.includes('{line}')) {
@@ -1529,18 +1742,18 @@ function createTrenordTrafficTitleNodes(data) {
 
     const [before, ...afterParts] = template.split('{line}');
     const after = afterParts.join('{line}');
-    const children = [];
+    const children: NodeChild[] = [];
     if (before) children.push(createNode('span', { className: 'trenord-traffic-title-main', text: before }));
     children.push(createNode('span', { className: 'trenord-traffic-line', text: line }));
     if (after) children.push(createNode('span', { className: 'trenord-traffic-title-main', text: after }));
     return children;
 }
 
-function formatTrenordNoticeDate(value) {
+function formatTrenordNoticeDate(value: unknown): string {
     if (!value) return '';
-    const date = new Date(value);
+    const date = new Date(String(value));
     if (Number.isNaN(date.getTime())) return String(value);
-    const locale = currentLang === 'zh' ? 'zh-CN' : currentLang === 'it' ? 'it-IT' : 'en-GB';
+    const locale = window.currentLang === 'zh' ? 'zh-CN' : window.currentLang === 'it' ? 'it-IT' : 'en-GB';
     return new Intl.DateTimeFormat(locale, {
         timeZone: 'Europe/Rome',
         year: 'numeric',
@@ -1551,10 +1764,10 @@ function formatTrenordNoticeDate(value) {
     }).format(date);
 }
 
-function createTrenordNoticeLink(url, index, total) {
-    const safeUrl = /^https?:\/\//i.test(String(url || '')) ? url : '';
+function createTrenordNoticeLink(url: unknown, index: number, total: number): HTMLAnchorElement | null {
+    const safeUrl = /^https?:\/\//i.test(String(url || '')) ? String(url) : '';
     if (!safeUrl) return null;
-    const t = translations[currentLang];
+    const t = translations[window.currentLang];
     const label = total > 1 ? `${t.trenord_notice_link} ${index + 1}` : t.trenord_notice_link;
     return createNode('a', {
         className: 'trenord-notice-link',
@@ -1565,11 +1778,11 @@ function createTrenordNoticeLink(url, index, total) {
     });
 }
 
-function renderTrenordTrafficInformation(data) {
+function renderTrenordTrafficInformation(data: TrenordTrafficPayload): void {
     const card = document.getElementById('smartCaringCard');
     if (!card || !data) return;
 
-    const t = translations[currentLang];
+    const t = translations[window.currentLang];
     const notices = Array.isArray(data.notices) ? data.notices : [];
     const wasCollapsed = card.querySelector('.sc-body-wrap') === null
         ? true
@@ -1588,13 +1801,13 @@ function renderTrenordTrafficInformation(data) {
 
     const bodyChildren = [];
     if (notices.length) {
-        const list = createNode('div', { className: 'trenord-notices-list' }, notices.map((notice) => {
+        const list = createNode('div', { className: 'trenord-notices-list' }, notices.map((notice: TrenordTrafficNotice) => {
             const severityLevel = notice.severityLevel || 'info';
             const severityText = notice.severityDescription || t.trenord_severity_info;
             const dateText = formatTrenordNoticeDate(notice.date);
             const urls = Array.isArray(notice.urls) ? notice.urls : [];
             const links = urls
-                .map((url, index) => createTrenordNoticeLink(url, index, urls.length))
+                .map((url: unknown, index: number) => createTrenordNoticeLink(url, index, urls.length))
                 .filter(Boolean);
 
             return createNode('div', { className: 'trenord-notice' }, [
@@ -1633,20 +1846,22 @@ function renderTrenordTrafficInformation(data) {
     card.style.display = 'block';
 }
 
-function renderSmartCaring(data) {
+function renderSmartCaring(data: SmartCaringPayload): void {
     const card = document.getElementById('smartCaringCard');
     if (!card || !data) return;
 
-    const t = translations[currentLang];
+    const t = translations[window.currentLang];
     const isFullMode = SC_FULL_CATS.includes(currentTrainCategory);
 
-    const hasToday = data.today && data.today.length > 0;
-    const hasRecent = data.recent && data.recent.length > 0;
+    const todayNotices = data.today || [];
+    const recentNotices = data.recent || [];
+    const hasToday = todayNotices.length > 0;
+    const hasRecent = recentNotices.length > 0;
     const notifTitle = hasToday ? t.sc_today : t.sc_recent;
     let notificationBody = null;
 
     if (hasToday) {
-        notificationBody = createNode('div', { className: 'sc-notes-list' }, data.today.map(n => {
+        notificationBody = createNode('div', { className: 'sc-notes-list' }, todayNotices.map((n: SmartCaringNotice) => {
             const time = new Date(n.insertTimestamp).toLocaleTimeString('it-IT', {
                 hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome'
             });
@@ -1656,11 +1871,11 @@ function renderSmartCaring(data) {
             ]);
         }));
     } else if (hasRecent) {
-        notificationBody = createNode('div', { className: 'sc-notes-list' }, data.recent.map(n => {
+        notificationBody = createNode('div', { className: 'sc-notes-list' }, recentNotices.map((n: SmartCaringNotice) => {
             const d = new Date(n.insertTimestamp);
-            const monthStr = getShortMonth(d, currentLang);
+            const monthStr = getShortMonth(d, window.currentLang);
             const dayNum = d.getDate();
-            const dateStr = currentLang === 'zh' ? `${monthStr}${dayNum}号` : `${monthStr} ${dayNum}`;
+            const dateStr = window.currentLang === 'zh' ? `${monthStr}${dayNum}号` : `${monthStr} ${dayNum}`;
             const time = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' });
             return createNode('div', { className: 'sc-note' }, [
                 createNode('span', { className: 'sc-note-date', text: dateStr }),
@@ -1682,25 +1897,25 @@ function renderSmartCaring(data) {
 
     if (isFullMode) {
         const now = new Date();
-        const days = [];
+        const days: Array<{ date: Date; dateKey: string; delay: number; notifications: number; reasons: string[] }> = [];
         for (let i = 13; i >= 0; i--) {
             const d = new Date(now);
             d.setDate(d.getDate() - i);
             const dateKey = d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
-            const histDay = data.history ? data.history.find(h => h.date === dateKey) : null;
+            const histDay = data.history ? data.history.find((h: SmartCaringHistoryDay) => h.date === dateKey) : null;
             days.push({
                 date: d,
                 dateKey,
-                delay: histDay ? histDay.maxDelay : 0,
-                notifications: histDay ? histDay.notifications : 0,
-                reasons: histDay ? histDay.reasons : []
+                delay: histDay?.maxDelay ?? 0,
+                notifications: histDay?.notifications ?? 0,
+                reasons: histDay?.reasons ?? []
             });
         }
 
-        const maxDelay = Math.max(...days.map(d => d.delay), 1);
+        const maxDelay = Math.max(...days.map((d) => d.delay), 1);
 
         const chart = createNode('div', { className: 'sc-chart' });
-        days.forEach(d => {
+        days.forEach((d) => {
             const barHeight = d.delay > 0 ? Math.max(18, Math.round((d.delay / maxDelay) * 48) + 8) : 6;
             let colorClass = 'sc-level-0';
             if (d.delay > 30) colorClass = 'sc-level-3';
@@ -1708,7 +1923,7 @@ function renderSmartCaring(data) {
             else if (d.delay > 0) colorClass = 'sc-level-1';
 
             const dayNum = d.date.getDate();
-            const monthAbbr = getShortMonth(d.date, currentLang);
+            const monthAbbr = getShortMonth(d.date, window.currentLang);
             const tipDelay = d.delay > 0 ? `+${d.delay}min` : 'OK';
             const tipReason = (d.delay > 0 && d.reasons.length) ? d.reasons[0] : '';
 
@@ -1745,17 +1960,18 @@ function renderSmartCaring(data) {
                 createNode('span', { text: t.sc_all_clear })
             ]);
         } else {
-            const rateColor = stats.onTimeRate >= 70 ? 'var(--color-info)' : stats.onTimeRate >= 40 ? 'var(--color-warning)' : 'var(--color-error)';
-            const statValue = (value, suffix = '') => {
+            const onTimeRate = stats.onTimeRate ?? 0;
+            const rateColor = onTimeRate >= 70 ? 'var(--color-info)' : onTimeRate >= 40 ? 'var(--color-warning)' : 'var(--color-error)';
+            const statValue = (value: unknown, suffix = ''): HTMLSpanElement => {
                 const valueNode = createNode('span', { className: 'sc-stat-value', text: value });
                 if (suffix) valueNode.append(createNode('small', { text: suffix }));
                 return valueNode;
             };
-            const makeStat = (valueNode, label) => createNode('div', { className: 'sc-stat' }, [
+            const makeStat = (valueNode: HTMLElement, label: unknown): HTMLDivElement => createNode('div', { className: 'sc-stat' }, [
                 valueNode,
                 createNode('span', { className: 'sc-stat-label', text: label })
             ]);
-            const onTimeValue = statValue(`${stats.onTimeRate}%`);
+            const onTimeValue = statValue(`${onTimeRate}%`);
             onTimeValue.style.color = rateColor;
             statsNode = createNode('div', { className: 'sc-stats-row' }, [
                 makeStat(onTimeValue, t.sc_ontime_rate),
@@ -1796,7 +2012,7 @@ function renderSmartCaring(data) {
     card.style.display = 'block';
 }
 
-function toggleScTooltip(e, col) {
+function toggleScTooltip(e: Event, col: HTMLElement): void {
     e.stopPropagation();
     const tooltip = document.getElementById('scTooltip');
     if (!tooltip) return;
@@ -1804,7 +2020,7 @@ function toggleScTooltip(e, col) {
     const wasActive = col.classList.contains('sc-active');
     const chart = col.closest('.sc-chart');
     if (!chart) return;
-    chart.querySelectorAll('.sc-bar-col').forEach(c => c.classList.remove('sc-active'));
+    chart.querySelectorAll('.sc-bar-col').forEach((c: Element) => c.classList.remove('sc-active'));
     if (wasActive) { hideScTooltip(); return; }
 
     col.classList.add('sc-active');
@@ -1816,6 +2032,7 @@ function toggleScTooltip(e, col) {
     if (reason) tooltip.append(createNode('span', { className: 'sc-tooltip-reason', text: reason }));
 
     const bar = col.querySelector('.sc-bar');
+    if (!bar) return;
     const rect = bar.getBoundingClientRect();
 
     tooltip.classList.add('sc-tooltip-show');
@@ -1837,7 +2054,7 @@ function hideScTooltip() {
 }
 
 document.addEventListener('click', (e) => {
-    if (!e.target.closest('.sc-bar-col')) hideScTooltip();
+    if (!isElementTarget(e.target) || !e.target.closest('.sc-bar-col')) hideScTooltip();
 });
 window.addEventListener('scroll', hideScTooltip, { passive: true });
 window.addEventListener('resize', hideScTooltip);
@@ -1850,16 +2067,36 @@ function initApp() {
     loadRecentSearches();
 }
 
+function bindHomeControls() {
+    const homeLogoLink = document.getElementById('homeLogoLink');
+    if (homeLogoLink && !homeLogoLink.dataset.btBound) {
+        homeLogoLink.dataset.btBound = 'true';
+        homeLogoLink.addEventListener('click', (event) => {
+            event.preventDefault();
+            goHome();
+        });
+    }
+
+    const searchModeToggle = document.getElementById('searchModeToggle');
+    if (searchModeToggle && !searchModeToggle.dataset.btBound) {
+        searchModeToggle.dataset.btBound = 'true';
+        searchModeToggle.addEventListener('click', () => {
+            switchSearchMode(searchMode === 'train' ? 'station' : 'train');
+        });
+    }
+}
+
 
 document.addEventListener('astro:page-load', () => {
     initApp();
+    bindHomeControls();
     fetchStatistiche();
 
     const trainInput = document.getElementById('trainSearch');
     if (trainInput) {
         trainInput.addEventListener('keydown', async (e) => {
             if (e.key === 'Enter') {
-                const input = e.target.value.trim();
+                const input = (e.currentTarget as HTMLInputElement).value.trim();
                 if (input) startSearch(input);
             }
         });
@@ -1869,7 +2106,7 @@ document.addEventListener('astro:page-load', () => {
         window._mainInitialized = true;
 
         document.addEventListener('click', (e) => {
-            if (!e.target.closest('.lang-switch') && !e.target.closest('.theme-switch')) {
+            if (!isElementTarget(e.target) || (!e.target.closest('.lang-switch') && !e.target.closest('.theme-switch'))) {
                 const langMenu = document.getElementById('langMenu');
                 const themeMenu = document.getElementById('themeMenu');
                 if (langMenu) langMenu.classList.remove('show');
@@ -1878,18 +2115,18 @@ document.addEventListener('astro:page-load', () => {
         });
 
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-            if (currentTheme === 'auto') {
-                applyTheme();
+            if (window.currentTheme === 'auto') {
+                window.applyTheme?.();
             }
         });
 
         document.addEventListener('click', function (e) {
-            const stationLink = e.target.closest('.station-link');
+            const stationLink = isElementTarget(e.target) ? e.target.closest('.station-link') : null;
             if (stationLink) {
                 const stationId = stationLink.getAttribute('data-station-id');
                 const stationName = stationLink.getAttribute('data-station-name');
                 if (stationId && stationName) {
-                    goToStationBoard(stationId, stationName);
+                    navigateToStationBoard(stationId, stationName);
                 }
             }
         });
@@ -1902,7 +2139,7 @@ document.addEventListener('astro:page-load', () => {
     const trainParam = new URLSearchParams(window.location.search).get('train');
     if (!trainParam) return;
     const trainNumber = trainParam.trim();
-    const trainInput = document.getElementById('trainSearch');
+    const trainInput = document.getElementById('trainSearch') as HTMLInputElement | null;
     if (!trainInput) return;
     trainInput.value = trainNumber;
     // 短暂延迟确保 common.js 的 astro:page-load 回调（语言初始化）已先执行

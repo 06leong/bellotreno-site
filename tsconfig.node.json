@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM"],
+    "types": ["node", "@cloudflare/workers-types"]
+  },
+  "include": [
+    "src/types/cloudflare-pages.d.ts",
+    "scripts/**/*.ts",
+    "tests/js/**/*.ts"
+  ]
+}

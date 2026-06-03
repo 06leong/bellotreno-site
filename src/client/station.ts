@@ -1,8 +1,72 @@
 
 // BelloTreno © 2026
 
+import { registerStationNavigationGlobal, type StationBoardType } from './station-navigation.js';
 
-function getItalianTimeString() {
+export {};
+
+const translations = window.translations || {};
+type Language = NonNullable<Window["currentLang"]>;
+
+interface StationBoardTrain {
+    arrivoReale?: number | null;
+    binarioEffettivoArrivoDescrizione?: string | null;
+    binarioEffettivoPartenzaDescrizione?: string | null;
+    binarioProgrammatoArrivoDescrizione?: string | null;
+    binarioProgrammatoPartenzaDescrizione?: string | null;
+    compNumeroTreno?: string | null;
+    compOrarioArrivo?: string | null;
+    compOrarioEffettivoArrivo?: string | null;
+    compOrarioPartenza?: string | null;
+    destinazione?: string | null;
+    destinazioneEstera?: string | null;
+    inStazione?: boolean | null;
+    nonPartito?: boolean | null;
+    numeroTreno?: string | number | null;
+    origine?: string | null;
+    origineEstera?: string | null;
+    provvedimento?: number | string | null;
+    ritardo?: number | null;
+    [key: string]: unknown;
+}
+
+interface FormattedDepartureData {
+    destination: string;
+    inStazione: boolean;
+    platformHtml: string;
+    rawData: StationBoardTrain;
+    scheduledTime: string;
+    status: string;
+    statusColor: string;
+    trainNumber: string;
+}
+
+interface FormattedArrivalData {
+    actualTime: string;
+    inStazione: boolean;
+    origin: string;
+    platformHtml: string;
+    rawData: StationBoardTrain;
+    scheduledTime: string;
+    status: string;
+    statusColor: string;
+    trainNumber: string;
+}
+
+interface BoardColumn {
+    center: boolean;
+    label: string;
+    width: string;
+}
+
+interface SwissLookupData {
+    available?: boolean;
+    stops?: Array<{ name?: string | null }>;
+}
+
+registerStationNavigationGlobal();
+
+function getItalianTimeString(): string {
     const now = new Date();
 
     const italianTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Rome' }));
@@ -37,18 +101,7 @@ function getItalianTimeString() {
 }
 
 
-function goToStationBoard(stationId, stationName) {
-    
-    const params = new URLSearchParams({
-        id: stationId,
-        name: stationName,
-        type: 'partenze' 
-    });
-    window.location.href = `/station?${params.toString()}`;
-}
-
-
-async function fetchStationBoard(stationId, type = 'partenze') {
+async function fetchStationBoard(stationId: string, type: StationBoardType = 'partenze'): Promise<StationBoardTrain[]> {
     const timeString = getItalianTimeString();
     const encodedTime = encodeURIComponent(timeString);
     
@@ -61,7 +114,7 @@ async function fetchStationBoard(stationId, type = 'partenze') {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         const data = await response.json();
-        return data;
+        return Array.isArray(data) ? data : [];
     } catch (error) {
         console.error('Failed to fetch station board:', error);
         throw error;
@@ -71,7 +124,7 @@ async function fetchStationBoard(stationId, type = 'partenze') {
 const OPERATOR_MAP = window.CLIENT_MAP || {};
 
 
-function formatTrainNumber(trainNumberStr) {
+function formatTrainNumber(trainNumberStr: string): string {
     if (!trainNumberStr) return '';
 
     trainNumberStr = trainNumberStr.trim();
@@ -108,7 +161,7 @@ const STATION_TRANSLATIONS = {
     it: { cancelled: 'CANCELLATO', not_departed: 'Non partito', delayed: 'Ritardo', early: 'In anticipo', on_time: 'In orario', minutes: 'min' }
 };
 
-function formatDepartureData(train, currentLang = 'zh', currentStation = '') {
+function formatDepartureData(train: StationBoardTrain, currentLang: Language = 'zh', currentStation = ''): FormattedDepartureData {
     const t = STATION_TRANSLATIONS[currentLang] || STATION_TRANSLATIONS.zh;
 
     
@@ -125,6 +178,7 @@ function formatDepartureData(train, currentLang = 'zh', currentStation = '') {
     
     let status = '';
     let statusColor = 'green';
+    const delayMinutes = Number(train.ritardo ?? 0);
 
     if (train.provvedimento == 1) {
         status = t.cancelled;
@@ -132,8 +186,8 @@ function formatDepartureData(train, currentLang = 'zh', currentStation = '') {
     } else if (train.nonPartito === true) {
         status = t.not_departed;
         statusColor = 'grey';
-    } else if (train.ritardo > 0) {
-        status = `${t.delayed} ${train.ritardo} ${t.minutes}`;
+    } else if (delayMinutes > 0) {
+        status = `${t.delayed} ${delayMinutes} ${t.minutes}`;
         statusColor = 'red';
     } else {
         status = t.on_time;
@@ -173,7 +227,7 @@ function formatDepartureData(train, currentLang = 'zh', currentStation = '') {
 }
 
 
-function formatArrivalData(train, currentLang = 'zh', currentStation = '') {
+function formatArrivalData(train: StationBoardTrain, currentLang: Language = 'zh', currentStation = ''): FormattedArrivalData {
     const t = STATION_TRANSLATIONS[currentLang] || STATION_TRANSLATIONS.zh;
 
     
@@ -201,15 +255,16 @@ function formatArrivalData(train, currentLang = 'zh', currentStation = '') {
     
     let status = '';
     let statusColor = 'green';
+    const delayMinutes = Number(train.ritardo ?? 0);
 
     if (train.provvedimento == 1) {
         status = t.cancelled;
         statusColor = 'red';
-    } else if (train.ritardo > 0) {
-        status = `${t.delayed} ${train.ritardo} ${t.minutes}`;
+    } else if (delayMinutes > 0) {
+        status = `${t.delayed} ${delayMinutes} ${t.minutes}`;
         statusColor = 'red';
-    } else if (train.ritardo < 0) {
-        status = `${t.early} ${Math.abs(train.ritardo)} ${t.minutes}`;
+    } else if (delayMinutes < 0) {
+        status = `${t.early} ${Math.abs(delayMinutes)} ${t.minutes}`;
         statusColor = 'green';
     } else {
         status = t.on_time;
@@ -250,23 +305,6 @@ function formatArrivalData(train, currentLang = 'zh', currentStation = '') {
 }
 
 
-if (typeof module !== 'undefined' && module.exports) {
-    
-    module.exports = {
-        getItalianTimeString,
-        goToStationBoard,
-        fetchStationBoard,
-        formatDepartureData,
-        formatArrivalData
-    };
-} else {
-    
-    window.getItalianTimeString = getItalianTimeString;
-    window.goToStationBoard = goToStationBoard;
-    window.fetchStationBoard = fetchStationBoard;
-    window.formatDepartureData = formatDepartureData;
-    window.formatArrivalData = formatArrivalData;
-}
 // =============================================================
 // Station Board Page Logic
 // Moved from station.astro inline script for maintainability.
@@ -275,17 +313,32 @@ if (typeof module !== 'undefined' && module.exports) {
 
 let _stId = '';
 let _stName = '';
-let _stBoardType = 'partenze';
+let _stBoardType: StationBoardType = 'partenze';
 let _stBoardSeq = 0;
 const ST_SWISS_MAX_LOOKUPS = 10;
 
-/** Called from onclick attributes in station.astro HTML */
-window.switchBoardType = function (type) {
+function switchBoardType(type: StationBoardType): void {
     _stBoardType = type;
-    document.getElementById('btnPartenze').classList.toggle('active', type === 'partenze');
-    document.getElementById('btnArrivi').classList.toggle('active', type === 'arrivi');
-    _stLoadBoard();
-};
+    document.getElementById('btnPartenze')?.classList.toggle('active', type === 'partenze');
+    document.getElementById('btnArrivi')?.classList.toggle('active', type === 'arrivi');
+    void _stLoadBoard();
+}
+
+function isStationBoardType(value: string | undefined): value is StationBoardType {
+    return value === 'partenze' || value === 'arrivi';
+}
+
+function bindStationBoardTypeControls(): void {
+    document.querySelectorAll<HTMLElement>('[data-board-type]').forEach((button) => {
+        if (button.dataset.btBound) return;
+        button.dataset.btBound = 'true';
+        button.addEventListener('click', () => {
+            if (isStationBoardType(button.dataset.boardType)) {
+                switchBoardType(button.dataset.boardType);
+            }
+        });
+    });
+}
 
 async function _stLoadBoard() {
     const loadingEl = document.getElementById('loadingIndicator');
@@ -303,8 +356,10 @@ async function _stLoadBoard() {
 
         if (!data || data.length === 0) {
             const t = (typeof translations !== 'undefined' && translations[window.currentLang]) || {};
-            errorEl.querySelector('span').textContent = 'info';
-            errorEl.querySelector('p').textContent    = t.no_trains || 'No trains at this time';
+            const iconEl = errorEl.querySelector('span');
+            const messageEl = errorEl.querySelector('p');
+            if (iconEl) iconEl.textContent = 'info';
+            if (messageEl) messageEl.textContent = t.no_trains || 'No trains at this time';
             errorEl.style.display   = 'block';
             loadingEl.style.display = 'none';
             return;
@@ -321,22 +376,22 @@ async function _stLoadBoard() {
     }
 }
 
-function _stEsc(value) {
+function _stEsc(value: unknown): string {
     return window.escapeHtml ? window.escapeHtml(value) : String(value ?? '');
 }
 
-function _stTrainNumber(train) {
+function _stTrainNumber(train: StationBoardTrain): string {
     if (window.BelloSwiss?.getTrainNumber) return window.BelloSwiss.getTrainNumber(train);
     return String(train?.numeroTreno || train?.compNumeroTreno || '').replace(/\D+/g, '');
 }
 
-function _stOperationDate(train) {
+function _stOperationDate(train: StationBoardTrain): string {
     return window.BelloSwiss?.getOperationDate?.(train)
         || window.BelloSwiss?.getTodayInZurich?.()
         || new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Zurich' });
 }
 
-function _stVisibleRouteName(train) {
+function _stVisibleRouteName(train: StationBoardTrain): string {
     if (_stBoardType === 'partenze') {
         return (train.destinazioneEstera &&
             train.destinazioneEstera !== train.origine &&
@@ -350,7 +405,7 @@ function _stVisibleRouteName(train) {
         ? train.origineEstera : (train.origine || '');
 }
 
-function _stShouldTrySwiss(train) {
+function _stShouldTrySwiss(train: StationBoardTrain): boolean {
     if (!window.BelloSwiss) return false;
     const visibleRoute = _stVisibleRouteName(train);
     const category = window.BelloSwiss.getCategory ? window.BelloSwiss.getCategory(train) : '';
@@ -361,14 +416,14 @@ function _stShouldTrySwiss(train) {
     return false;
 }
 
-function _stSwissTerminalName(swissData) {
+function _stSwissTerminalName(swissData: SwissLookupData): string {
     const stops = Array.isArray(swissData?.stops) ? swissData.stops : [];
     if (!stops.length) return '';
     const terminal = _stBoardType === 'partenze' ? stops[stops.length - 1] : stops[0];
     return terminal?.name || '';
 }
 
-function _stShouldReplaceRouteName(currentName, swissName) {
+function _stShouldReplaceRouteName(currentName: string, swissName: string): boolean {
     if (!swissName || !window.BelloSwiss) return false;
     const currentKey = currentName ? window.BelloSwiss.normalizeStationName(currentName) : '';
     const swissKey = window.BelloSwiss.normalizeStationName(swissName);
@@ -379,8 +434,8 @@ function _stShouldReplaceRouteName(currentName, swissName) {
     return Boolean(window.BelloSwiss.isSwissBoundaryName?.(currentName));
 }
 
-async function _stEnhanceBoardWithSwiss(trains, boardSeq) {
-    if (!window.BelloSwiss || !Array.isArray(trains) || !trains.length) return;
+async function _stEnhanceBoardWithSwiss(trains: StationBoardTrain[], boardSeq: number): Promise<void> {
+    if (!window.BelloSwiss?.fetchSwissByTrainNumber || !Array.isArray(trains) || !trains.length) return;
 
     const candidates = trains
         .map((train, index) => ({ train, index }))
@@ -394,7 +449,7 @@ async function _stEnhanceBoardWithSwiss(trains, boardSeq) {
         const operationDate = _stOperationDate(train);
         if (!trainNumber || !operationDate) continue;
 
-        const swissData = await window.BelloSwiss.fetchSwissByTrainNumber(trainNumber, operationDate);
+        const swissData = await window.BelloSwiss.fetchSwissByTrainNumber(trainNumber, operationDate) as SwissLookupData;
         if (boardSeq !== _stBoardSeq) return;
         if (!swissData?.available) continue;
 
@@ -414,31 +469,31 @@ async function _stEnhanceBoardWithSwiss(trains, boardSeq) {
     }
 }
 
-function _stTextElement(tagName, text, className = '') {
+function _stTextElement<K extends keyof HTMLElementTagNameMap>(tagName: K, text: unknown, className = ''): HTMLElementTagNameMap[K] {
     const element = document.createElement(tagName);
     if (className) element.className = className;
-    element.textContent = text ?? '';
+    element.textContent = String(text ?? '');
     return element;
 }
 
-function _stReplaceChildren(element, children) {
+function _stReplaceChildren(element: Element, children: Node[]): void {
     if (typeof element.replaceChildren === 'function') {
         element.replaceChildren(...children);
         return;
     }
     element.textContent = '';
-    children.forEach((child) => element.appendChild(child));
+    children.forEach((child: Node) => element.appendChild(child));
 }
 
-function _stCreateCell(tagName, text, className, width = '') {
+function _stCreateCell(tagName: 'td' | 'th', text: unknown, className: string, width = ''): HTMLTableCellElement {
     const cell = document.createElement(tagName);
     cell.className = className;
     if (width) cell.style.width = width;
-    if (text !== undefined && text !== null) cell.textContent = text;
+    if (text !== undefined && text !== null) cell.textContent = String(text);
     return cell;
 }
 
-function _stAppendTrainBadge(cell, trainNumberStr) {
+function _stAppendTrainBadge(cell: HTMLElement, trainNumberStr: unknown): void {
     const raw = String(trainNumberStr || '').trim();
     if (!raw) {
         cell.textContent = '--';
@@ -476,7 +531,7 @@ function _stAppendTrainBadge(cell, trainNumberStr) {
     cell.appendChild(badge);
 }
 
-function _stAppendPlatform(cell, train, type) {
+function _stAppendPlatform(cell: HTMLElement, train: StationBoardTrain, type: StationBoardType): void {
     const actualPlatform = type === 'arrivi'
         ? train.binarioEffettivoArrivoDescrizione || ''
         : train.binarioEffettivoPartenzaDescrizione || '';
@@ -485,7 +540,7 @@ function _stAppendPlatform(cell, train, type) {
         : train.binarioProgrammatoPartenzaDescrizione || '';
     const inStation = train.inStazione === true;
 
-    function platformSpan(text, changed = false) {
+    function platformSpan(text: string, changed = false): HTMLSpanElement {
         const span = _stTextElement('span', text);
         if (inStation) span.classList.add('platform-pulse');
         if (changed) {
@@ -508,7 +563,7 @@ function _stAppendPlatform(cell, train, type) {
     cell.textContent = '--';
 }
 
-function _stRouteCell(text, index) {
+function _stRouteCell(text: string, index: number): HTMLTableCellElement {
     const cell = _stCreateCell('td', text, "text-[0.65rem] sm:text-sm align-middle whitespace-normal leading-tight px-1 sm:px-4");
     cell.dataset.routeCell = String(index);
     cell.style.fontFamily = "var(--app-font-heading)";
@@ -517,11 +572,11 @@ function _stRouteCell(text, index) {
     return cell;
 }
 
-function _stBuildBoardHeader(columns) {
+function _stBuildBoardHeader(columns: BoardColumn[]): HTMLTableSectionElement {
     const thead = document.createElement('thead');
     thead.className = 'bg-primary text-primary-content border-none';
     const row = document.createElement('tr');
-    columns.forEach((column, index) => {
+    columns.forEach((column: BoardColumn, index: number) => {
         const classes = `${column.center ? 'text-center ' : ''}py-2 sm:py-3 font-semibold text-[0.65rem] sm:text-sm${index < columns.length - 1 ? ' border-r border-primary-content/20' : ''}`;
         row.appendChild(_stCreateCell('th', column.label, classes, column.width));
     });
@@ -529,29 +584,46 @@ function _stBuildBoardHeader(columns) {
     return thead;
 }
 
-function _stBuildTrainRow(train, index) {
-    const formatted = _stBoardType === 'partenze'
-        ? formatDepartureData(train, window.currentLang, _stName)
-        : formatArrivalData(train, window.currentLang, _stName);
+function _stBuildTrainRow(train: StationBoardTrain, index: number): HTMLTableRowElement {
+    const isDepartures = _stBoardType === 'partenze';
     const trainNumber = train.numeroTreno || '';
     const row = document.createElement('tr');
     row.className = 'train-row hover cursor-pointer transition-colors border-b border-base-200 last:border-0';
     row.dataset.trainNumber = String(trainNumber);
 
-    row.appendChild(_stCreateCell('td', formatted.scheduledTime, 'text-center font-mono font-bold text-sm sm:text-xl align-middle whitespace-nowrap px-1 sm:px-4'));
+    let scheduledTime = '--:--';
+    let status = '';
+    let statusColor = 'green';
+
+    if (isDepartures) {
+        const formatted = formatDepartureData(train, window.currentLang, _stName);
+        scheduledTime = formatted.scheduledTime;
+        status = formatted.status;
+        statusColor = formatted.statusColor;
+    } else {
+        const formatted = formatArrivalData(train, window.currentLang, _stName);
+        scheduledTime = formatted.scheduledTime;
+        status = formatted.status;
+        statusColor = formatted.statusColor;
+    }
+
+    row.appendChild(_stCreateCell('td', scheduledTime, 'text-center font-mono font-bold text-sm sm:text-xl align-middle whitespace-nowrap px-1 sm:px-4'));
 
     const trainCell = _stCreateCell('td', null, 'text-center font-medium text-[0.65rem] sm:text-sm align-middle whitespace-normal px-1 sm:px-4');
     _stAppendTrainBadge(trainCell, train.compNumeroTreno || '');
     row.appendChild(trainCell);
 
-    row.appendChild(_stRouteCell(_stBoardType === 'partenze' ? formatted.destination : formatted.origin, index));
-
-    if (_stBoardType === 'arrivi') {
+    if (isDepartures) {
+        const formatted = formatDepartureData(train, window.currentLang, _stName);
+        row.appendChild(_stRouteCell(formatted.destination, index));
+    } else {
+        const formatted = formatArrivalData(train, window.currentLang, _stName);
+        row.appendChild(_stRouteCell(formatted.origin, index));
         row.appendChild(_stCreateCell('td', formatted.actualTime, 'text-center font-mono font-bold text-sm sm:text-xl align-middle whitespace-nowrap px-1 sm:px-4'));
     }
 
-    const statusCell = _stCreateCell('td', formatted.status, 'text-center font-medium text-[0.65rem] sm:text-sm align-middle px-1 sm:px-4 leading-tight');
-    statusCell.style.color = formatted.statusColor;
+    const statusCell = _stCreateCell('td', status, 'text-center font-medium text-[0.65rem] sm:text-sm align-middle px-1 sm:px-4 leading-tight');
+    statusCell.style.color = statusColor;
     row.appendChild(statusCell);
 
     const platformCell = _stCreateCell('td', null, 'text-center font-mono font-bold text-sm sm:text-lg align-middle px-1 sm:px-4');
@@ -561,7 +633,7 @@ function _stBuildTrainRow(train, index) {
     return row;
 }
 
-function _stRenderBoard(trains) {
+function _stRenderBoard(trains: StationBoardTrain[]): void {
     const contentEl = document.getElementById('boardContent');
     const t = translations[window.currentLang];
     if (!contentEl) return;
@@ -590,20 +662,21 @@ function _stRenderBoard(trains) {
         ];
 
     const tbody = document.createElement('tbody');
-    trains.forEach((train, index) => tbody.appendChild(_stBuildTrainRow(train, index)));
+    trains.forEach((train: StationBoardTrain, index: number) => tbody.appendChild(_stBuildTrainRow(train, index)));
     table.append(_stBuildBoardHeader(columns), tbody);
     wrapper.appendChild(table);
     _stReplaceChildren(contentEl, [wrapper]);
 
-    contentEl.querySelectorAll('.train-row').forEach(row => {
-        row.addEventListener('click', function () {
-            const num = this.getAttribute('data-train-number');
+    contentEl.querySelectorAll<HTMLElement>('.train-row').forEach(row => {
+        row.addEventListener('click', (event) => {
+            const target = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+            const num = target?.getAttribute('data-train-number');
             if (num) window.location.href = '/?train=' + encodeURIComponent(num.trim());
         });
     });
 }
 
-async function _stFetchWeather(stationId) {
+async function _stFetchWeather(stationId: string): Promise<void> {
     const apiBase = window.API_BASE;
     try {
         const regRes = await fetch(apiBase + '/regione/' + stationId);
@@ -618,11 +691,16 @@ async function _stFetchWeather(stationId) {
         const sw = meteoData[stationId];
         if (!sw) return;
 
-        document.getElementById('weatherTemp').textContent = sw.oggiTemperatura + '\u00b0C';
-        document.getElementById('weatherAM').textContent   = sw.oggiTemperaturaMattino + '\u00b0';
-        document.getElementById('weatherPM').textContent   = sw.oggiTemperaturaPomeriggio + '\u00b0';
-        document.getElementById('weatherEve').textContent  = sw.oggiTemperaturaSera + '\u00b0';
-        document.getElementById('weatherBar').classList.remove('opacity-0');
+        const tempEl = document.getElementById('weatherTemp');
+        const morningEl = document.getElementById('weatherAM');
+        const afternoonEl = document.getElementById('weatherPM');
+        const eveningEl = document.getElementById('weatherEve');
+        const weatherBar = document.getElementById('weatherBar');
+        if (tempEl) tempEl.textContent = sw.oggiTemperatura + '\u00b0C';
+        if (morningEl) morningEl.textContent = sw.oggiTemperaturaMattino + '\u00b0';
+        if (afternoonEl) afternoonEl.textContent = sw.oggiTemperaturaPomeriggio + '\u00b0';
+        if (eveningEl) eveningEl.textContent = sw.oggiTemperaturaSera + '\u00b0';
+        if (weatherBar) weatherBar.classList.remove('opacity-0');
     } catch (e) {
         console.error('Weather fetch failed:', e);
     }
@@ -632,30 +710,35 @@ document.addEventListener('astro:page-load', () => {
     // Guard: only run on the station page
     if (!document.getElementById('boardContent')) return;
 
+    bindStationBoardTypeControls();
+
     const params = new URLSearchParams(window.location.search);
     _stId        = params.get('id') || '';
     _stName      = decodeURIComponent(params.get('name') || '');
-    _stBoardType = params.get('type') || 'partenze';
+    const requestedBoardType = params.get('type') || undefined;
+    _stBoardType = isStationBoardType(requestedBoardType) ? requestedBoardType : 'partenze';
 
     // Register language change hook for this page.
     // common.js fires onLanguageChanged during its own astro:page-load (which runs first),
     // so this hook is for user-initiated language switches that happen later.
     window.onLanguageChanged = function () {
-        if (_stId) _stLoadBoard();
+        if (_stId) void _stLoadBoard();
     };
 
     const nameEl = document.getElementById('stationName');
     if (nameEl) nameEl.textContent = _stName;
 
-    document.getElementById('btnPartenze').classList.toggle('active', _stBoardType === 'partenze');
-    document.getElementById('btnArrivi').classList.toggle('active', _stBoardType === 'arrivi');
+    document.getElementById('btnPartenze')?.classList.toggle('active', _stBoardType === 'partenze');
+    document.getElementById('btnArrivi')?.classList.toggle('active', _stBoardType === 'arrivi');
 
     if (!_stId) {
-        document.getElementById('errorMessage').style.display   = 'block';
-        document.getElementById('loadingIndicator').style.display = 'none';
+        const errorEl = document.getElementById('errorMessage');
+        const loadingEl = document.getElementById('loadingIndicator');
+        if (errorEl) errorEl.style.display = 'block';
+        if (loadingEl) loadingEl.style.display = 'none';
         return;
     }
 
-    _stLoadBoard();
-    _stFetchWeather(_stId);
+    void _stLoadBoard();
+    void _stFetchWeather(_stId);
 });

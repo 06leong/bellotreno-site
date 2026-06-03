@@ -7,9 +7,16 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     description="Cerca treni italiani in tempo reale. Stato, ritardi e percorso completo di Frecciarossa, Intercity, Regionali e altri treni Trenitalia su ViaggiaTreno."
     pageScripts={["/scripts/station.js", "/scripts/swiss.js", "/scripts/main.js"]}>
     <Fragment slot="head"></Fragment>
+    <Fragment slot="scripts">
+        <script>
+            import '../client/station.ts';
+            import '../client/swiss.ts';
+            import '../client/main.ts';
+        </script>
+    </Fragment>
     <div class="container">
         <div class="text-center mt-12 mb-8 relative z-10">
-            <a href="#" class="text-primary inline-block hover:opacity-80 transition-opacity" onclick="goHome(); return false;">
+            <a href="/" id="homeLogoLink" class="text-primary inline-block hover:opacity-80 transition-opacity">
                 <h1 class="text-[3.5rem] font-extrabold mb-2 text-primary brand-heading tracking-tight drop-shadow-sm">BelloTreno</h1>
             </a>
 
@@ -40,7 +47,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                 <div class="absolute -inset-0.5 bg-gradient-to-r from-primary/30 to-info/30 rounded-full blur opacity-0 group-focus-within:opacity-100 transition duration-500"></div>
                 
                 <div class="relative flex items-center bg-base-100/65 backdrop-blur-3xl glass-border shadow-glass rounded-full overflow-hidden transition-all duration-300">
-                    <button id="searchModeToggle" onclick="switchSearchMode(searchMode === 'train' ? 'station' : 'train')" 
+                    <button id="searchModeToggle"
+                            type="button"
                             class="flex items-center justify-center h-14 w-16 sm:w-20 pl-1 sm:pl-2 flex-shrink-0 gap-0 bg-transparent text-base-content/60 hover:text-primary transition-colors border-r border-base-content/10 outline-none cursor-pointer">
                         <span class="material-symbols-outlined text-[1.4rem]" id="searchIcon">train</span>
                         <span class="material-symbols-outlined text-[1.2rem] -ml-1">arrow_drop_down</span>

@@ -7,23 +7,24 @@ import {
   chartCategoryCode,
   normalizeCategoryCounts,
   statisticsCategoryColor,
-} from "../../src/lib/normalizers/statistics.js";
+} from "../../src/lib/normalizers/statistics.ts";
 import {
   buildPartialCancellationState,
   normalizeStationMatchName,
-} from "../../src/lib/normalizers/viaggiatreno.js";
+} from "../../src/lib/normalizers/viaggiatreno.ts";
 import {
   hasSwissHint,
   isSwissBoundaryName,
   mergeSwissVehicleRecords,
   normalizeSwissStationName,
   shouldQuerySwissFormation,
-} from "../../src/lib/normalizers/swiss.js";
+} from "../../src/lib/normalizers/swiss.ts";
 import {
   extractTrenordNoticeUrls,
   filterTrenordNoticesForDisplay,
   normalizeTrenordTrafficInformation,
-} from "../../src/lib/normalizers/trenord.js";
+} from "../../src/lib/normalizers/trenord.ts";
+import type { TrenordNotice } from "../../src/lib/normalizers/trenord.ts";
 
 test("statistics category helpers preserve special categories and regional aliases", () => {
   assert.equal(categoryCode("ECFR"), "EC FR");
@@ -144,7 +145,7 @@ test("Swiss vehicle records merge by EVN without global closed pollution", () =>
 
   assert.equal(merged.length, 1);
   assert.equal(merged[0].closed, false);
-  assert.equal(merged[0].segments.length, 2);
+  assert.equal(merged[0].segments?.length, 2);
 });
 
 test("Trenord traffic information resolves S9 primary direttrice", () => {
@@ -268,7 +269,7 @@ test("Trenord traffic information finds direttrice in nested payload wrappers", 
 });
 
 test("Trenord notice display keeps today first or recent 14-day notices", () => {
-  const notices = [
+  const notices: TrenordNotice[] = [
     { id: "old", source: "trenord-direttrici", direttriceCode: "D014", direttriceDescription: "Line", description: "old", date: "2026-04-10T12:00:00.000Z", severityLevel: "info", urls: [] },
     { id: "recent", source: "trenord-direttrici", direttriceCode: "D014", direttriceDescription: "Line", description: "recent", date: "2026-05-23T12:00:00.000Z", severityLevel: "info", urls: [] },
     { id: "today", source: "trenord-direttrici", direttriceCode: "D014", direttriceDescription: "Line", description: "today", date: "2026-05-25T12:00:00.000Z", severityLevel: "info", urls: [] },
