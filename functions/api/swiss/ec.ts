@@ -11,8 +11,102 @@ const ALLOWED_HOSTS = new Set([
     "[::1]"
 ]);
 
-type AnyRecord = Record<string, any>;
+type JsonRecord = Record<string, unknown>;
 type CorsHeaderMap = Record<string, string>;
+
+interface SwissStopPoint {
+    uic: string | null;
+    name: string | null;
+}
+
+interface SwissFormationStop extends SwissStopPoint {
+    arrivalTime: string | null;
+    departureTime: string | null;
+    track: string | null;
+    stopType: string | null;
+    stopModifications: number;
+    formationShortString: string | null;
+    vehicleGoals: {
+        fromVehicleAtPosition: number;
+        toVehicleAtPosition: number;
+        destinationStopPoint: SwissStopPoint;
+    }[];
+}
+
+interface SwissVehicleStop extends SwissStopPoint {
+    arrivalTime: string | null;
+    departureTime: string | null;
+    track: string | null;
+    sectors: string | null;
+    accessToPreviousVehicle: boolean | null;
+}
+
+interface SwissVehicleSegment {
+    fromStop: string | null;
+    toStop: string | null;
+    closed: boolean;
+    vehicleWillBePutAway: boolean;
+    trolleyStatus: string | null;
+}
+
+interface SwissVehicle {
+    position: number;
+    number: number;
+    typeCode: string | null;
+    typeCodeName: string | null;
+    buildTypeCode: string | null;
+    countryCode: string | null;
+    vehicleNumber: string | null;
+    checkNumber: string | null;
+    evn: string | null;
+    parentEvn: string | null;
+    length: number;
+    numberRestaurantSpace: number;
+    numberBeds: number;
+    firstClassSeats: number;
+    secondClassSeats: number;
+    bikeHooks: number;
+    bikePlatform: boolean;
+    emergencyCallSystem: boolean;
+    lowFloor: boolean;
+    climated: boolean;
+    wheelchairSpaces: number;
+    wheelchairSpacesFirstClass: number;
+    wheelchairSpacesSecondClass: number;
+    wheelchairToilet: boolean;
+    wheelchairAccessibleRestaurant: boolean;
+    disabledCompartment: boolean;
+    wheelchairFoldingRamp: boolean;
+    wheelchairGapBridging: boolean;
+    wheelchairBoardingPlatformHeight: number;
+    wheelchairPicto: boolean;
+    bikePicto: boolean;
+    strollerPicto: boolean;
+    familyZonePicto: boolean;
+    businessZonePicto: boolean;
+    closed: boolean;
+    vehicleWillBePutAway: boolean;
+    trolleyStatus: string | null;
+    fromStop: string | null;
+    toStop: string | null;
+    segments: SwissVehicleSegment[];
+    stopSectors: SwissVehicleStop[];
+}
+
+interface SwissFormationResponse {
+    available: true;
+    provider: "swiss_train_formation";
+    evu: string;
+    trainNumber: string;
+    operationDate: string;
+    lastUpdate: string | null;
+    runs: string | null;
+    stops: SwissFormationStop[];
+    vehicles: SwissVehicle[];
+    vehicleCount: number;
+    rawVehicleCount: number;
+    reportedVehicleCount: number;
+}
 
 function json(data: unknown, status = 200, extraHeaders: HeadersInit = {}): Response {
     return new Response(JSON.stringify(data), {
@@ -107,22 +201,30 @@ function asOptionalBool(value: unknown): boolean | null {
     return asBool(value);
 }
 
+function asRecord(value: unknown): JsonRecord {
+    return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {};
+}
+
+function asRecordArray(value: unknown): JsonRecord[] {
+    return Array.isArray(value) ? value.map(asRecord) : [];
+}
+
 function isClosedTrolleyStatus(value: unknown): boolean {
     return /geschlossen/i.test(String(value || ""));
 }
 
-function normalizeStopPoint(stopPoint: AnyRecord) {
+function normalizeStopPoint(stopPoint: JsonRecord): SwissStopPoint {
     return {
         uic: asString(stopPoint?.uic),
         name: asString(stopPoint?.name)
     };
 }
 
-function normalizeStop(rawStop: AnyRecord) {
-    const scheduledStop = rawStop?.scheduledStop || {};
-    const stopPoint = normalizeStopPoint(scheduledStop.stopPoint || {});
-    const stopTime = scheduledStop.stopTime || {};
-    const formationShort = rawStop?.formationShort || {};
+function normalizeStop(rawStop: JsonRecord): SwissFormationStop {
+    const scheduledStop = asRecord(rawStop?.scheduledStop);
+    const stopPoint = normalizeStopPoint(asRecord(scheduledStop.stopPoint));
+    const stopTime = asRecord(scheduledStop.stopTime);
+    const formationShort = asRecord(rawStop?.formationShort);
 
     return {
         uic: stopPoint.uic,
@@ -133,24 +235,24 @@ function normalizeStop(rawStop: AnyRecord) {
         stopType: asString(scheduledStop.stopType),
         stopModifications: asInt(scheduledStop.stopModifications),
         formationShortString: asString(formationShort.formationShortString),
-        vehicleGoals: Array.isArray(formationShort.vehicleGoals)
-            ? formationShort.vehicleGoals.map((goal) => ({
+        vehicleGoals: asRecordArray(formationShort.vehicleGoals)
+            .map((goal) => ({
                 fromVehicleAtPosition: asInt(goal.fromVehicleAtPosition),
                 toVehicleAtPosition: asInt(goal.toVehicleAtPosition),
-                destinationStopPoint: normalizeStopPoint(goal.destinationStopPoint || {})
+                destinationStopPoint: normalizeStopPoint(asRecord(goal.destinationStopPoint))
             }))
-            : []
     };
 }
 
-function extractVehicles(raw: AnyRecord): AnyRecord[] {
-    const vehicles: AnyRecord[] = [];
+function extractVehicles(raw: JsonRecord): JsonRecord[] {
+    const vehicles: JsonRecord[] = [];
     if (!Array.isArray(raw?.formations)) return vehicles;
 
-    for (const formation of raw.formations) {
-        if (Array.isArray(formation?.formationVehicles)) {
-            vehicles.push(...formation.formationVehicles);
-        } else if (formation && (formation.vehicleIdentifier || formation.vehicleProperties || formation.position !== undefined)) {
+    for (const rawFormation of raw.formations) {
+        const formation = asRecord(rawFormation);
+        if (Array.isArray(formation.formationVehicles)) {
+            vehicles.push(...formation.formationVehicles.map(asRecord));
+        } else if (formation.vehicleIdentifier || formation.vehicleProperties || formation.position !== undefined) {
             vehicles.push(formation);
         }
     }
@@ -158,9 +260,9 @@ function extractVehicles(raw: AnyRecord): AnyRecord[] {
     return vehicles;
 }
 
-function normalizeVehicleStop(rawStop: AnyRecord) {
-    const stopPoint = normalizeStopPoint(rawStop?.stopPoint || {});
-    const stopTime = rawStop?.stopTime || {};
+function normalizeVehicleStop(rawStop: JsonRecord): SwissVehicleStop {
+    const stopPoint = normalizeStopPoint(asRecord(rawStop?.stopPoint));
+    const stopTime = asRecord(rawStop?.stopTime);
 
     return {
         uic: stopPoint.uic,
@@ -173,12 +275,12 @@ function normalizeVehicleStop(rawStop: AnyRecord) {
     };
 }
 
-function normalizeVehicle(rawVehicle: AnyRecord) {
-    const identifier = rawVehicle?.vehicleIdentifier || {};
-    const props = rawVehicle?.vehicleProperties || {};
-    const accessibility = props.accessibilityProperties || {};
-    const wheelchairSymbol = accessibility.wheelchairSymbolProperties || {};
-    const picto = props.pictoProperties || {};
+function normalizeVehicle(rawVehicle: JsonRecord): SwissVehicle {
+    const identifier = asRecord(rawVehicle?.vehicleIdentifier);
+    const props = asRecord(rawVehicle?.vehicleProperties);
+    const accessibility = asRecord(props.accessibilityProperties);
+    const wheelchairSymbol = asRecord(accessibility.wheelchairSymbolProperties);
+    const picto = asRecord(props.pictoProperties);
 
     const trolleyStatus = asString(props.trolleyStatus);
     const vehicleWillBePutAway = asBool(props.vehicleWillBePutAway);
@@ -222,18 +324,23 @@ function normalizeVehicle(rawVehicle: AnyRecord) {
         closed,
         vehicleWillBePutAway,
         trolleyStatus,
-        fromStop: asString(props.fromStop?.name),
-        toStop: asString(props.toStop?.name),
+        fromStop: asString(asRecord(props.fromStop).name),
+        toStop: asString(asRecord(props.toStop).name),
         segments: buildVehicleSegments(props, closed, vehicleWillBePutAway, trolleyStatus),
         stopSectors: Array.isArray(rawVehicle?.formationVehicleAtScheduledStops)
-            ? rawVehicle.formationVehicleAtScheduledStops.map(normalizeVehicleStop)
+            ? rawVehicle.formationVehicleAtScheduledStops.map(asRecord).map(normalizeVehicleStop)
             : []
     };
 }
 
-function buildVehicleSegments(props: AnyRecord, closed = false, vehicleWillBePutAway = false, trolleyStatus: string | null = null) {
-    const fromStop = asString(props?.fromStop?.name);
-    const toStop = asString(props?.toStop?.name);
+function buildVehicleSegments(
+    props: JsonRecord,
+    closed = false,
+    vehicleWillBePutAway = false,
+    trolleyStatus: string | null = null
+): SwissVehicleSegment[] {
+    const fromStop = asString(asRecord(props?.fromStop).name);
+    const toStop = asString(asRecord(props?.toStop).name);
     if (!fromStop && !toStop) return [];
     return [{
         fromStop,
@@ -244,7 +351,7 @@ function buildVehicleSegments(props: AnyRecord, closed = false, vehicleWillBePut
     }];
 }
 
-function vehicleKey(vehicle: AnyRecord): string {
+function vehicleKey(vehicle: SwissVehicle): string {
     if (vehicle.evn) return `evn:${vehicle.evn}`;
 
     const completeVehicleNumber = [
@@ -259,7 +366,7 @@ function vehicleKey(vehicle: AnyRecord): string {
 }
 
 function mergeUniqueObjects<T>(left: T[], right: T[], keyFn: (item: T) => string): T[] {
-    const map = new Map();
+    const map = new Map<string, T>();
     for (const item of [...left, ...right]) {
         const key = keyFn(item);
         if (!key || !map.has(key)) map.set(key || `item:${map.size}`, item);
@@ -284,7 +391,7 @@ function preferTrolleyStatus(currentValue: string | null, nextValue: string | nu
     return currentValue;
 }
 
-function mergeVehicles(existing: AnyRecord, incoming: AnyRecord): AnyRecord {
+function mergeVehicles(existing: SwissVehicle, incoming: SwissVehicle): SwissVehicle {
     return {
         ...existing,
         position: Math.min(existing.position || incoming.position || 9999, incoming.position || existing.position || 9999),
@@ -326,14 +433,14 @@ function mergeVehicles(existing: AnyRecord, incoming: AnyRecord): AnyRecord {
         trolleyStatus: preferTrolleyStatus(existing.trolleyStatus, incoming.trolleyStatus),
         fromStop: preferValue(existing.fromStop, incoming.fromStop),
         toStop: preferValue(existing.toStop, incoming.toStop),
-        segments: mergeUniqueObjects<AnyRecord>(existing.segments || [], incoming.segments || [], (segment) => [
+        segments: mergeUniqueObjects<SwissVehicleSegment>(existing.segments || [], incoming.segments || [], (segment) => [
             segment.fromStop || "",
             segment.toStop || "",
             segment.closed ? "closed" : "open",
             segment.vehicleWillBePutAway ? "putaway" : "active",
             segment.trolleyStatus || ""
         ].join("|")),
-        stopSectors: mergeUniqueObjects<AnyRecord>(existing.stopSectors || [], incoming.stopSectors || [], (stop) => [
+        stopSectors: mergeUniqueObjects<SwissVehicleStop>(existing.stopSectors || [], incoming.stopSectors || [], (stop) => [
             stop.uic || "",
             stop.name || "",
             stop.track || "",
@@ -345,13 +452,14 @@ function mergeVehicles(existing: AnyRecord, incoming: AnyRecord): AnyRecord {
     };
 }
 
-function normalizeVehicles(rawVehicles: AnyRecord[]): AnyRecord[] {
-    const map = new Map<string, AnyRecord>();
+function normalizeVehicles(rawVehicles: JsonRecord[]): SwissVehicle[] {
+    const map = new Map<string, SwissVehicle>();
     for (const rawVehicle of rawVehicles) {
         const vehicle = normalizeVehicle(rawVehicle);
         const key = vehicleKey(vehicle);
         if (map.has(key)) {
-            map.set(key, mergeVehicles(map.get(key) || {}, vehicle));
+            const existing = map.get(key);
+            map.set(key, existing ? mergeVehicles(existing, vehicle) : vehicle);
         } else {
             map.set(key, vehicle);
         }
@@ -360,18 +468,18 @@ function normalizeVehicles(rawVehicles: AnyRecord[]): AnyRecord[] {
     return Array.from(map.values()).sort((a, b) => (a.position || 9999) - (b.position || 9999));
 }
 
-function reportedVehicleCount(raw: AnyRecord): number {
+function reportedVehicleCount(raw: JsonRecord): number {
     const counts = Array.isArray(raw?.formations)
-        ? raw.formations.map((formation) => asInt(formation?.metaInformation?.numberVehicles)).filter(Boolean)
+        ? raw.formations.map((formation) => asInt(asRecord(asRecord(formation).metaInformation).numberVehicles)).filter(Boolean)
         : [];
     return counts.length ? Math.max(...counts) : 0;
 }
 
-function normalizeFormation(raw: AnyRecord, requestedTrainNumber: string, requestedDate: string, evu: string) {
-    const trainMeta = raw?.trainMetaInformation || {};
-    const journeyMeta = raw?.journeyMetaInformation || {};
+function normalizeFormation(raw: JsonRecord, requestedTrainNumber: string, requestedDate: string, evu: string): SwissFormationResponse | null {
+    const trainMeta = asRecord(raw?.trainMetaInformation);
+    const journeyMeta = asRecord(raw?.journeyMetaInformation);
     const stops = Array.isArray(raw?.formationsAtScheduledStops)
-        ? raw.formationsAtScheduledStops.map(normalizeStop).filter((stop) => stop.name)
+        ? raw.formationsAtScheduledStops.map(asRecord).map(normalizeStop).filter((stop) => stop.name)
         : [];
     const rawVehicles = extractVehicles(raw);
     const vehicles = normalizeVehicles(rawVehicles);
@@ -478,7 +586,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
             });
         }
 
-        const raw = await upstream.json() as AnyRecord;
+        const raw = asRecord(await upstream.json());
         const normalized = normalizeFormation(raw, trainNumber, operationDate, evu);
 
         if (!normalized) {
