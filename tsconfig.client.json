@@ -2,9 +2,7 @@
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "strict": false,
-    "noImplicitAny": true,
-    "strictNullChecks": false,
+    "strict": true,
     "useUnknownInCatchVariables": true
   },
   "include": [

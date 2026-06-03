@@ -51,7 +51,9 @@ function updateLanguage() {
 
     document.querySelectorAll('[data-i18n]').forEach(el => {
         const key = el.getAttribute('data-i18n');
-        const translation = (typeof translations !== 'undefined' && translations[window.currentLang]) ? translations[window.currentLang][key] : null;
+        const translation = key && typeof translations !== 'undefined' && translations[window.currentLang]
+            ? translations[window.currentLang][key]
+            : null;
 
         if (translation) {
             if (el.hasAttribute('placeholder')) {

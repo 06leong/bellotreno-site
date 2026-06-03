@@ -178,6 +178,7 @@ function formatDepartureData(train: StationBoardTrain, currentLang: Language = '
     
     let status = '';
     let statusColor = 'green';
+    const delayMinutes = Number(train.ritardo ?? 0);
 
     if (train.provvedimento == 1) {
         status = t.cancelled;
@@ -185,8 +186,8 @@ function formatDepartureData(train: StationBoardTrain, currentLang: Language = '
     } else if (train.nonPartito === true) {
         status = t.not_departed;
         statusColor = 'grey';
-    } else if (train.ritardo > 0) {
-        status = `${t.delayed} ${train.ritardo} ${t.minutes}`;
+    } else if (delayMinutes > 0) {
+        status = `${t.delayed} ${delayMinutes} ${t.minutes}`;
         statusColor = 'red';
     } else {
         status = t.on_time;
@@ -254,15 +255,16 @@ function formatArrivalData(train: StationBoardTrain, currentLang: Language = 'zh
     
     let status = '';
     let statusColor = 'green';
+    const delayMinutes = Number(train.ritardo ?? 0);
 
     if (train.provvedimento == 1) {
         status = t.cancelled;
         statusColor = 'red';
-    } else if (train.ritardo > 0) {
-        status = `${t.delayed} ${train.ritardo} ${t.minutes}`;
+    } else if (delayMinutes > 0) {
+        status = `${t.delayed} ${delayMinutes} ${t.minutes}`;
         statusColor = 'red';
-    } else if (train.ritardo < 0) {
-        status = `${t.early} ${Math.abs(train.ritardo)} ${t.minutes}`;
+    } else if (delayMinutes < 0) {
+        status = `${t.early} ${Math.abs(delayMinutes)} ${t.minutes}`;
         statusColor = 'green';
     } else {
         status = t.on_time;
@@ -354,8 +356,10 @@ async function _stLoadBoard() {
 
         if (!data || data.length === 0) {
             const t = (typeof translations !== 'undefined' && translations[window.currentLang]) || {};
-            errorEl.querySelector('span').textContent = 'info';
-            errorEl.querySelector('p').textContent    = t.no_trains || 'No trains at this time';
+            const iconEl = errorEl.querySelector('span');
+            const messageEl = errorEl.querySelector('p');
+            if (iconEl) iconEl.textContent = 'info';
+            if (messageEl) messageEl.textContent = t.no_trains || 'No trains at this time';
             errorEl.style.display   = 'block';
             loadingEl.style.display = 'none';
             return;
@@ -663,9 +667,10 @@ function _stRenderBoard(trains: StationBoardTrain[]): void {
     wrapper.appendChild(table);
     _stReplaceChildren(contentEl, [wrapper]);
 
-    contentEl.querySelectorAll('.train-row').forEach(row => {
-        row.addEventListener('click', function () {
-            const num = this.getAttribute('data-train-number');
+    contentEl.querySelectorAll<HTMLElement>('.train-row').forEach(row => {
+        row.addEventListener('click', (event) => {
+            const target = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+            const num = target?.getAttribute('data-train-number');
             if (num) window.location.href = '/?train=' + encodeURIComponent(num.trim());
         });
     });
@@ -686,11 +691,16 @@ async function _stFetchWeather(stationId: string): Promise<void> {
         const sw = meteoData[stationId];
         if (!sw) return;
 
-        document.getElementById('weatherTemp').textContent = sw.oggiTemperatura + '\u00b0C';
-        document.getElementById('weatherAM').textContent   = sw.oggiTemperaturaMattino + '\u00b0';
-        document.getElementById('weatherPM').textContent   = sw.oggiTemperaturaPomeriggio + '\u00b0';
-        document.getElementById('weatherEve').textContent  = sw.oggiTemperaturaSera + '\u00b0';
-        document.getElementById('weatherBar').classList.remove('opacity-0');
+        const tempEl = document.getElementById('weatherTemp');
+        const morningEl = document.getElementById('weatherAM');
+        const afternoonEl = document.getElementById('weatherPM');
+        const eveningEl = document.getElementById('weatherEve');
+        const weatherBar = document.getElementById('weatherBar');
+        if (tempEl) tempEl.textContent = sw.oggiTemperatura + '\u00b0C';
+        if (morningEl) morningEl.textContent = sw.oggiTemperaturaMattino + '\u00b0';
+        if (afternoonEl) afternoonEl.textContent = sw.oggiTemperaturaPomeriggio + '\u00b0';
+        if (eveningEl) eveningEl.textContent = sw.oggiTemperaturaSera + '\u00b0';
+        if (weatherBar) weatherBar.classList.remove('opacity-0');
     } catch (e) {
         console.error('Weather fetch failed:', e);
     }
@@ -718,12 +728,14 @@ document.addEventListener('astro:page-load', () => {
     const nameEl = document.getElementById('stationName');
     if (nameEl) nameEl.textContent = _stName;
 
-    document.getElementById('btnPartenze').classList.toggle('active', _stBoardType === 'partenze');
-    document.getElementById('btnArrivi').classList.toggle('active', _stBoardType === 'arrivi');
+    document.getElementById('btnPartenze')?.classList.toggle('active', _stBoardType === 'partenze');
+    document.getElementById('btnArrivi')?.classList.toggle('active', _stBoardType === 'arrivi');
 
     if (!_stId) {
-        document.getElementById('errorMessage').style.display   = 'block';
-        document.getElementById('loadingIndicator').style.display = 'none';
+        const errorEl = document.getElementById('errorMessage');
+        const loadingEl = document.getElementById('loadingIndicator');
+        if (errorEl) errorEl.style.display = 'block';
+        if (loadingEl) loadingEl.style.display = 'none';
         return;
     }
 

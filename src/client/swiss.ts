@@ -320,7 +320,7 @@ export {};
             }).catch(() => ({ available: false, reason: "upstream_error" })));
         }
 
-        return cache.get(key);
+        return cache.get(key) ?? { available: false, reason: "cache_miss" };
     }
 
     async function fetchSwissEc(data: TrainLike, category?: string): Promise<SwissFormationData> {
@@ -868,8 +868,8 @@ export {};
         const map = new Map<string, SwissVehicle>();
         asArray<SwissVehicle>(vehicles).forEach((vehicle: SwissVehicle) => {
             const key = vehicleUniqueKey(vehicle);
-            if (map.has(key)) map.set(key, mergeVehicle(map.get(key), vehicle));
-            else map.set(key, vehicle);
+            const existing = map.get(key);
+            map.set(key, existing ? mergeVehicle(existing, vehicle) : vehicle);
         });
         return Array.from(map.values()).sort(compareVehiclesByPhysicalOrder);
     }
@@ -919,7 +919,7 @@ export {};
             if (!coach?.number) return;
             const key = String(coach.number);
             if (!queues.has(key)) queues.set(key, []);
-            queues.get(key).push(coach);
+            queues.get(key)?.push(coach);
         });
         return queues;
     }
@@ -928,7 +928,8 @@ export {};
         const key = vehicle?.number ? String(vehicle.number) : "";
         if (!key || !queues.has(key)) return null;
         const queue = queues.get(key);
-        return queue.length ? queue.shift() : null;
+        if (!queue?.length) return null;
+        return queue.shift() ?? null;
     }
 
     function buildVehicleItem(vehicle: SwissVehicle, coach: CoachToken | null, stop: SwissStop | null, stops: SwissStop[]): VehicleItem {
@@ -1255,9 +1256,10 @@ export {};
 
         items.forEach((item: VehicleItem, index: number) => {
             const key = item.unitKey || `single:${index}`;
-            if (!byUnit.has(key)) {
-                const range = itemSectorRange(item);
-                const group: VehicleItemGroup = {
+            const range = itemSectorRange(item);
+            let group = byUnit.get(key);
+            if (!group) {
+                group = {
                     key,
                     firstIndex: index,
                     minSector: range.min,
@@ -1269,9 +1271,6 @@ export {};
                 byUnit.set(key, group);
                 groups.push(group);
             }
-
-            const group = byUnit.get(key);
-            const range = itemSectorRange(item);
             group.minSector = Math.min(group.minSector, range.min);
             group.maxSector = Math.max(group.maxSector, range.max);
             group.minPosition = Math.min(group.minPosition, itemVehiclePosition(item));
@@ -1582,8 +1581,9 @@ export {};
     }
 
     function renderVehicleSegments(vehicle: SwissVehicle): string {
-        const segments = asArray(vehicle.segments).length
-            ? vehicle.segments
+        const vehicleSegments = asArray<VehicleSegment>(vehicle.segments);
+        const segments = vehicleSegments.length
+            ? vehicleSegments
             : (vehicle.fromStop || vehicle.toStop ? [{ fromStop: vehicle.fromStop, toStop: vehicle.toStop }] : []);
         const labels = segments
             .map((segment: VehicleSegment) => `${esc(segment.fromStop || "--")} -> ${esc(segment.toStop || "--")}`)

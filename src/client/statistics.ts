@@ -695,7 +695,7 @@ export {};
             const showSegment = (target: HTMLElement) => {
                 const wrap = target.closest(".statistics-donut-wrap");
                 const selected = wrap?.querySelector<HTMLElement>(".statistics-donut-selected");
-                if (!selected) return;
+                if (!wrap || !selected) return;
                 const label = target.dataset.label || "";
                 const value = target.dataset.value || "";
                 const percent = target.dataset.percent || "";
@@ -757,17 +757,20 @@ export {};
         const values = summaryCounts();
         const series = normalizeTimeseries(state.timeseries);
         const runningPoints = asArray(series.points || series.running || series.trains || series.treniCircolanti);
-        if ($("statisticsRunningChart")) $("statisticsRunningChart").innerHTML = renderLineChart(runningPoints);
-        if ($("statisticsRegularityChart")) {
-            $("statisticsRegularityChart").innerHTML = renderInteractiveDonut([
+        const runningChart = $("statisticsRunningChart");
+        if (runningChart) runningChart.innerHTML = renderLineChart(runningPoints);
+        const regularityChart = $("statisticsRegularityChart");
+        if (regularityChart) {
+            regularityChart.innerHTML = renderInteractiveDonut([
                 { label: tr("statistics_regular", "Regular"), value: values.regular, color: "#65bfc0" },
                 { label: tr("statistics_status_delayed", "Delayed"), value: values.delayed, color: "#5b9ee4" },
                 { label: tr("statistics_rescheduled", "Rescheduled"), value: values.rescheduled, color: "#f4b35d" },
                 { label: tr("statistics_cancelled", "Cancelled"), value: values.cancelled, color: "#ec6685" }
             ], tr("statistics_trains", "trains"));
         }
-        if ($("statisticsPunctualityChart")) {
-            $("statisticsPunctualityChart").innerHTML = `
+        const punctualityChart = $("statisticsPunctualityChart");
+        if (punctualityChart) {
+            punctualityChart.innerHTML = `
                 <div class="statistics-dual-donut">
                     <div>
                         <h3>${esc(tr("statistics_departure_punctuality", "Departure punctuality"))}</h3>
@@ -787,8 +790,9 @@ export {};
                 </div>
             `;
         }
-        if ($("statisticsCategoryChart")) {
-            $("statisticsCategoryChart").innerHTML = renderCategoryChart(summary.categories || summary.categoryCounts || []);
+        const categoryChart = $("statisticsCategoryChart");
+        if (categoryChart) {
+            categoryChart.innerHTML = renderCategoryChart(summary.categories || summary.categoryCounts || []);
         }
     }
 
@@ -914,7 +918,7 @@ export {};
         if (column === "avgDelay") return formatMinutes(item.avgDelay ?? item.averageDelay ?? item.delayAverage);
         if (column === "monitored") return formatNumber(item.monitored ?? item.count ?? item.total);
         if (column === "cancelled") return formatNumber(item.cancelled);
-        if (column === "status") return statusLabel(item.status || item.state || (item.notDeparted ? "not_departed" : item.cancelled ? "cancelled" : item.delay > 5 ? "delayed" : "regular"));
+        if (column === "status") return statusLabel(item.status || item.state || (item.notDeparted ? "not_departed" : item.cancelled ? "cancelled" : (item.delay ?? 0) > 5 ? "delayed" : "regular"));
         return asString(item[column], "--");
     }
 

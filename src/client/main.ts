@@ -855,8 +855,10 @@ function removeRecentSearch(id: string, type: SearchMode, event?: Event): void {
 
 
 async function startSearch(input: string): Promise<void> {
-    document.getElementById('results').style.display = 'none';
-    document.getElementById('disambiguation').style.display = 'none';
+    const resultsPanel = document.getElementById('results');
+    const disambiguationPanel = document.getElementById('disambiguation');
+    if (resultsPanel) resultsPanel.style.display = 'none';
+    if (disambiguationPanel) disambiguationPanel.style.display = 'none';
 
     if (searchMode === 'train') {
 
@@ -934,6 +936,7 @@ function renderDisambiguation(): void {
 
     const list = document.getElementById('choicesList');
     const panel = document.getElementById('disambiguation');
+    if (!list || !panel) return;
     clearNode(list);
 
     disambiguationData.forEach(line => {
@@ -977,12 +980,13 @@ function renderDisambiguation(): void {
 function showStationDisambiguation(stations: StationSearchResult[]): void {
     const list = document.getElementById('choicesList');
     const panel = document.getElementById('disambiguation');
+    if (!list || !panel) return;
     const panelTitle = panel.querySelector('h3');
 
     const titleText = window.currentLang === 'zh' ? '选择车站：' :
         window.currentLang === 'it' ? 'Seleziona stazione:' :
             'Select station:';
-    panelTitle.textContent = titleText;
+    if (panelTitle) panelTitle.textContent = titleText;
 
     clearNode(list);
 
@@ -1057,7 +1061,7 @@ async function fetchDetails(triple: string): Promise<void> {
 }
 
 async function loadSwissFormation(data: TrainData, triple: string, requestSeq: number): Promise<void> {
-    if (!window.BelloSwiss || !window.BelloSwiss.shouldQuery(data, currentTrainCategory)) {
+    if (!window.BelloSwiss || !window.BelloSwiss.fetchSwissEc || !window.BelloSwiss.shouldQuery(data, currentTrainCategory)) {
         if (window.BelloSwiss) window.BelloSwiss.hideFormationCard();
         return;
     }
@@ -1071,18 +1075,18 @@ async function loadSwissFormation(data: TrainData, triple: string, requestSeq: n
         if (!swissData?.available) {
             currentSwissFormationData = null;
             window.BelloSwiss.hideFormationCard();
-            render(currentTrainData);
+            if (currentTrainData) render(currentTrainData);
             return;
         }
 
         currentSwissFormationData = swissData;
-        render(currentTrainData);
+        if (currentTrainData) render(currentTrainData);
     } catch (err) {
         if (requestSeq !== swissRequestSeq || triple !== currentTriple) return;
         console.error('Swiss formation fetch failed:', err);
         currentSwissFormationData = null;
         if (window.BelloSwiss) window.BelloSwiss.hideFormationCard();
-        render(currentTrainData);
+        if (currentTrainData) render(currentTrainData);
     }
 }
 
@@ -1118,7 +1122,8 @@ function resolveRouteDisplay(data: TrainData, timelineStops: TrainStop[]): { ori
 
     const displayableStops = stops.filter((stop) => {
         if (!stop?.stazione) return false;
-        return !(window.BelloSwiss?.isTechnicalSwissStop && window.BelloSwiss.isTechnicalSwissStop(stop.swissStop || stop));
+        const swissStop = asRecord(stop.swissStop || stop);
+        return !(window.BelloSwiss?.isTechnicalSwissStop && window.BelloSwiss.isTechnicalSwissStop(swissStop));
     });
 
     const first = displayableStops[0] || stops[0];
@@ -1138,7 +1143,8 @@ function resolveDurationDisplay(data: TrainData, timelineStops: TrainStop[]): st
 
     const displayableStops = stops.filter((stop) => {
         if (!stop?.stazione) return false;
-        return !(window.BelloSwiss?.isTechnicalSwissStop && window.BelloSwiss.isTechnicalSwissStop(stop.swissStop || stop));
+        const swissStop = asRecord(stop.swissStop || stop);
+        return !(window.BelloSwiss?.isTechnicalSwissStop && window.BelloSwiss.isTechnicalSwissStop(swissStop));
     });
 
     const first = displayableStops[0];
@@ -1163,10 +1169,13 @@ function normalizeTrainStops(stops: unknown): TrainStop[] {
 
 
 function render(data: TrainData): void {
-    document.getElementById('results').style.display = 'block';
+    const resultsPanel = document.getElementById('results');
     const card = document.getElementById('trainCard');
     const timeline = document.getElementById('timelineBody');
-    const timelineStops = normalizeTrainStops(window.BelloSwiss
+    if (!resultsPanel || !card || !timeline) return;
+
+    resultsPanel.style.display = 'block';
+    const timelineStops = normalizeTrainStops(window.BelloSwiss && currentSwissFormationData?.available
         ? window.BelloSwiss.mergeTimelineStops(data.fermate || [], currentSwissFormationData)
         : (data.fermate || []));
 
@@ -1196,7 +1205,8 @@ function render(data: TrainData): void {
         catCode = "TS";
     }
 
-    let operator = CLIENT_MAP[data.codiceCliente] || "Other";
+    const clientCode = String(data.codiceCliente ?? '');
+    let operator = CLIENT_MAP[clientCode] || "Other";
     let operatorLink = CLIENT_LINK_MAP[operator] || "#";
 
 
@@ -1504,9 +1514,11 @@ function resolveTrainCategory(data: TrainData): string {
 }
 
 function isTrenordTrain(data: TrainData | null): boolean {
+    if (!data) return false;
     if (Number(data?.codiceCliente) === 63) return true;
     const clientMap = window.CLIENT_MAP || {};
-    const operator = clientMap[data?.codiceCliente] || clientMap[Number(data?.codiceCliente)];
+    const clientCode = String(data.codiceCliente ?? '');
+    const operator = clientMap[clientCode];
     return String(operator || '').toUpperCase() === 'TRENORD';
 }
 
@@ -1841,13 +1853,15 @@ function renderSmartCaring(data: SmartCaringPayload): void {
     const t = translations[window.currentLang];
     const isFullMode = SC_FULL_CATS.includes(currentTrainCategory);
 
-    const hasToday = data.today && data.today.length > 0;
-    const hasRecent = data.recent && data.recent.length > 0;
+    const todayNotices = data.today || [];
+    const recentNotices = data.recent || [];
+    const hasToday = todayNotices.length > 0;
+    const hasRecent = recentNotices.length > 0;
     const notifTitle = hasToday ? t.sc_today : t.sc_recent;
     let notificationBody = null;
 
     if (hasToday) {
-        notificationBody = createNode('div', { className: 'sc-notes-list' }, data.today.map((n: SmartCaringNotice) => {
+        notificationBody = createNode('div', { className: 'sc-notes-list' }, todayNotices.map((n: SmartCaringNotice) => {
             const time = new Date(n.insertTimestamp).toLocaleTimeString('it-IT', {
                 hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome'
             });
@@ -1857,7 +1871,7 @@ function renderSmartCaring(data: SmartCaringPayload): void {
             ]);
         }));
     } else if (hasRecent) {
-        notificationBody = createNode('div', { className: 'sc-notes-list' }, data.recent.map((n: SmartCaringNotice) => {
+        notificationBody = createNode('div', { className: 'sc-notes-list' }, recentNotices.map((n: SmartCaringNotice) => {
             const d = new Date(n.insertTimestamp);
             const monthStr = getShortMonth(d, window.currentLang);
             const dayNum = d.getDate();
@@ -1892,9 +1906,9 @@ function renderSmartCaring(data: SmartCaringPayload): void {
             days.push({
                 date: d,
                 dateKey,
-                delay: histDay ? histDay.maxDelay : 0,
-                notifications: histDay ? histDay.notifications : 0,
-                reasons: histDay ? histDay.reasons : []
+                delay: histDay?.maxDelay ?? 0,
+                notifications: histDay?.notifications ?? 0,
+                reasons: histDay?.reasons ?? []
             });
         }
 
@@ -1946,7 +1960,8 @@ function renderSmartCaring(data: SmartCaringPayload): void {
                 createNode('span', { text: t.sc_all_clear })
             ]);
         } else {
-            const rateColor = stats.onTimeRate >= 70 ? 'var(--color-info)' : stats.onTimeRate >= 40 ? 'var(--color-warning)' : 'var(--color-error)';
+            const onTimeRate = stats.onTimeRate ?? 0;
+            const rateColor = onTimeRate >= 70 ? 'var(--color-info)' : onTimeRate >= 40 ? 'var(--color-warning)' : 'var(--color-error)';
             const statValue = (value: unknown, suffix = ''): HTMLSpanElement => {
                 const valueNode = createNode('span', { className: 'sc-stat-value', text: value });
                 if (suffix) valueNode.append(createNode('small', { text: suffix }));
@@ -1956,7 +1971,7 @@ function renderSmartCaring(data: SmartCaringPayload): void {
                 valueNode,
                 createNode('span', { className: 'sc-stat-label', text: label })
             ]);
-            const onTimeValue = statValue(`${stats.onTimeRate}%`);
+            const onTimeValue = statValue(`${onTimeRate}%`);
             onTimeValue.style.color = rateColor;
             statsNode = createNode('div', { className: 'sc-stats-row' }, [
                 makeStat(onTimeValue, t.sc_ontime_rate),
@@ -2017,6 +2032,7 @@ function toggleScTooltip(e: Event, col: HTMLElement): void {
     if (reason) tooltip.append(createNode('span', { className: 'sc-tooltip-reason', text: reason }));
 
     const bar = col.querySelector('.sc-bar');
+    if (!bar) return;
     const rect = bar.getBoundingClientRect();
 
     tooltip.classList.add('sc-tooltip-show');
