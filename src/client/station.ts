@@ -372,22 +372,22 @@ async function _stLoadBoard() {
     }
 }
 
-function _stEsc(value) {
+function _stEsc(value: unknown): string {
     return window.escapeHtml ? window.escapeHtml(value) : String(value ?? '');
 }
 
-function _stTrainNumber(train) {
+function _stTrainNumber(train: StationBoardTrain): string {
     if (window.BelloSwiss?.getTrainNumber) return window.BelloSwiss.getTrainNumber(train);
     return String(train?.numeroTreno || train?.compNumeroTreno || '').replace(/\D+/g, '');
 }
 
-function _stOperationDate(train) {
+function _stOperationDate(train: StationBoardTrain): string {
     return window.BelloSwiss?.getOperationDate?.(train)
         || window.BelloSwiss?.getTodayInZurich?.()
         || new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Zurich' });
 }
 
-function _stVisibleRouteName(train) {
+function _stVisibleRouteName(train: StationBoardTrain): string {
     if (_stBoardType === 'partenze') {
         return (train.destinazioneEstera &&
             train.destinazioneEstera !== train.origine &&
@@ -401,7 +401,7 @@ function _stVisibleRouteName(train) {
         ? train.origineEstera : (train.origine || '');
 }
 
-function _stShouldTrySwiss(train) {
+function _stShouldTrySwiss(train: StationBoardTrain): boolean {
     if (!window.BelloSwiss) return false;
     const visibleRoute = _stVisibleRouteName(train);
     const category = window.BelloSwiss.getCategory ? window.BelloSwiss.getCategory(train) : '';
@@ -419,7 +419,7 @@ function _stSwissTerminalName(swissData: SwissLookupData): string {
     return terminal?.name || '';
 }
 
-function _stShouldReplaceRouteName(currentName, swissName) {
+function _stShouldReplaceRouteName(currentName: string, swissName: string): boolean {
     if (!swissName || !window.BelloSwiss) return false;
     const currentKey = currentName ? window.BelloSwiss.normalizeStationName(currentName) : '';
     const swissKey = window.BelloSwiss.normalizeStationName(swissName);
@@ -465,31 +465,31 @@ async function _stEnhanceBoardWithSwiss(trains: StationBoardTrain[], boardSeq: n
     }
 }
 
-function _stTextElement(tagName, text, className = '') {
+function _stTextElement<K extends keyof HTMLElementTagNameMap>(tagName: K, text: unknown, className = ''): HTMLElementTagNameMap[K] {
     const element = document.createElement(tagName);
     if (className) element.className = className;
-    element.textContent = text ?? '';
+    element.textContent = String(text ?? '');
     return element;
 }
 
-function _stReplaceChildren(element, children) {
+function _stReplaceChildren(element: Element, children: Node[]): void {
     if (typeof element.replaceChildren === 'function') {
         element.replaceChildren(...children);
         return;
     }
     element.textContent = '';
-    children.forEach((child) => element.appendChild(child));
+    children.forEach((child: Node) => element.appendChild(child));
 }
 
-function _stCreateCell(tagName, text, className, width = '') {
+function _stCreateCell(tagName: 'td' | 'th', text: unknown, className: string, width = ''): HTMLTableCellElement {
     const cell = document.createElement(tagName);
     cell.className = className;
     if (width) cell.style.width = width;
-    if (text !== undefined && text !== null) cell.textContent = text;
+    if (text !== undefined && text !== null) cell.textContent = String(text);
     return cell;
 }
 
-function _stAppendTrainBadge(cell, trainNumberStr) {
+function _stAppendTrainBadge(cell: HTMLElement, trainNumberStr: unknown): void {
     const raw = String(trainNumberStr || '').trim();
     if (!raw) {
         cell.textContent = '--';
@@ -527,7 +527,7 @@ function _stAppendTrainBadge(cell, trainNumberStr) {
     cell.appendChild(badge);
 }
 
-function _stAppendPlatform(cell, train, type) {
+function _stAppendPlatform(cell: HTMLElement, train: StationBoardTrain, type: StationBoardType): void {
     const actualPlatform = type === 'arrivi'
         ? train.binarioEffettivoArrivoDescrizione || ''
         : train.binarioEffettivoPartenzaDescrizione || '';
@@ -536,7 +536,7 @@ function _stAppendPlatform(cell, train, type) {
         : train.binarioProgrammatoPartenzaDescrizione || '';
     const inStation = train.inStazione === true;
 
-    function platformSpan(text, changed = false) {
+    function platformSpan(text: string, changed = false): HTMLSpanElement {
         const span = _stTextElement('span', text);
         if (inStation) span.classList.add('platform-pulse');
         if (changed) {
@@ -559,7 +559,7 @@ function _stAppendPlatform(cell, train, type) {
     cell.textContent = '--';
 }
 
-function _stRouteCell(text, index) {
+function _stRouteCell(text: string, index: number): HTMLTableCellElement {
     const cell = _stCreateCell('td', text, "text-[0.65rem] sm:text-sm align-middle whitespace-normal leading-tight px-1 sm:px-4");
     cell.dataset.routeCell = String(index);
     cell.style.fontFamily = "var(--app-font-heading)";
@@ -568,11 +568,11 @@ function _stRouteCell(text, index) {
     return cell;
 }
 
-function _stBuildBoardHeader(columns) {
+function _stBuildBoardHeader(columns: BoardColumn[]): HTMLTableSectionElement {
     const thead = document.createElement('thead');
     thead.className = 'bg-primary text-primary-content border-none';
     const row = document.createElement('tr');
-    columns.forEach((column, index) => {
+    columns.forEach((column: BoardColumn, index: number) => {
         const classes = `${column.center ? 'text-center ' : ''}py-2 sm:py-3 font-semibold text-[0.65rem] sm:text-sm${index < columns.length - 1 ? ' border-r border-primary-content/20' : ''}`;
         row.appendChild(_stCreateCell('th', column.label, classes, column.width));
     });
@@ -629,7 +629,7 @@ function _stBuildTrainRow(train: StationBoardTrain, index: number): HTMLTableRow
     return row;
 }
 
-function _stRenderBoard(trains) {
+function _stRenderBoard(trains: StationBoardTrain[]): void {
     const contentEl = document.getElementById('boardContent');
     const t = translations[window.currentLang];
     if (!contentEl) return;
@@ -658,7 +658,7 @@ function _stRenderBoard(trains) {
         ];
 
     const tbody = document.createElement('tbody');
-    trains.forEach((train, index) => tbody.appendChild(_stBuildTrainRow(train, index)));
+    trains.forEach((train: StationBoardTrain, index: number) => tbody.appendChild(_stBuildTrainRow(train, index)));
     table.append(_stBuildBoardHeader(columns), tbody);
     wrapper.appendChild(table);
     _stReplaceChildren(contentEl, [wrapper]);
@@ -671,7 +671,7 @@ function _stRenderBoard(trains) {
     });
 }
 
-async function _stFetchWeather(stationId) {
+async function _stFetchWeather(stationId: string): Promise<void> {
     const apiBase = window.API_BASE;
     try {
         const regRes = await fetch(apiBase + '/regione/' + stationId);

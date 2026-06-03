@@ -3,9 +3,9 @@
   "compilerOptions": {
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "strict": false,
-    "noImplicitAny": false,
+    "noImplicitAny": true,
     "strictNullChecks": false,
-    "useUnknownInCatchVariables": false
+    "useUnknownInCatchVariables": true
   },
   "include": [
     "src/types/**/*.d.ts",

@@ -192,7 +192,7 @@ window.initVisitorCounter = initVisitorCounter;
 
 // ========== XSS: HTML 转义工具 ==========
 // 用于将 API 返回的字符串安全地插入 innerHTML
-function escapeHtml(str) {
+function escapeHtml(str: unknown): string {
     if (str == null) return '';
     return String(str)
         .replace(/&/g, '&amp;')

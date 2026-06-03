@@ -132,7 +132,7 @@ export {};
     };
 
     const palette = ["#65bfc0", "#5b9ee4", "#ec6685", "#f4b35d", "#83c77f", "#a78bfa", "#f78fb3", "#7dd3fc"];
-    const CATEGORY_COLORS = {
+    const CATEGORY_COLORS: Record<string, string> = {
         REG: "#70a84a",
         RE: "#70a84a",
         RV: "#70a84a",

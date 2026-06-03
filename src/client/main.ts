@@ -4,6 +4,7 @@ export {};
 
 type SearchMode = 'train' | 'station';
 type JsonRecord = Record<string, unknown>;
+type Language = NonNullable<Window["currentLang"]>;
 type TimeKind = 'arrival' | 'departure';
 type TimeStatus = '' | 'early' | 'late' | 'on-time';
 type PartialStopBoundary = '' | 'actualStart' | 'actualEnd' | 'replacementStart';
@@ -93,6 +94,59 @@ interface StatisticsPayload {
     treniGiorno?: number;
 }
 
+interface TrenordLineInfo {
+    date: string;
+    line: string;
+    trainNumber: string;
+}
+
+interface TrenordTrafficNotice extends JsonRecord {
+    date?: string;
+    description?: string;
+    severityDescription?: string;
+    severityLevel?: string;
+    urls?: unknown[];
+}
+
+interface TrenordTrafficPayload extends JsonRecord {
+    available?: boolean;
+    direttrice?: string;
+    direttriceDescription?: string;
+    line?: string;
+    notices?: TrenordTrafficNotice[];
+    provider?: 'trenord-traffic';
+    reason?: string;
+}
+
+interface SmartCaringNotice extends JsonRecord {
+    infoNote?: string;
+    insertTimestamp: string | number;
+}
+
+interface SmartCaringHistoryDay extends JsonRecord {
+    date: string;
+    maxDelay?: number;
+    notifications?: number;
+    reasons?: string[];
+}
+
+interface SmartCaringStats extends JsonRecord {
+    avgDelay?: number;
+    disruptedDays?: number;
+    maxDelay?: number;
+    onTimeRate?: number;
+    totalDays?: number;
+}
+
+interface SmartCaringPayload extends JsonRecord {
+    error?: string;
+    history?: SmartCaringHistoryDay[];
+    noData?: boolean;
+    recent?: SmartCaringNotice[];
+    stats?: SmartCaringStats;
+    today?: SmartCaringNotice[];
+}
+
 function isElementTarget(target: EventTarget | null): target is Element {
     return target instanceof Element;
 }
@@ -116,7 +170,7 @@ let currentSmartCaringData: JsonRecord | null = null;
 let currentTrainCategory = '';
 let currentSwissFormationData: SwissFormationPayload | null = null;
 let swissRequestSeq = 0;
-let currentTrenordLineInfo: JsonRecord | null = null;
+let currentTrenordLineInfo: TrenordLineInfo | null = null;
 
 
 const API_BASE = window.API_BASE;
@@ -134,7 +188,7 @@ const DARK_MODE_CONTRAST_LOGOS = new Set([
     'en.png',
     'espresso.png'
 ]);
-const TRENORD_LINE_COLORS = Object.freeze({
+const TRENORD_LINE_COLORS: Readonly<Record<string, string>> = Object.freeze({
     RE: "#c02e25",
     RE80: "#205099",
     MXP: "#c02826",
@@ -156,7 +210,7 @@ const TRENORD_LINE_COLORS = Object.freeze({
     S40: "#85bb7d",
     S50: "#754917"
 });
-const TRENORD_LINE_ALIASES = Object.freeze({
+const TRENORD_LINE_ALIASES: Readonly<Record<string, string>> = Object.freeze({
     RE51: "MXP2",
     RE54: "MXP1"
 });
@@ -545,6 +599,7 @@ function collectSuppressedStopNames(value: unknown, names: string[] = []): strin
 }
 
 function partialStopLabel(kind: PartialStopBoundary | 'cancelled'): string {
+    if (!kind) return '';
     const lang = window.currentLang || 'en';
     const labels = {
         zh: {
@@ -705,12 +760,15 @@ function loadRecentSearches(): void {
         const oldData = localStorage.getItem('recentTrains');
         if (oldData && !localStorage.getItem('recentSearches')) {
             const oldSearches = JSON.parse(oldData);
-            const newSearches = oldSearches.map(item => ({
-                id: item.number,
-                name: `${item.number} ${item.origin || ''} → ${item.destination || ''}`.trim(),
-                type: 'train',
-                timestamp: item.timestamp
-            }));
+            const newSearches = (Array.isArray(oldSearches) ? oldSearches : []).map((item: unknown) => {
+                const record = asRecord(item);
+                return {
+                    id: record.number,
+                    name: `${record.number || ''} ${record.origin || ''} → ${record.destination || ''}`.trim(),
+                    type: 'train',
+                    timestamp: record.timestamp
+                };
+            });
             localStorage.setItem('recentSearches', JSON.stringify(newSearches));
             localStorage.removeItem('recentTrains');
         }
@@ -980,7 +1038,7 @@ async function fetchDetails(triple: string): Promise<void> {
                     "No real-time data for this train (may be expired or not yet generated)";
             return alert(msg);
         }
-        const data = await res.json();
+        const data = asRecord(await res.json()) as TrainData;
         currentTrainData = data;
         currentTrainCategory = resolveTrainCategory(data);
         render(data);
@@ -1418,14 +1476,14 @@ function render(data: TrainData): void {
 
 const SC_SKIP_CATS = ['IC', 'ICN', 'EC', 'EN'];
 const SC_FULL_CATS = ['FR', 'FA', 'FB'];
-const DESC_TO_CAT = {
+const DESC_TO_CAT: Record<string, string> = {
     'FRECCIAROSSA': 'FR', 'FRECCIARGENTO': 'FA', 'FRECCIABIANCA': 'FB',
     'INTERCITY': 'IC', 'INTERCITY NOTTE': 'ICN',
     'REGIONALE': 'REG', 'REGIONALE VELOCE': 'RV', 'METROPOLITANO': 'MET',
     'EUROCITY': 'EC', 'EURONIGHT': 'EN'
 };
 
-function resolveTrainCategory(data) {
+function resolveTrainCategory(data: TrainData): string {
     const comp = (data.compNumeroTreno || '').trim().toUpperCase();
     if (comp.includes('EC FR')) return 'FR';
     if (comp.includes('TS')) return 'TS';
@@ -1445,22 +1503,22 @@ function resolveTrainCategory(data) {
     return '';
 }
 
-function isTrenordTrain(data) {
+function isTrenordTrain(data: TrainData | null): boolean {
     if (Number(data?.codiceCliente) === 63) return true;
     const clientMap = window.CLIENT_MAP || {};
     const operator = clientMap[data?.codiceCliente] || clientMap[Number(data?.codiceCliente)];
     return String(operator || '').toUpperCase() === 'TRENORD';
 }
 
-function getCurrentTrainNumber(data) {
+function getCurrentTrainNumber(data: TrainData | null): string {
     return String(data?.numeroTreno || '').replace(/\D+/g, '');
 }
 
-function normalizeTrenordLineCode(line) {
+function normalizeTrenordLineCode(line: unknown): string {
     return String(line || '').trim().toUpperCase().replace(/\s+/g, '').replace(/-/g, '_');
 }
 
-function resolveTrenordLineBadgeSpec(line) {
+function resolveTrenordLineBadgeSpec(line: unknown): { label: string; color: string; textColor: string } | null {
     const rawCode = normalizeTrenordLineCode(line);
     if (!rawCode) return null;
 
@@ -1486,7 +1544,7 @@ function resolveTrenordLineBadgeSpec(line) {
     };
 }
 
-function getReadableBadgeTextColor(hexColor) {
+function getReadableBadgeTextColor(hexColor: unknown): string {
     const hex = String(hexColor || '').replace('#', '');
     if (!/^[\da-f]{6}$/i.test(hex)) return '#ffffff';
     const red = parseInt(hex.slice(0, 2), 16);
@@ -1496,7 +1554,7 @@ function getReadableBadgeTextColor(hexColor) {
     return luminance > 150 ? '#111827' : '#ffffff';
 }
 
-function createTrenordLineBadge(line) {
+function createTrenordLineBadge(line: unknown): HTMLSpanElement | null {
     const spec = resolveTrenordLineBadgeSpec(line);
     if (!spec) return null;
     return createNode('span', {
@@ -1511,7 +1569,7 @@ function createTrenordLineBadge(line) {
     });
 }
 
-function getCurrentTrenordLineForTrain(data) {
+function getCurrentTrenordLineForTrain(data: TrainData): string | null {
     if (!isTrenordTrain(data)) return null;
     const trainNumber = getCurrentTrainNumber(data);
     if (!trainNumber || currentTrenordLineInfo?.trainNumber !== trainNumber) return null;
@@ -1519,14 +1577,14 @@ function getCurrentTrenordLineForTrain(data) {
     return currentTrenordLineInfo.line || null;
 }
 
-function rememberTrenordLine(trainNumber, date, line) {
+function rememberTrenordLine(trainNumber: string, date: string, line: unknown): void {
     const lineCode = normalizeTrenordLineCode(line);
     if (!trainNumber || !lineCode) return;
     currentTrenordLineInfo = { trainNumber, date, line: lineCode };
     upsertTrenordLineBadge(lineCode);
 }
 
-function upsertTrenordLineBadge(line) {
+function upsertTrenordLineBadge(line: unknown): void {
     const meta = document.querySelector('.train-number-meta');
     if (!meta) return;
 
@@ -1537,7 +1595,7 @@ function upsertTrenordLineBadge(line) {
     if (badge) meta.append(badge);
 }
 
-function todayInRome() {
+function todayInRome(): string {
     return new Intl.DateTimeFormat('sv-SE', {
         timeZone: 'Europe/Rome',
         year: 'numeric',
@@ -1546,7 +1604,7 @@ function todayInRome() {
     }).format(new Date());
 }
 
-function getTrainOperationDate(data) {
+function getTrainOperationDate(data: TrainData): string {
     if (data?.dataPartenzaTrenoAsDate && /^\d{4}-\d{2}-\d{2}$/.test(data.dataPartenzaTrenoAsDate)) {
         return data.dataPartenzaTrenoAsDate;
     }
@@ -1559,7 +1617,7 @@ function getTrainOperationDate(data) {
     return todayInRome();
 }
 
-function fetchTrafficInformation(data) {
+function fetchTrafficInformation(data: TrainData): void {
     if (isTrenordTrain(data)) {
         fetchTrenordTrafficInformation(data);
         return;
@@ -1567,7 +1625,7 @@ function fetchTrafficInformation(data) {
     fetchSmartCaring(data.numeroTreno);
 }
 
-async function fetchTrenordTrafficInformation(trainData) {
+async function fetchTrenordTrafficInformation(trainData: TrainData): Promise<void> {
     const card = document.getElementById('smartCaringCard');
     const trainNumber = getCurrentTrainNumber(trainData);
     const date = getTrainOperationDate(trainData);
@@ -1584,7 +1642,7 @@ async function fetchTrenordTrafficInformation(trainData) {
     try {
         const requestUrl = `${TRENORD_TRAFFIC_BASE}?train=${encodeURIComponent(trainNumber)}&date=${encodeURIComponent(date)}`;
         const res = await fetch(requestUrl, { headers: { accept: 'application/json' } });
-        const data = await res.json();
+        const data = asRecord(await res.json()) as TrenordTrafficPayload;
 
         if (getCurrentTrainNumber(currentTrainData) !== trainNumber) return;
         if (data?.line) rememberTrenordLine(trainNumber, date, data.line);
@@ -1611,7 +1669,7 @@ async function fetchTrenordTrafficInformation(trainData) {
     }
 }
 
-async function fetchSmartCaring(trainNumber) {
+async function fetchSmartCaring(trainNumber: string | number | null | undefined): Promise<void> {
     const card = document.getElementById('smartCaringCard');
     if (!card || !NOTIFY_BASE) return;
 
@@ -1632,7 +1690,7 @@ async function fetchSmartCaring(trainNumber) {
     try {
         const res = await fetch(`${NOTIFY_BASE}?train=${trainNumber}`);
         if (!res.ok) throw new Error('API error');
-        const data = await res.json();
+        const data = asRecord(await res.json()) as SmartCaringPayload;
         if (data.error) throw new Error(data.error);
         const isFullMode = SC_FULL_CATS.includes(currentTrainCategory);
         const hasNotifications = data.today?.length || data.recent?.length;
@@ -1648,7 +1706,7 @@ async function fetchSmartCaring(trainNumber) {
     }
 }
 
-function getShortMonth(date, lang) {
+function getShortMonth(date: Date, lang: Language): string {
     const m = date.getMonth();
     if (lang === 'zh') return `${m + 1}月`;
     const en = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -1656,13 +1714,13 @@ function getShortMonth(date, lang) {
     return lang === 'it' ? it[m] : en[m];
 }
 
-function formatTrenordTrafficTitle(data) {
+function formatTrenordTrafficTitle(data: TrenordTrafficPayload): string {
     const t = translations[window.currentLang];
     const line = data?.direttriceDescription || data?.direttrice || 'Trenord';
     return String(t.trenord_traffic_title || '{line} line notices').replace('{line}', line);
 }
 
-function createTrenordTrafficTitleNodes(data) {
+function createTrenordTrafficTitleNodes(data: TrenordTrafficPayload): NodeChild[] {
     const t = translations[window.currentLang];
     const line = data?.direttriceDescription || data?.direttrice || 'Trenord';
     const template = String(t.trenord_traffic_title || 'Traffic information · {line}');
@@ -1672,16 +1730,16 @@ function createTrenordTrafficTitleNodes(data) {
 
     const [before, ...afterParts] = template.split('{line}');
     const after = afterParts.join('{line}');
-    const children = [];
+    const children: NodeChild[] = [];
     if (before) children.push(createNode('span', { className: 'trenord-traffic-title-main', text: before }));
     children.push(createNode('span', { className: 'trenord-traffic-line', text: line }));
     if (after) children.push(createNode('span', { className: 'trenord-traffic-title-main', text: after }));
     return children;
 }
 
-function formatTrenordNoticeDate(value) {
+function formatTrenordNoticeDate(value: unknown): string {
     if (!value) return '';
-    const date = new Date(value);
+    const date = new Date(String(value));
     if (Number.isNaN(date.getTime())) return String(value);
     const locale = window.currentLang === 'zh' ? 'zh-CN' : window.currentLang === 'it' ? 'it-IT' : 'en-GB';
     return new Intl.DateTimeFormat(locale, {
@@ -1694,8 +1752,8 @@ function formatTrenordNoticeDate(value) {
     }).format(date);
 }
 
-function createTrenordNoticeLink(url, index, total) {
-    const safeUrl = /^https?:\/\//i.test(String(url || '')) ? url : '';
+function createTrenordNoticeLink(url: unknown, index: number, total: number): HTMLAnchorElement | null {
+    const safeUrl = /^https?:\/\//i.test(String(url || '')) ? String(url) : '';
     if (!safeUrl) return null;
     const t = translations[window.currentLang];
     const label = total > 1 ? `${t.trenord_notice_link} ${index + 1}` : t.trenord_notice_link;
@@ -1708,7 +1766,7 @@ function createTrenordNoticeLink(url, index, total) {
     });
 }
 
-function renderTrenordTrafficInformation(data) {
+function renderTrenordTrafficInformation(data: TrenordTrafficPayload): void {
     const card = document.getElementById('smartCaringCard');
     if (!card || !data) return;
 
@@ -1731,13 +1789,13 @@ function renderTrenordTrafficInformation(data) {
 
     const bodyChildren = [];
     if (notices.length) {
-        const list = createNode('div', { className: 'trenord-notices-list' }, notices.map((notice) => {
+        const list = createNode('div', { className: 'trenord-notices-list' }, notices.map((notice: TrenordTrafficNotice) => {
             const severityLevel = notice.severityLevel || 'info';
             const severityText = notice.severityDescription || t.trenord_severity_info;
             const dateText = formatTrenordNoticeDate(notice.date);
             const urls = Array.isArray(notice.urls) ? notice.urls : [];
             const links = urls
-                .map((url, index) => createTrenordNoticeLink(url, index, urls.length))
+                .map((url: unknown, index: number) => createTrenordNoticeLink(url, index, urls.length))
                 .filter(Boolean);
 
             return createNode('div', { className: 'trenord-notice' }, [
@@ -1776,7 +1834,7 @@ function renderTrenordTrafficInformation(data) {
     card.style.display = 'block';
 }
 
-function renderSmartCaring(data) {
+function renderSmartCaring(data: SmartCaringPayload): void {
     const card = document.getElementById('smartCaringCard');
     if (!card || !data) return;
 
@@ -1789,7 +1847,7 @@ function renderSmartCaring(data) {
     let notificationBody = null;
 
     if (hasToday) {
-        notificationBody = createNode('div', { className: 'sc-notes-list' }, data.today.map(n => {
+        notificationBody = createNode('div', { className: 'sc-notes-list' }, data.today.map((n: SmartCaringNotice) => {
             const time = new Date(n.insertTimestamp).toLocaleTimeString('it-IT', {
                 hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome'
             });
@@ -1799,7 +1857,7 @@ function renderSmartCaring(data) {
             ]);
         }));
     } else if (hasRecent) {
-        notificationBody = createNode('div', { className: 'sc-notes-list' }, data.recent.map(n => {
+        notificationBody = createNode('div', { className: 'sc-notes-list' }, data.recent.map((n: SmartCaringNotice) => {
             const d = new Date(n.insertTimestamp);
             const monthStr = getShortMonth(d, window.currentLang);
             const dayNum = d.getDate();
@@ -1825,12 +1883,12 @@ function renderSmartCaring(data) {
 
     if (isFullMode) {
         const now = new Date();
-        const days = [];
+        const days: Array<{ date: Date; dateKey: string; delay: number; notifications: number; reasons: string[] }> = [];
         for (let i = 13; i >= 0; i--) {
             const d = new Date(now);
             d.setDate(d.getDate() - i);
             const dateKey = d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
-            const histDay = data.history ? data.history.find(h => h.date === dateKey) : null;
+            const histDay = data.history ? data.history.find((h: SmartCaringHistoryDay) => h.date === dateKey) : null;
             days.push({
                 date: d,
                 dateKey,
@@ -1840,10 +1898,10 @@ function renderSmartCaring(data) {
             });
         }
 
-        const maxDelay = Math.max(...days.map(d => d.delay), 1);
+        const maxDelay = Math.max(...days.map((d) => d.delay), 1);
 
         const chart = createNode('div', { className: 'sc-chart' });
-        days.forEach(d => {
+        days.forEach((d) => {
             const barHeight = d.delay > 0 ? Math.max(18, Math.round((d.delay / maxDelay) * 48) + 8) : 6;
             let colorClass = 'sc-level-0';
             if (d.delay > 30) colorClass = 'sc-level-3';
@@ -1889,12 +1947,12 @@ function renderSmartCaring(data) {
             ]);
         } else {
             const rateColor = stats.onTimeRate >= 70 ? 'var(--color-info)' : stats.onTimeRate >= 40 ? 'var(--color-warning)' : 'var(--color-error)';
-            const statValue = (value, suffix = '') => {
+            const statValue = (value: unknown, suffix = ''): HTMLSpanElement => {
                 const valueNode = createNode('span', { className: 'sc-stat-value', text: value });
                 if (suffix) valueNode.append(createNode('small', { text: suffix }));
                 return valueNode;
             };
-            const makeStat = (valueNode, label) => createNode('div', { className: 'sc-stat' }, [
+            const makeStat = (valueNode: HTMLElement, label: unknown): HTMLDivElement => createNode('div', { className: 'sc-stat' }, [
                 valueNode,
                 createNode('span', { className: 'sc-stat-label', text: label })
             ]);
@@ -1939,7 +1997,7 @@ function renderSmartCaring(data) {
     card.style.display = 'block';
 }
 
-function toggleScTooltip(e, col) {
+function toggleScTooltip(e: Event, col: HTMLElement): void {
     e.stopPropagation();
     const tooltip = document.getElementById('scTooltip');
     if (!tooltip) return;
@@ -1947,7 +2005,7 @@ function toggleScTooltip(e, col) {
     const wasActive = col.classList.contains('sc-active');
     const chart = col.closest('.sc-chart');
     if (!chart) return;
-    chart.querySelectorAll('.sc-bar-col').forEach(c => c.classList.remove('sc-active'));
+    chart.querySelectorAll('.sc-bar-col').forEach((c: Element) => c.classList.remove('sc-active'));
     if (wasActive) { hideScTooltip(); return; }
 
     col.classList.add('sc-active');

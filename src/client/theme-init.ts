@@ -24,7 +24,7 @@
         return bl.startsWith('zh') ? 'zh' : bl.startsWith('it') ? 'it' : 'en';
     }
 
-    function applyPreferences(targetRoot) {
+    function applyPreferences(targetRoot: HTMLElement | null | undefined) {
         if (!targetRoot) return;
 
         const theme = readTheme();
