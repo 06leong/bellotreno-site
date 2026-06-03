@@ -1,3 +1,4 @@
+const themeInitSource = String.raw`
 (function () {
     function readTheme() {
         try {
@@ -20,11 +21,11 @@
         } catch (error) {
             // Ignore storage errors and fall back to the browser language.
         }
-        const bl = navigator.language.toLowerCase();
-        return bl.startsWith('zh') ? 'zh' : bl.startsWith('it') ? 'it' : 'en';
+        const browserLanguage = navigator.language.toLowerCase();
+        return browserLanguage.startsWith('zh') ? 'zh' : browserLanguage.startsWith('it') ? 'it' : 'en';
     }
 
-    function applyPreferences(targetRoot: HTMLElement | null | undefined) {
+    function applyPreferences(targetRoot) {
         if (!targetRoot) return;
 
         const theme = readTheme();
@@ -55,3 +56,6 @@
         });
     }
 })();
+`;
+
+export default themeInitSource;

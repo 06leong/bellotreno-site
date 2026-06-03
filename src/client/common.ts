@@ -4,20 +4,29 @@ export {};
  * BelloTreno - Common UI Logic
  */
 
-window.currentLang = window.currentLang || 'zh';
-window.currentTheme = 'auto';
 const translations = window.translations || {};
 
 type Language = NonNullable<Window["currentLang"]>;
 type ThemePreference = NonNullable<Window["currentTheme"]>;
 
-function isLanguage(value: string | undefined): value is Language {
+function isLanguage(value: unknown): value is Language {
     return value === 'zh' || value === 'en' || value === 'it';
 }
 
-function isThemePreference(value: string | undefined): value is ThemePreference {
+function isThemePreference(value: unknown): value is ThemePreference {
     return value === 'auto' || value === 'light' || value === 'dark';
 }
+
+function normalizeLanguage(value: unknown): Language {
+    return isLanguage(value) ? value : 'zh';
+}
+
+function normalizeThemePreference(value: unknown): ThemePreference {
+    return isThemePreference(value) ? value : 'auto';
+}
+
+window.currentLang = normalizeLanguage(window.currentLang);
+window.currentTheme = normalizeThemePreference(window.currentTheme);
 
 function blurActiveElement() {
     if (document.activeElement instanceof HTMLElement) {
@@ -28,14 +37,12 @@ function blurActiveElement() {
 // ========== Language Management ==========
 
 function initLanguage() {
-    const lang = document.documentElement.getAttribute('data-lang') as Window["currentLang"] | null;
-    if (lang) {
-        window.currentLang = lang;
-    }
+    window.currentLang = normalizeLanguage(document.documentElement.getAttribute('data-lang') || window.currentLang);
     updateLanguage();
 }
 
 function updateLanguage() {
+    window.currentLang = normalizeLanguage(window.currentLang);
     const langNames: Record<Language, string> = { zh: 'CN', en: 'EN', it: 'IT' };
     const currentLangEl = document.getElementById('currentLang');
     if (currentLangEl) currentLangEl.textContent = langNames[window.currentLang];
@@ -67,6 +74,7 @@ function updateLanguage() {
 
 function changeLang(lang: Language) {
     window.currentLang = lang;
+    document.documentElement.setAttribute('data-lang', lang);
     localStorage.setItem('language', lang);
     updateLanguage();
 }
@@ -75,13 +83,13 @@ function changeLang(lang: Language) {
 
 function initTheme() {
     const storedTheme = localStorage.getItem('theme') || 'auto';
-    const savedTheme = isThemePreference(storedTheme) ? storedTheme : 'auto';
-    window.currentTheme = savedTheme;
+    window.currentTheme = normalizeThemePreference(storedTheme);
     applyTheme();
     updateThemeDisplay();
 }
 
 function applyTheme() {
+    window.currentTheme = normalizeThemePreference(window.currentTheme);
     const root = document.documentElement;
     root.classList.add('theme-transitioning');
 
