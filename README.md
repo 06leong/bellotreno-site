@@ -3,7 +3,7 @@
 ![BelloTreno project banner](public/readme-banner.svg)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Astro](https://img.shields.io/badge/Astro-5.x-orange.svg)](https://astro.build/)
+[![Astro](https://img.shields.io/badge/Astro-6.x-orange.svg)](https://astro.build/)
 [![Cloudflare Pages](https://img.shields.io/badge/Cloudflare-Pages-f38020.svg)](https://pages.cloudflare.com/)
 [![CI](https://github.com/06leong/bellotreno-site/actions/workflows/ci.yml/badge.svg)](https://github.com/06leong/bellotreno-site/actions/workflows/ci.yml)
 [![Docker Images](https://github.com/06leong/bellotreno-site/actions/workflows/docker-images.yml/badge.svg)](https://github.com/06leong/bellotreno-site/actions/workflows/docker-images.yml)
@@ -116,11 +116,16 @@ npm run check
 npm run build
 ```
 
-The frontend is an Astro static site with TypeScript browser modules under
-`src/client/`, typed Cloudflare Pages Functions under `functions/api/`, shared
-normalizers under `src/lib/normalizers/`, and typed maintenance scripts under
-`scripts/`. Production deployment is currently designed for Cloudflare Pages,
-with Pages Functions used for token-protected server-side API calls.
+The frontend is an Astro static site with strict TypeScript browser modules
+under `src/client/`, typed Cloudflare Pages Functions under `functions/api/`,
+shared normalizers under `src/lib/normalizers/`, and typed maintenance scripts
+under `scripts/`. Production deployment is designed for Cloudflare Pages, with
+Pages Functions used for token-protected server-side API calls.
+
+Runtime JavaScript source should not be added under `public/scripts/`. Browser
+code is authored as TypeScript and bundled by Astro/Vite into hashed assets.
+Fonts are configured through Astro's Fonts API so generated font files are served
+from the built site instead of loading Google Fonts at page runtime.
 
 ## Disclaimer
 

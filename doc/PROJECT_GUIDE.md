@@ -25,7 +25,7 @@ BelloTreno 现在包含五个主要页面：
 
 浏览器缓存方面，项目使用 `public/_headers` 控制 HTML 等入口资源重新校验，浏览器运行时代码由 Astro/Vite 打包成带 hash 的 `/_astro/*` 资源，避免 Cloudflare Pages 新部署后 iOS Safari 或桌面浏览器继续使用旧脚本。
 
-访问统计方面，`BaseLayout.astro` 支持可选 Umami 注入。只有同时配置 `PUBLIC_UMAMI_SCRIPT_URL` 和 `PUBLIC_UMAMI_WEBSITE_ID` 时才会加载，默认限定 `PUBLIC_UMAMI_DOMAINS=bellotreno.org,real.bellotreno.org`，并启用 `data-do-not-track` 和 `data-exclude-search`。
+访问统计方面，`BaseLayout.astro` 支持可选 Umami 注入。只有同时配置 `PUBLIC_UMAMI_SCRIPT_URL` 和 `PUBLIC_UMAMI_WEBSITE_ID` 时才会加载。建议把 `PUBLIC_UMAMI_DOMAINS` 设置为 `bellotreno.org,real.bellotreno.org,*.bellotreno-site.pages.dev`，这样生产域名和 Cloudflare Pages preview 域名都能验证；脚本同时启用 `data-do-not-track` 和 `data-exclude-search`。
 
 ---
 
@@ -265,7 +265,7 @@ Trenord Traffic info is intentionally implemented as a same-origin Pages Functio
 
 #### 前端代码组织
 
-前端运行时代码已经从未编译的 `public/scripts/*.js` 迁移到 Astro/Vite 管理的 TypeScript 模块：
+前端运行时代码已经从未编译的 `public/scripts/*.js` 迁移到 Astro/Vite 管理的 TypeScript 模块。当前 `src/client/**/*.ts` 使用 `tsconfig.client.json` 的完整 `strict: true` 检查；Cloudflare Pages Functions、normalizers、Node scripts/tests 也分别由独立 tsconfig 检查。
 
 | 模块 | 职责 |
 |------|------|
@@ -278,9 +278,11 @@ Trenord Traffic info is intentionally implemented as a same-origin Pages Functio
 | `src/client/infomobilita.ts` | RFI RSS 公告页 |
 | `src/client/statistics.ts` | 统计 dashboard、chart、表格和 CSV link |
 | `src/client/swiss.ts` | Swiss formation fetch、timeline merge、coach strip |
-| `src/client/theme-init.ts` | head 内联主题初始化，避免主题闪烁 |
+| `src/client/theme-init-source.ts` | 导出纯 JavaScript bootstrap 字符串，由 `BaseLayout.astro` 内联到 head，避免主题/语言闪烁 |
 
 `BaseLayout.astro` 固定先导入 `config.ts`、`i18n.ts`、`common.ts`，各页面再通过 `slot="scripts"` 导入自己的模块。新的浏览器代码不应再放回 `public/scripts/`。
+
+`theme-init-source.ts` 本身是 TypeScript 模块，但导出的字符串必须是浏览器可直接执行的普通 JavaScript。不要再用 `?raw` 把带 TypeScript 类型标注的源码直接注入 inline script。
 
 #### 前端数据获取流程（以查询列车为例）
 
@@ -314,14 +316,14 @@ fetch("https://ah.bellotreno.workers.dev/?url=https://www.viaggiatreno.it/.../an
 
 - **零 JS 默认**：Astro 默认不向浏览器发送 JS 框架代码，页面加载极快
 - **Islands 架构**：只在需要交互的地方注入 JS
-- **Astro Fonts API**：构建时下载并生成带 hash 的本地字体资源，避免运行时阻塞 `fonts.googleapis.com` / `fonts.gstatic.com`
+- **Astro Fonts API**：构建时下载并生成带 hash 的本地字体资源，避免页面运行时再访问 `fonts.googleapis.com` / `fonts.gstatic.com`
 - **适合内容型站点**：配合 Tailwind + DaisyUI 快速构建美观 UI
 
 #### SEO 与 PWA
 
 `BaseLayout.astro` 集中管理所有 SEO 标签，各页面只需传入意大利语 `description`：
 
-- **静态 `lang="it"`**：搜索引擎爬虫看到意大利语作为主语言；`theme-init.ts` 在运行时根据 `localStorage('language')` 覆盖为用户偏好语言
+- **静态 `lang="it"`**：搜索引擎爬虫看到意大利语作为主语言；`theme-init-source.ts` 在运行时根据 `localStorage('language')` 覆盖为用户偏好语言
 - **每页独立 canonical URL**：使用 `Astro.url.pathname` 自动生成，避免重复内容问题
 - **hreflang 多语言提示**：`it` / `en` / `zh-Hans` / `x-default` 均指向同一 URL（单 URL 多语言架构）
 - **Open Graph + Twitter Card**：社交分享预览，依赖 `public/og-image.png`（1200×630 px）
@@ -345,7 +347,8 @@ Cloudflare Pages 部署后，浏览器可能继续使用旧资源。项目现在
 | 问题 | 解决方案 |
 |------|---------|
 | badge 映射逻辑重复（`main.ts` 和 `station.ts` 曾各有一份） | 提取为 `window.getBadgeClass(catCode)` 放在 `config.ts`，两处共用 |
-| API 数据直接注入 `innerHTML` 存在 XSS 风险 | `common.ts` 提供 `window.escapeHtml(str)`，高风险新代码优先使用 DOM builder 和 `textContent` |
+| API 数据直接注入 `innerHTML` 存在 XSS 风险 | `common.ts` 提供 `window.escapeHtml(str)`，高风险新代码优先使用 DOM builder 和 `textContent`；剩余模板见 `doc/innerhtml-audit.md` |
+| 前端运行时代码缺少严格类型边界 | `tsconfig.client.json` 已开启 `strict: true`，DOM 查询、全局状态、Swiss/statistics payload 都必须通过类型守卫、局部 interface 或 normalizer 表达 |
 | `station.astro` 内嵌 ~175 行业务逻辑脚本 | 全部移入 `station.ts`（通过 `astro:page-load` 初始化），`station.astro` 现为纯 HTML 模板 |
 | `platform-pulse` CSS 用 `<style is:global>` 限制在单页 | 移入 `global.css`，全局可用 |
 | 访问计数每次 SPA 跳转重复触发 | `common.ts` 用 `sessionStorage` 标记，同一标签页会话只计一次 |
@@ -383,7 +386,7 @@ Cloudflare Pages 部署后，浏览器可能继续使用旧资源。项目现在
 | `TRENORD_BFF_SECRET` | Secret | Pages Function `/api/trenord/traffic` 解密 Trenord train BFF payload；不要使用 `PUBLIC_` 前缀，不要写入仓库 |
 | `PUBLIC_UMAMI_SCRIPT_URL` | Plain text | 可选 Umami script 地址，会进入前端 HTML |
 | `PUBLIC_UMAMI_WEBSITE_ID` | Plain text | 可选 Umami website id，会进入前端 HTML |
-| `PUBLIC_UMAMI_DOMAINS` | Plain text | Umami 允许统计的域名，默认 `bellotreno.org,real.bellotreno.org` |
+| `PUBLIC_UMAMI_DOMAINS` | Plain text | Umami 允许统计的域名，建议包含 `bellotreno.org,real.bellotreno.org,*.bellotreno-site.pages.dev` 以便 Cloudflare Pages preview 验证 |
 
 `PUBLIC_*` 变量会暴露到前端，只能放可公开配置；真正的 API token 必须使用非 `PUBLIC_` 的 Secret。
 
@@ -393,8 +396,8 @@ Cloudflare Pages 部署后，浏览器可能继续使用旧资源。项目现在
 
 ```
 ┌─ 前端 ─────────────────────────────────────────┐
-│  Astro 6 · Tailwind CSS 4 · DaisyUI 5          │
-│  原生 JavaScript · Astro Fonts API              │
+│  Astro 6 · TypeScript · Tailwind CSS 4 · DaisyUI 5 │
+│  Astro Fonts API · typed browser modules        │
 │  @astrojs/sitemap · site.webmanifest (PWA)      │
 │  Cloudflare Pages · Pages Functions             │
 └─────────────────────────────────────────────────┘

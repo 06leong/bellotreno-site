@@ -44,14 +44,14 @@ The current implementation is spread across these files:
 
 | Path | Responsibility |
 | --- | --- |
-| `functions/api/trenord/traffic.js` | Same-origin Cloudflare Pages Function. Fetches Trenord upstreams, decrypts the train BFF payload server-side, caches direttrici, and returns normalized JSON. |
-| `src/lib/normalizers/trenord.js` | Pure normalizer utilities. Extracts train metadata, matches direttrice codes, filters notices, extracts URLs, assigns severity levels, and creates stable IDs. |
-| `public/scripts/main.js` | Frontend dispatch and rendering. Detects Trenord trains, calls `/api/trenord/traffic`, renders the collapsed Traffic info card, and inserts the Trenord line badge when available. |
-| `public/scripts/config.js` | Defines `window.TRENORD_TRAFFIC_BASE = "/api/trenord/traffic"`. |
-| `public/scripts/i18n.js` | Defines localized UI strings for `Traffic info`, `Info linea`, and empty notice states. |
+| `functions/api/trenord/traffic.ts` | Same-origin Cloudflare Pages Function. Fetches Trenord upstreams, decrypts the train BFF payload server-side, caches direttrici, and returns normalized JSON. |
+| `src/lib/normalizers/trenord.ts` | Pure normalizer utilities. Extracts train metadata, matches direttrice codes, filters notices, extracts URLs, assigns severity levels, and creates stable IDs. |
+| `src/client/main.ts` | Frontend dispatch and rendering. Detects Trenord trains, calls `/api/trenord/traffic`, renders the collapsed Traffic info card, and inserts the Trenord line badge when available. |
+| `src/client/config.ts` | Defines `window.TRENORD_TRAFFIC_BASE = "/api/trenord/traffic"`. |
+| `src/client/i18n.ts` | Defines localized UI strings for `Traffic info`, `Info linea`, and empty notice states. |
 | `src/styles/global.css` | Styles the Traffic info card, notice badges, notice links, and Trenord line badge. |
-| `tests/js/normalizers.test.mjs` | Unit tests for matching, fallback behavior, URL extraction, sorting, stable IDs, severity mapping, and empty notice handling. |
-| `scripts/validate-trenord-traffic.mjs` | Optional live validation script. Requires `TRENORD_BFF_SECRET` in the local environment. |
+| `tests/js/normalizers.test.ts` | Unit tests for matching, fallback behavior, URL extraction, sorting, stable IDs, severity mapping, and empty notice handling. |
+| `scripts/validate-trenord-traffic.ts` | Optional live validation script. Requires `TRENORD_BFF_SECRET` in the local environment. Run through `tsx`. |
 
 ## 4. Runtime Data Flow
 
@@ -453,7 +453,7 @@ PowerShell example:
 
 ```powershell
 $env:TRENORD_BFF_SECRET = "<secret value from your private environment>"
-node scripts/validate-trenord-traffic.mjs 24946 2026-05-25
+TRENORD_BFF_SECRET="<private secret>" npx tsx scripts/validate-trenord-traffic.ts 24946 2026-05-25
 Remove-Item Env:TRENORD_BFF_SECRET
 ```
 
@@ -492,7 +492,7 @@ Possible causes:
 
 Action:
 
-- Validate with `scripts/validate-trenord-traffic.mjs`.
+- Validate with `npx tsx scripts/validate-trenord-traffic.ts`.
 - Inspect whether Trenord's public website still loads the same train detail.
 - Keep the actual secret out of logs and comments.
 
@@ -510,7 +510,7 @@ Action:
 
 - Test the same train and date on Trenord's real-time page.
 - Try a known baseline such as `24946` on `2026-05-25` in a private environment.
-- If the field moved, update `getTrenordTrainRecord()` / `getTrenordTrainInfo()` in `src/lib/normalizers/trenord.js`.
+- If the field moved, update `getTrenordTrainRecord()` / `getTrenordTrainInfo()` in `src/lib/normalizers/trenord.ts`.
 
 ### `reason: "direttrice_not_found"`
 
@@ -560,8 +560,8 @@ The Trenord normalizer tests cover:
 Optional live validation:
 
 ```bash
-TRENORD_BFF_SECRET="<private secret>" node scripts/validate-trenord-traffic.mjs 24946 2026-05-25
-TRENORD_BFF_SECRET="<private secret>" node scripts/validate-trenord-traffic.mjs 2634 2026-05-25
+TRENORD_BFF_SECRET="<private secret>" npx tsx scripts/validate-trenord-traffic.ts 24946 2026-05-25
+TRENORD_BFF_SECRET="<private secret>" npx tsx scripts/validate-trenord-traffic.ts 2634 2026-05-25
 ```
 
 Do not paste real live validation commands containing the secret into GitHub comments, issue descriptions, documentation, screenshots, or logs.
@@ -644,4 +644,3 @@ the frontend normalizes it to `RE80` for the badge label and color mapping. The 
 - Do not treat `direttrice_security` as the primary source.
 - Do not describe direttrici notices as train-specific unless the text explicitly names that train.
 - Keep the provider isolated so it can later be replaced by a documented Trenord API, E015 source, or GTFS-RT ServiceAlerts source.
-

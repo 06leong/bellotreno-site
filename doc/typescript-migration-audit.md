@@ -1,6 +1,6 @@
 # TypeScript Migration Audit
 
-Last updated: 2026-06-01
+Last updated: 2026-06-03
 
 This document records the TypeScript migration state for the single PR on
 `codex/typescript-migration`. The goal is to keep the project reviewable while
@@ -14,7 +14,7 @@ surfaces:
 
 | Area | Current source | Type checking |
 |------|----------------|---------------|
-| Browser runtime | `src/client/**/*.ts` | `tsconfig.client.json` |
+| Browser runtime | `src/client/**/*.ts` | `tsconfig.client.json` (`strict: true`) |
 | Shared normalizers | `src/lib/normalizers/**/*.ts` | `tsconfig.normalizers.json` |
 | Cloudflare Pages Functions | `functions/api/**/*.ts` | `tsconfig.functions.json` |
 | Node scripts and JS tests | `scripts/**/*.ts`, `tests/js/**/*.test.ts` | `tsconfig.node.json` |
@@ -27,6 +27,9 @@ owning Astro page through `slot="scripts"`.
 
 - `src/client/config.ts`, `i18n.ts`, and `common.ts` are the shared runtime base
   and must load before page modules.
+- `src/client/theme-init-source.ts` exports a browser-ready JavaScript bootstrap
+  string for the inline head script. Do not inline raw TypeScript source with
+  `?raw`.
 - `src/client/station-navigation.ts` is the canonical station board navigation
   API. Search results, recent station chips, train-detail station links, and
   station-page compatibility globals should use this module instead of
@@ -70,23 +73,23 @@ from `rfi-proxy/`.
 
 ## Remaining Hardening
 
-The browser modules currently keep migration compatibility through scoped
-`// @ts-nocheck` comments on the large runtime files. This is intentional for
-the first full-source migration because it avoids mixing behavior changes with
-thousands of DOM and upstream payload type decisions.
+The full source migration is complete for active JavaScript surfaces, and the
+browser runtime now passes TypeScript with `strict: true`. Remaining work is no
+longer about renaming files; it is about improving domain models, reducing broad
+`Record<string, unknown>` boundaries, and lowering rendering risk.
 
 Recommended hardening order:
 
-1. Add local interfaces for repeated API payloads in `src/client/main.ts`,
-   `station.ts`, `statistics.ts`, and `swiss.ts`.
-2. Remove `// @ts-nocheck` one file at a time, starting with the smallest page
-   runtime modules.
-3. Move reusable pure helpers from client files into `src/lib/normalizers/` or
+1. Replace broad `Record<string, unknown>` boundaries with named payload
+   interfaces where the upstream shape is stable enough to model.
+2. Move reusable pure helpers from client files into `src/lib/normalizers/` or
    a new typed client utility module when they can be tested without the DOM.
-4. Replace remaining string-template `innerHTML` surfaces according to
+3. Replace remaining string-template `innerHTML` surfaces according to
    `doc/innerhtml-audit.md`.
-5. Keep global `window.*` declarations in `src/types/bellotreno-globals.d.ts`
+4. Keep global `window.*` declarations in `src/types/bellotreno-globals.d.ts`
    as a compatibility boundary only. New feature code should prefer imports.
+5. Add browser smoke tests for homepage search, station board navigation,
+   statistics, language switching, and theme switching.
 
 ## Future Vue Islands
 
@@ -114,4 +117,4 @@ layout. The recommended path is:
 | Tooling scripts | Complete |
 | Client runtime | Complete |
 | Documentation | Complete |
-| Hardening | Partially complete; large client files remain in migration mode |
+| Hardening | Partially complete; client strict mode is enabled, remaining work is payload modeling and innerHTML reduction |

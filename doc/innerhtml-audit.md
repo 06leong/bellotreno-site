@@ -4,11 +4,12 @@ This note tracks the current migration path away from unsafe HTML string output.
 
 ## Current high-output areas
 
-- `src/client/main.ts`: train details, timeline stops, service messages, partial-cancellation indicators, disambiguation choices, recent searches, and SmartCaring now use DOM builders.
+- `src/client/main.ts`: train details, timeline stops, service messages, partial-cancellation indicators, disambiguation choices, recent searches, and most SmartCaring surfaces now use DOM builders.
 - `src/client/station.ts`: station departure/arrival rows and Swiss route badges now use DOM builders.
 - `src/client/swiss.ts`: Swiss formation stop selector, coach strip, vehicle details.
 - `src/client/statistics.ts`: summary cards and charts still use controlled HTML/SVG templates. Query table rows use DOM builders instead of HTML string templates.
 - `src/client/infomobilita.ts`: RFI/Infomobilita news content now uses DOM builders.
+- `src/pages/about.astro`: localized content currently uses trusted in-repo HTML strings.
 
 ## Current safe patterns
 
@@ -27,6 +28,7 @@ This note tracks the current migration path away from unsafe HTML string output.
 
 1. Swiss vehicle details and coach strip in `src/client/swiss.ts`.
 2. Remaining statistics chart/tooltips templates in `src/client/statistics.ts`.
-3. Any future high-risk page added under `src/client/`.
+3. `src/pages/about.astro` can stay lower priority because content is static and in-repo, but it should move to structured content if the page becomes CMS/API driven.
+4. Any future high-risk page added under `src/client/`.
 
 The first Priority 2 baseline added normalizer tests and quality gates. Follow-up PRs converted the statistics table, station board, Infomobilita cards, and `src/client/main.ts` train-detail surfaces. Continue converting one high-risk rendering area at a time, with fixture coverage before each behavior change.
