@@ -2,11 +2,11 @@
 
 BelloTreno 是一个**意大利铁路实时信息面板**，通过自建后端代理绕过官方 API 反爬限制，经 Cloudflare Worker 中间层转发，最终在静态前端网站上以更清晰、易读的 UI 展示列车实时动态、车站到发信息与 RFI 出行公告。
 
-线上地址：https://bellotreno.org/（`real.bellotreno.org` 作为旧入口保留，并建议 301 到主域名）
+线上地址：https://bellotreno.org/ （`real.bellotreno.org` 作为旧入口保留，并建议 301 到主域名）
 
 ---
 
-## 一、2026-05 当前功能快照
+## 一、当前功能
 
 BelloTreno 现在包含五个主要页面：
 
