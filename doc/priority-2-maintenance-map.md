@@ -7,7 +7,7 @@ file-extension migration.
 
 ## Current Baseline
 
-- `npm run check` runs raw JavaScript syntax checks, strict TypeScript checks,
+- `npm run check` runs a raw JavaScript source guard, strict TypeScript checks,
   JS tests, i18n key parity, and Python compile/unit checks.
 - `src/client/**/*.ts` is bundled by Astro/Vite and checked by
   `tsconfig.client.json`.

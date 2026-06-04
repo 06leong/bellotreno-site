@@ -12,6 +12,7 @@ Functions.
 npm run dev         # start Astro dev server
 npm run build       # production build to dist/
 npm run check       # full local quality gate, same baseline as CI
+npm run check:no-raw-js # fail if raw .js/.mjs/.cjs source files are added
 npm run check:types # TypeScript checks for every scoped project
 npm run test:js     # Node test runner through tsx for tests/js/*.test.ts
 npm run preview     # serve built output locally
@@ -19,7 +20,8 @@ npm run preview     # serve built output locally
 
 `npm run check` is the minimum gate before pushing. It runs:
 
-- raw JavaScript syntax audit for any remaining `.js` / `.mjs` files;
+- raw JavaScript source guard for `.js`, `.mjs`, and `.cjs` files outside
+  generated/dependency directories;
 - TypeScript checks for normalizers, Cloudflare Pages Functions, Node
   scripts/tests, and browser runtime modules;
 - Node tests under `tests/js/`;

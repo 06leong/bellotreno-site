@@ -274,6 +274,8 @@ Astro/Vite-managed TypeScript modules. `src/client/**/*.ts` is checked with
 modules are imported by their owning Astro pages through the `scripts` slot.
 
 Do not put new browser runtime code back under `public/scripts/`.
+`npm run check:no-raw-js` enforces that `.js`, `.mjs`, and `.cjs` source files
+are not reintroduced outside generated or dependency directories.
 
 `theme-init-source.ts` is a TypeScript module, but the exported string must be
 plain JavaScript because it is inlined directly into the document head. Do not
@@ -354,7 +356,7 @@ The active JavaScript surfaces are now TypeScript:
 - browser runtime: `src/client/**/*.ts`;
 - Pages Functions: `functions/api/**/*.ts`;
 - normalizers: `src/lib/normalizers/**/*.ts`;
-- scripts and JS tests: `scripts/**/*.ts`, `tests/js/**/*.test.ts`;
+- scripts and Node tests: `scripts/**/*.ts`, `tests/js/**/*.test.ts`;
 - Astro config: `astro.config.ts`.
 
 Quality improvements already in place:

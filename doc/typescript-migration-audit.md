@@ -56,7 +56,8 @@ npm run build
 
 `npm run check` includes:
 
-- raw JavaScript syntax check for any remaining JS files;
+- raw JavaScript source guard for `.js`, `.mjs`, and `.cjs` files outside
+  generated/dependency directories;
 - TypeScript checks for normalizers, Functions, Node scripts/tests, and client
   modules;
 - Node tests under `tests/js/`;
