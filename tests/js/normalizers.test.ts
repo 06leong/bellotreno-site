@@ -11,6 +11,7 @@ import {
 import {
   buildPartialCancellationState,
   normalizeStationMatchName,
+  resolveStopTimeStatus,
 } from "../../src/lib/normalizers/viaggiatreno.ts";
 import {
   hasSwissHint,
@@ -51,6 +52,39 @@ test("statistics category helpers preserve special categories and regional alias
 test("station name matching is accent and punctuation tolerant", () => {
   assert.equal(normalizeStationMatchName("DOMEGLIARA-S. AMBROGIO"), "DOMEGLIARA S AMBROGIO");
   assert.equal(normalizeStationMatchName("Genova Brignole"), "GENOVA BRIGNOLE");
+});
+
+test("stop time status does not mark scheduled-only future stops as on time", () => {
+  const scheduledMs = Date.parse("2026-06-04T09:38:00+02:00");
+
+  assert.equal(resolveStopTimeStatus({
+    delayMinutes: 0,
+    realMs: null,
+    scheduledMs,
+    displayedMs: scheduledMs,
+  }), "");
+});
+
+test("stop time status marks actual zero-delay stops as on time", () => {
+  const scheduledMs = Date.parse("2026-06-04T09:38:00+02:00");
+
+  assert.equal(resolveStopTimeStatus({
+    delayMinutes: 0,
+    realMs: scheduledMs,
+    scheduledMs,
+    displayedMs: scheduledMs,
+  }), "on-time");
+});
+
+test("stop time status keeps explicit non-zero delay estimates visible", () => {
+  const scheduledMs = Date.parse("2026-06-04T09:38:00+02:00");
+
+  assert.equal(resolveStopTimeStatus({
+    delayMinutes: 12,
+    realMs: null,
+    scheduledMs,
+    displayedMs: scheduledMs + 12 * 60000,
+  }), "late");
 });
 
 test("partial cancellation before actual start is marked as cancelled", () => {

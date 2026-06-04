@@ -1,4 +1,8 @@
 import { navigateToStationBoard, registerStationNavigationGlobal } from './station-navigation.js';
+import {
+    resolveStopTimeStatus,
+    type StopTimeStatus
+} from '../lib/normalizers/viaggiatreno.js';
 
 export {};
 
@@ -6,7 +10,7 @@ type SearchMode = 'train' | 'station';
 type JsonRecord = Record<string, unknown>;
 type Language = NonNullable<Window["currentLang"]>;
 type TimeKind = 'arrival' | 'departure';
-type TimeStatus = '' | 'early' | 'late' | 'on-time';
+type TimeStatus = StopTimeStatus;
 type PartialStopBoundary = '' | 'actualStart' | 'actualEnd' | 'replacementStart';
 
 interface NodeOptions {
@@ -433,14 +437,6 @@ function sameDisplayedMinute(left: unknown, right: unknown): boolean {
     return formatT(left) === formatT(right);
 }
 
-function resolveTimeStatusClass(delayMin: unknown): Exclude<TimeStatus, 'on-time'> {
-    const delay = Number(delayMin);
-    if (!Number.isFinite(delay)) return '';
-    if (delay > 0) return 'late';
-    if (delay < 0) return 'early';
-    return '';
-}
-
 function formatTimeStatusText(status: TimeStatus, delayMin: unknown): string {
     const delay = Math.abs(Math.round(Number(delayMin) || 0));
     if (status === 'late') {
@@ -452,15 +448,6 @@ function formatTimeStatusText(status: TimeStatus, delayMin: unknown): string {
     if (status === 'on-time') {
         return translations[window.currentLang].time_on_time || translations[window.currentLang].on_time || 'On time';
     }
-    return '';
-}
-
-function resolveTimeStatus(delayMin: unknown, primaryMs: unknown, schedMs: unknown): TimeStatus {
-    const status = resolveTimeStatusClass(delayMin);
-    if (status) return status;
-    const delay = Number(delayMin);
-    if (Number.isFinite(delay) && delay === 0 && (hasTimestamp(primaryMs) || hasTimestamp(schedMs))) return 'on-time';
-    if (sameDisplayedMinute(primaryMs, schedMs)) return 'on-time';
     return '';
 }
 
@@ -492,7 +479,12 @@ function renderTimeHtml(kind: TimeKind, schedMs: unknown, realMs: unknown, delay
     const hasExpected = hasTimestamp(expectedMs) && !sameDisplayedMinute(schedMs, expectedMs);
     const primaryMs = hasReal ? Number(realMs) : (hasExpected ? expectedMs : (hasTimestamp(schedMs) ? Number(schedMs) : null));
     const primary = formatT(primaryMs) || '--:--';
-    const status = resolveTimeStatus(delayMin, primaryMs, schedMs);
+    const status = resolveStopTimeStatus({
+        delayMinutes: delayMin,
+        realMs,
+        scheduledMs: schedMs,
+        displayedMs: primaryMs
+    });
     const statusText = formatTimeStatusText(status, delayMin);
     const label = getTimeLabelParts(kind);
     const scheduledLabel = translations[window.currentLang].scheduled_short || translations[window.currentLang].scheduled;
@@ -512,7 +504,12 @@ function renderTimeNode(kind: TimeKind, schedMs: unknown, realMs: unknown, delay
     const hasExpected = hasTimestamp(expectedMs) && !sameDisplayedMinute(schedMs, expectedMs);
     const primaryMs = hasReal ? Number(realMs) : (hasExpected ? expectedMs : (hasTimestamp(schedMs) ? Number(schedMs) : null));
     const primary = formatT(primaryMs) || '--:--';
-    const status = resolveTimeStatus(delayMin, primaryMs, schedMs);
+    const status = resolveStopTimeStatus({
+        delayMinutes: delayMin,
+        realMs,
+        scheduledMs: schedMs,
+        displayedMs: primaryMs
+    });
     const statusText = formatTimeStatusText(status, delayMin);
 
     const primaryChildren = [

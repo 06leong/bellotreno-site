@@ -9,6 +9,15 @@ export interface PartialCancellationState {
   boundary: "" | "actualStart" | "actualEnd" | "replacementStart";
 }
 
+export type StopTimeStatus = "" | "early" | "late" | "on-time";
+
+export interface StopTimeStatusInput {
+  delayMinutes: unknown;
+  realMs: unknown;
+  scheduledMs: unknown;
+  displayedMs?: unknown;
+}
+
 export function normalizeStationMatchName(value: unknown): string {
   return String(value || "")
     .normalize("NFD")
@@ -18,6 +27,41 @@ export function normalizeStationMatchName(value: unknown): string {
     .replace(/\s+/g, " ")
     .trim()
     .toUpperCase();
+}
+
+function hasTimestamp(value: unknown): boolean {
+  const timestamp = Number(value);
+  return Number.isFinite(timestamp) && timestamp > 0;
+}
+
+function sameTimestampMinute(left: unknown, right: unknown): boolean {
+  if (!hasTimestamp(left) || !hasTimestamp(right)) return false;
+  return Math.floor(Number(left) / 60000) === Math.floor(Number(right) / 60000);
+}
+
+/**
+ * Resolve the visual status badge for a stop time.
+ *
+ * A scheduled time by itself is not realtime evidence. Non-zero delay values can
+ * still be shown because they are explicit realtime estimates, but an "on time"
+ * badge requires an actual timestamp from ViaggiaTreno.
+ */
+export function resolveStopTimeStatus(input: StopTimeStatusInput): StopTimeStatus {
+  const delay = Number(input.delayMinutes);
+  const hasRealTime = hasTimestamp(input.realMs);
+
+  if (Number.isFinite(delay)) {
+    if (delay > 0) return "late";
+    if (delay < 0) return "early";
+    if (delay === 0 && hasRealTime) return "on-time";
+    return "";
+  }
+
+  if (hasRealTime && sameTimestampMinute(input.displayedMs ?? input.realMs, input.scheduledMs)) {
+    return "on-time";
+  }
+
+  return "";
 }
 
 export function findStopIndexByName(stops: ViaggiaTrenoStop[], name: unknown): number {
