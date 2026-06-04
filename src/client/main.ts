@@ -3,6 +3,12 @@ import {
     resolveStopTimeStatus,
     type StopTimeStatus
 } from '../lib/normalizers/viaggiatreno.js';
+import {
+    parseTrainTriple,
+    readTrainUrlState,
+    trainStateToSearch,
+    trainTripleToSearch
+} from './train-url-state.js';
 
 export {};
 
@@ -12,6 +18,7 @@ type Language = NonNullable<Window["currentLang"]>;
 type TimeKind = 'arrival' | 'departure';
 type TimeStatus = StopTimeStatus;
 type PartialStopBoundary = '' | 'actualStart' | 'actualEnd' | 'replacementStart';
+type UrlMode = 'none' | 'push' | 'replace';
 
 interface NodeOptions {
     attrs?: Record<string, unknown>;
@@ -27,6 +34,10 @@ interface NodeOptions {
 }
 
 type NodeChild = Node | string | number | boolean | null | undefined;
+
+interface SearchOptions {
+    urlMode?: UrlMode;
+}
 
 interface RecentSearchItem {
     id: string;
@@ -170,11 +181,13 @@ let currentTriple: string | null = null;
 let searchMode: SearchMode = 'train';
 window.searchMode = searchMode;
 let disambiguationData: string[] | null = null;
+let disambiguationUrlMode: UrlMode = 'push';
 let currentSmartCaringData: JsonRecord | null = null;
 let currentTrainCategory = '';
 let currentSwissFormationData: SwissFormationPayload | null = null;
 let swissRequestSeq = 0;
 let currentTrenordLineInfo: TrenordLineInfo | null = null;
+let lastLoadedTrainSearch = '';
 
 
 const API_BASE = window.API_BASE;
@@ -423,6 +436,21 @@ function formatT(ms: unknown): string | null {
 function hasTimestamp(ms: unknown): boolean {
     const value = Number(ms);
     return Number.isFinite(value) && value > 0;
+}
+
+function applyTrainSearchUrl(search: string, mode: UrlMode = 'push'): void {
+    if (mode === 'none' || !search || !window.history) return;
+    const nextUrl = `${window.location.pathname}?${search}`;
+    if (`${window.location.pathname}${window.location.search}` === nextUrl) return;
+    if (mode === 'replace') {
+        window.history.replaceState({}, document.title, nextUrl);
+        return;
+    }
+    window.history.pushState({}, document.title, nextUrl);
+}
+
+function applyTrainTripleUrl(triple: string, mode: UrlMode = 'push'): void {
+    applyTrainSearchUrl(trainTripleToSearch(triple), mode);
 }
 
 function resolveExpectedTimestamp(schedMs: unknown, realMs: unknown, delayMin: unknown): number | null {
@@ -851,7 +879,7 @@ function removeRecentSearch(id: string, type: SearchMode, event?: Event): void {
 
 
 
-async function startSearch(input: string): Promise<void> {
+async function startSearch(input: string, options: SearchOptions = {}): Promise<void> {
     const resultsPanel = document.getElementById('results');
     const disambiguationPanel = document.getElementById('disambiguation');
     if (resultsPanel) resultsPanel.style.display = 'none';
@@ -880,9 +908,9 @@ async function startSearch(input: string): Promise<void> {
 
             const lines = autoText.trim().split('\n');
             if (lines.length > 1) {
-                showDisambiguation(lines);
+                showDisambiguation(lines, options);
             } else {
-                fetchDetails(lines[0].split('|')[1]);
+                fetchDetails(lines[0].split('|')[1], options);
             }
         } catch (err) {
             const msg = window.currentLang === 'zh' ? "搜索失败" :
@@ -923,8 +951,9 @@ async function startSearch(input: string): Promise<void> {
 
 
 
-function showDisambiguation(lines: string[]): void {
+function showDisambiguation(lines: string[], options: SearchOptions = {}): void {
     disambiguationData = lines;
+    disambiguationUrlMode = options.urlMode || 'push';
     renderDisambiguation();
 }
 
@@ -965,7 +994,7 @@ function renderDisambiguation(): void {
         div.addEventListener('click', () => {
             panel.style.display = 'none';
             disambiguationData = null;
-            fetchDetails(triple);
+            fetchDetails(triple, { urlMode: disambiguationUrlMode });
         });
         list.appendChild(div);
     });
@@ -1021,7 +1050,8 @@ function showStationDisambiguation(stations: StationSearchResult[]): void {
 
 
 
-async function fetchDetails(triple: string): Promise<void> {
+async function fetchDetails(triple: string, options: SearchOptions = {}): Promise<void> {
+    if (!parseTrainTriple(triple)) return;
     currentTriple = triple;
     currentSmartCaringData = null;
     currentTrenordLineInfo = null;
@@ -1043,6 +1073,8 @@ async function fetchDetails(triple: string): Promise<void> {
         currentTrainData = data;
         currentTrainCategory = resolveTrainCategory(data);
         render(data);
+        applyTrainTripleUrl(triple, options.urlMode || 'push');
+        lastLoadedTrainSearch = trainTripleToSearch(triple);
         fetchTrafficInformation(data);
         loadSwissFormation(data, triple, requestSeq);
 
@@ -1095,7 +1127,7 @@ async function refreshTrainData(): Promise<void> {
         refreshBtn.style.opacity = '0.5';
         refreshBtn.style.pointerEvents = 'none';
     }
-    await fetchDetails(currentTriple);
+    await fetchDetails(currentTriple, { urlMode: 'none' });
     if (refreshBtn) {
         setTimeout(() => {
             refreshBtn.style.opacity = '1';
@@ -2130,22 +2162,26 @@ document.addEventListener('astro:page-load', () => {
     }
 });
 
+function loadTrainFromCurrentUrl(): void {
+    const state = readTrainUrlState(window.location.search);
+    if (!state) return;
+    const search = trainStateToSearch(state);
+    if (search && search === lastLoadedTrainSearch) return;
+
+    const trainInput = document.getElementById('trainSearch') as HTMLInputElement | null;
+    if (!trainInput) return;
+    trainInput.value = state.trainNumber;
+
+    setTimeout(() => {
+        if (state.originId && state.timestamp) {
+            fetchDetails(`${state.trainNumber}-${state.originId}-${state.timestamp}`, { urlMode: 'replace' });
+            return;
+        }
+        startSearch(state.trainNumber, { urlMode: 'replace' });
+    }, 200);
+}
 
 // astro:page-load 触发时 DOM 已完整就绪，无需轮询重试
 document.addEventListener('astro:page-load', () => {
-    const trainParam = new URLSearchParams(window.location.search).get('train');
-    if (!trainParam) return;
-    const trainNumber = trainParam.trim();
-    const trainInput = document.getElementById('trainSearch') as HTMLInputElement | null;
-    if (!trainInput) return;
-    trainInput.value = trainNumber;
-    // 短暂延迟确保 common.js 的 astro:page-load 回调（语言初始化）已先执行
-    setTimeout(() => {
-        startSearch(trainNumber);
-        setTimeout(() => {
-            if (window.history && window.history.replaceState) {
-                window.history.replaceState({}, document.title, window.location.pathname);
-            }
-        }, 300);
-    }, 200);
+    loadTrainFromCurrentUrl();
 });
