@@ -268,6 +268,8 @@ Astro/Vite-managed TypeScript modules. `src/client/**/*.ts` is checked with
 | `src/client/infomobilita.ts` | RFI RSS notice page |
 | `src/client/statistics.ts` | statistics dashboard, charts, table, pagination, CSV links |
 | `src/client/swiss.ts` | Swiss formation fetch/cache, timeline merge, coach strip |
+| `src/client/about.ts` | localized About-page static content |
+| `src/client/not-found.ts` | 404 terminal theme and device effect |
 | `src/client/theme-init-source.ts` | inline-safe theme/language bootstrap source |
 
 `BaseLayout.astro` imports `config.ts`, `i18n.ts`, and `common.ts` first. Page
@@ -276,6 +278,8 @@ modules are imported by their owning Astro pages through the `scripts` slot.
 Do not put new browser runtime code back under `public/scripts/`.
 `npm run check:no-raw-js` enforces that `.js`, `.mjs`, and `.cjs` source files
 are not reintroduced outside generated or dependency directories.
+Use `npm run smoke:pages` against a local server or a Cloudflare Pages Preview
+URL through `SMOKE_BASE_URL` for a fast page availability check.
 
 `theme-init-source.ts` is a TypeScript module, but the exported string must be
 plain JavaScript because it is inlined directly into the document head. Do not
@@ -371,13 +375,15 @@ Quality improvements already in place:
 | Weak browser runtime typing | `tsconfig.client.json` uses `strict: true` |
 | Swiss same-number false positives | Swiss querying is gated by category, date, and border hints |
 | Swiss vehicle closed-state pollution | EVN-based merge and active segment-specific status |
+| Inline 404 JavaScript and dynamic `innerHTML` | moved to `src/client/not-found.ts` with DOM builders |
 
 Remaining hardening:
 
 - replace broad `Record<string, unknown>` payload edges with named interfaces;
 - reduce remaining controlled `innerHTML` surfaces in Swiss and statistics;
-- add browser smoke tests for homepage search, station navigation, statistics,
-  language, and theme.
+- extend smoke coverage from page availability checks to browser interaction
+  tests for homepage search, station navigation, statistics, language, and
+  theme.
 
 ## 9. Security Model
 

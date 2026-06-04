@@ -30,17 +30,7 @@
 
         <div class="dropdown dropdown-end">
             <div tabindex="0" role="button" class="btn btn-ghost btn-sm rounded-btn px-2">
-                <span class="material-symbols-outlined text-[1.25rem]" id="currentThemeIcon"></span>
-                <script is:inline data-astro-rerun>
-                    (function() {
-                        var t = localStorage.getItem('theme') || 'auto';
-                        var i = 'contrast';
-                        if (t === 'light') i = 'light_mode';
-                        if (t === 'dark') i = 'dark_mode';
-                        var el = document.getElementById('currentThemeIcon');
-                        if (el) el.innerText = i;
-                    })();
-                </script>
+                <span class="material-symbols-outlined text-[1.25rem]" id="currentThemeIcon">contrast</span>
             </div>
             <ul tabindex="0" id="themeMenu" class="dropdown-content menu bg-base-100/80 backdrop-blur-3xl rounded-box z-[1] min-w-max p-2 shadow-glass border border-base-content/10 mt-2">
                 <li>

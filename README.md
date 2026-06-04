@@ -128,6 +128,9 @@ added outside generated/dependency directories.
 Fonts are configured through Astro's Fonts API so generated font files are served
 from the built site instead of loading Google Fonts at page runtime.
 
+For a quick deployed-page smoke check, run `npm run smoke:pages` against a local
+server or set `SMOKE_BASE_URL` to a Cloudflare Pages Preview URL.
+
 ## Disclaimer
 
 BelloTreno is for personal research, railway enthusiast use, and educational

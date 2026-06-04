@@ -247,67 +247,8 @@ import { Font } from 'astro:assets';
         &copy; <span id="year"></span> BELLOTRENO NETWORK. ALL RIGHTS RESERVED.
     </footer>
 
-    <script is:inline>
-        document.addEventListener("DOMContentLoaded", function() {
-            
-            document.getElementById('year').textContent = new Date().getFullYear();
-
-            const themes = [
-                { name: 'Green', bg: '#050505', main: '#33ff00', dim: '#006600', glow: 'rgba(51, 255, 0, 0.6)', scanline: 'rgba(0, 0, 0, 0.5)' },
-                { name: 'Amber', bg: '#1a1000', main: '#ffb000', dim: '#664400', glow: 'rgba(255, 176, 0, 0.6)', scanline: 'rgba(20, 10, 0, 0.4)' },
-                { name: 'Blue',  bg: '#101020', main: '#a5a5ff', dim: '#404080', glow: 'rgba(165, 165, 255, 0.5)', scanline: 'rgba(0, 0, 0, 0.3)' },
-                { name: 'Pink',  bg: '#150015', main: '#ff00ff', dim: '#770077', glow: 'rgba(255, 0, 255, 0.5)', scanline: 'rgba(0, 0, 0, 0.4)' },
-                { name: 'SSH',   bg: '#000000', main: '#c0c0c0', dim: '#666666', glow: 'rgba(255, 255, 255, 0.1)', scanline: 'rgba(255, 255, 255, 0.08)' }
-            ];
-
-            const t = themes[Math.floor(Math.random() * themes.length)];
-            const root = document.documentElement;
-            root.style.setProperty('--bg-color', t.bg);
-            root.style.setProperty('--main-color', t.main);
-            root.style.setProperty('--dim-color', t.name === 'SSH' ? '#888' : t.dim);
-            root.style.setProperty('--glow', t.glow);
-            root.style.setProperty('--scanline', t.scanline);
-
-            const term = document.getElementById('terminal-body');
-            const ua = navigator.userAgent;
-            const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (char) => ({
-                '&': '&amp;',
-                '<': '&lt;',
-                '>': '&gt;',
-                '"': '&quot;',
-                "'": '&#39;'
-            }[char]));
-            let deviceModel = "Unknown Device";
-            
-            if (/iPhone/.test(ua)) deviceModel = "iPhone";
-            else if (/iPad/.test(ua)) deviceModel = "iPad";
-            else if (/Android/.test(ua)) {
-                const match = ua.match(/Android.*?; (.*?)\)/);
-                deviceModel = match && match[1] ? match[1].split('Build')[0].trim() : "Android Device";
-            } else if (/Mac/.test(ua)) deviceModel = "Macintosh";
-            else if (/Win/.test(ua)) deviceModel = "Windows PC";
-            else if (/Linux/.test(ua)) deviceModel = "Linux Machine";
-
-            let browser = "Web Client";
-            if(/Chrome/.test(ua) && !/Edge/.test(ua)) browser = "Chrome";
-            else if(/Firefox/.test(ua)) browser = "Firefox";
-            else if(/Safari/.test(ua)) browser = "Safari";
-            else if(/Edge/.test(ua)) browser = "Edge";
-
-            const screenRes = `${window.screen.width}x${window.screen.height}`;
-
-            setTimeout(() => {
-                term.innerHTML = `
-                <span class="cmd-prefix">root@bellotreno:~#</span> client_identify<br>
-                <span class="cmd-line">Connection established from <span class="data-val">${escapeHtml(deviceModel)}</span></span>
-                <span class="cmd-line">Client Agent: <span class="data-val">${escapeHtml(browser)}</span></span>
-                <span class="cmd-line">Display Geometry: <span class="data-val">${escapeHtml(screenRes)}</span></span>
-                <br>
-                <span class="cmd-prefix">root@bellotreno:~#</span> check_status<br>
-                <span class="cmd-line log-warn">> [WARN] ACCESS DENIED: ROOT PRIVILEGES REQUIRED</span>
-                `;
-            }, 300);
-        });
+    <script>
+        import '../client/not-found.ts';
     </script>
 </body>
 </html>

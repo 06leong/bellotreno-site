@@ -9,7 +9,8 @@ This note tracks the current migration path away from unsafe HTML string output.
 - `src/client/swiss.ts`: Swiss formation stop selector, coach strip, vehicle details.
 - `src/client/statistics.ts`: summary cards and charts still use controlled HTML/SVG templates. Query table rows use DOM builders instead of HTML string templates.
 - `src/client/infomobilita.ts`: RFI/Infomobilita news content now uses DOM builders.
-- `src/pages/about.astro`: localized content currently uses trusted in-repo HTML strings.
+- `src/client/about.ts`: localized About-page content uses trusted in-repo HTML strings and is loaded through Astro/Vite as TypeScript. Keep this static unless the content becomes CMS/API driven.
+- `src/client/not-found.ts`: 404 terminal output uses DOM builders and no longer writes dynamic strings through `innerHTML`.
 
 ## Current safe patterns
 
@@ -28,7 +29,7 @@ This note tracks the current migration path away from unsafe HTML string output.
 
 1. Swiss vehicle details and coach strip in `src/client/swiss.ts`.
 2. Remaining statistics chart/tooltips templates in `src/client/statistics.ts`.
-3. `src/pages/about.astro` can stay lower priority because content is static and in-repo, but it should move to structured content if the page becomes CMS/API driven.
+3. `src/client/about.ts` can stay lower priority because content is static and in-repo, but it should move to structured content if the page becomes CMS/API driven.
 4. Any future high-risk page added under `src/client/`.
 
 The first Priority 2 baseline added normalizer tests and quality gates. Follow-up PRs converted the statistics table, station board, Infomobilita cards, and `src/client/main.ts` train-detail surfaces. Continue converting one high-risk rendering area at a time, with fixture coverage before each behavior change.

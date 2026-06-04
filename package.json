@@ -21,6 +21,7 @@
     "check:python": "python -m py_compile rfi-proxy/app.py rfi-proxy/statistics/app.py && python -m unittest discover -s tests/python",
     "test:js": "node --import tsx --test tests/js/*.test.ts",
     "audit:innerhtml": "tsx scripts/audit-innerhtml.ts",
+    "smoke:pages": "tsx scripts/smoke-pages.ts",
     "preview": "astro preview",
     "astro": "astro"
   },

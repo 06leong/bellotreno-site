@@ -15,6 +15,8 @@ file-extension migration.
 - `src/lib/normalizers/**/*.ts` contains pure data-normalization helpers.
 - `tests/js/` and `tests/python/` cover high-risk edge cases.
 - `doc/innerhtml-audit.md` records the remaining `innerHTML` risk surface.
+- `npm run smoke:pages` can fetch-check key local or Cloudflare Pages Preview
+  routes with `SMOKE_BASE_URL`.
 
 ## Remaining Work
 
@@ -22,7 +24,7 @@ file-extension migration.
 | --- | --- | --- | --- |
 | Payload modeling | Several API edges still use `Record<string, unknown>` | TypeScript is most useful when upstream shapes are explicit. | Add named interfaces for stable ViaggiaTreno, Swiss, Trenord, and statistics payloads one feature at a time. |
 | `innerHTML` migration | Swiss and statistics still use controlled HTML/SVG templates | Escaping is present, but string templates remain easier to misuse in future edits. | Convert Swiss vehicle details first, then statistics charts/tooltips. |
-| Browser smoke tests | Manual Playwright smoke scripts are used during PR work | CI catches build/type issues but not all user flows. | Add a dedicated smoke script for homepage search, station navigation, statistics, language, and theme. |
+| Browser smoke tests | A fetch-based page smoke script exists; full interaction testing is still manual | CI catches build/type issues but not all user flows. | Extend smoke coverage later with a real browser runner for homepage search, station navigation, statistics, language, and theme. |
 | Statistics backend split | `rfi-proxy/statistics/app.py` remains large | Collector, scheduler, storage, and API code are tightly coupled. | Move code without behavior changes first: `config`, `storage`, `viaggiatreno_client`, `collector`, `scheduler`, `api`. |
 | i18n quality | Key parity is enforced | Copy length and layout still require review. | Keep parity in CI; use preview to check zh/en/it on desktop and mobile. |
 | Future component islands | No Vue runtime is installed | Vue may help only for dense interactive islands. | Add Vue only for isolated components with typed props; keep domain logic in TypeScript utilities. |
@@ -42,8 +44,10 @@ file-extension migration.
      HTML/SVG strings.
    - Keep table rows on DOM builders.
 
-4. **Browser smoke test script**
-   - Add a script that can run against local dev or preview URLs.
+4. **Browser interaction smoke tests**
+   - Keep `npm run smoke:pages` for quick page availability checks.
+   - Add a browser runner when the project is ready to carry that dependency in
+     CI.
    - Cover homepage search, station navigation, statistics, language, and theme.
 
 5. **Backend statistics split**

@@ -1,10 +1,10 @@
 # TypeScript Migration Audit
 
-Last updated: 2026-06-03
+Last updated: 2026-06-04
 
-This document records the TypeScript migration state for the single PR on
-`codex/typescript-migration`. The goal is to keep the project reviewable while
-moving source code out of untyped JavaScript and into typed, bundler-managed
+This document records the TypeScript migration state after the single migration
+PR and follow-up hardening PRs. The goal is to keep the project reviewable while
+keeping source code out of untyped JavaScript and inside typed, bundler-managed
 modules.
 
 ## Current State
@@ -22,6 +22,10 @@ surfaces:
 `public/scripts/` is no longer the browser source location. Shared runtime
 modules are imported by `BaseLayout.astro`, and page modules are imported by the
 owning Astro page through `slot="scripts"`.
+
+The 404 page is also backed by `src/client/not-found.ts`; it is intentionally
+outside `BaseLayout.astro`, but its runtime behavior is still TypeScript and is
+bundled by Astro/Vite.
 
 ## Architecture Boundaries
 
@@ -64,6 +68,16 @@ npm run build
 - i18n key parity for `zh`, `en`, and `it`;
 - Python compile/unit checks for the VPS services.
 
+For quick preview validation after deployment, use:
+
+```bash
+npm run smoke:pages
+```
+
+Set `SMOKE_BASE_URL` to a Cloudflare Pages Preview URL when checking deployed
+output. This is a page availability smoke check, not a substitute for manual
+search/navigation/theme/language interaction testing.
+
 When deployment configuration or `rfi-proxy/` changes, also run:
 
 ```bash
@@ -89,8 +103,9 @@ Recommended hardening order:
    `doc/innerhtml-audit.md`.
 4. Keep global `window.*` declarations in `src/types/bellotreno-globals.d.ts`
    as a compatibility boundary only. New feature code should prefer imports.
-5. Add browser smoke tests for homepage search, station board navigation,
-   statistics, language switching, and theme switching.
+5. Extend smoke coverage from the current fetch-based page check to browser
+   interaction tests for homepage search, station board navigation, statistics,
+   language switching, and theme switching.
 
 ## Future Vue Islands
 
