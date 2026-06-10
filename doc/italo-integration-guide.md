@@ -48,17 +48,17 @@ BelloTreno calls them only through Cloudflare Pages Functions:
 
 Italo station codes are not ViaggiaTreno station ids. Examples:
 
-| Italo code | Italo display name | RFI/ViaggiaTreno bridge |
-| --- | --- | --- |
-| `MC_` | Milano Centrale | `RfiLocationCode: 1728` in train payload stops |
-| `RRO` | Milano Rho Fiera / Milano Expo Rho | `RfiLocationCode: 3098` |
-| `RMT` | Roma Termini | `RfiLocationCode: 2416` |
-| `RTB` | Roma Tiburtina | `RfiLocationCode: 2385` |
-| `SMN` | Firenze Santa Maria Novella | `RfiLocationCode: 1325` |
-| `BO2` | Bologna Centrale | `RfiLocationCode: 942` |
-| `AAV` | Reggio Emilia AV Mediopadana | `RfiLocationCode: 4054` |
-| `OUE` | Torino Porta Susa | `RfiLocationCode: 3163` |
-| `TOP` | Torino Porta Nuova | `RfiLocationCode: 2876` |
+| Italo code | Italo display name | Italo payload `RfiLocationCode` | ViaggiaTreno station page note |
+| --- | --- | --- | --- |
+| `MC_` | Milano Centrale | `1728` | ViaggiaTreno station page id can be `S01700`; this id is not used as an Italo bridge |
+| `RRO` | Milano Rho Fiera / Milano Expo Rho | `3098` | pending confirmation |
+| `RMT` | Roma Termini | `2416` | pending confirmation |
+| `RTB` | Roma Tiburtina | `2385` | pending confirmation |
+| `SMN` | Firenze Santa Maria Novella | `1325` | pending confirmation |
+| `BO2` | Bologna Centrale | `942` | pending confirmation |
+| `AAV` | Reggio Emilia AV Mediopadana | `4054` | pending confirmation |
+| `OUE` | Torino Porta Susa | `3163` | pending confirmation |
+| `TOP` | Torino Porta Nuova | `2876` | pending confirmation |
 
 The `/api/italo/stations` function attempts to parse Italo's station list from
 `/it/stazione`. If the upstream page changes or cannot be fetched, the function
@@ -66,12 +66,27 @@ falls back to a small built-in list of core high-speed stations. This gives the
 frontend a deterministic way to discover station codes without requiring a
 manually maintained complete list before the feature can work.
 
+The homepage station search still uses only ViaggiaTreno station search results.
+Italo stations are not shown as separate search suggestions. The Italo station
+board is requested only after the user has opened a ViaggiaTreno station page
+and BelloTreno can bridge that selected station to a confirmed Italo station.
+
 Station-board merging resolves an Italo station in this order:
 
 1. explicit `code` query value, such as `MC_`;
-2. known `RfiLocationCode` mapping, such as `1728 -> MC_`;
+2. exact normalized station-name or alias match, such as `MILANO CENTRALE -> MC_`;
 3. exact or alias station-name match through the Italo station list;
 4. built-in fallback station aliases.
+
+ViaggiaTreno station page ids and Italo payload location codes are not treated
+as the same numbering system. For example, Milano Centrale can appear as
+`S01700` on a ViaggiaTreno station-board URL, while Italo train payloads expose
+`MC_` with `RfiLocationCode: 1728`. BelloTreno therefore uses strict normalized
+name matching for station-board merging unless an Italo code is already known.
+Name matching normalizes case, accents, punctuation, and spacing. For example,
+`MILANO CENTRALE`, `Milano Centrale`, and `Milano C.le` can resolve to `MC_`,
+but a broader name such as `Milano Rogoredo` will not be treated as Milano
+Centrale simply because it contains `Milano`.
 
 ## Normalized Train Model
 

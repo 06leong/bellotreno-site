@@ -626,6 +626,16 @@ html[data-lang-loading] .hero-typewriter span {
     transition: filter 0.2s ease, opacity 0.2s ease;
 }
 
+.category-logo-light-contrast {
+    filter: brightness(0) saturate(100%) invert(15%) sepia(37%) saturate(2344%) hue-rotate(340deg) brightness(93%) contrast(94%);
+    opacity: 0.94;
+}
+
+[data-theme="dark"] .category-logo-light-contrast {
+    filter: none;
+    opacity: 1;
+}
+
 [data-theme="dark"] .category-logo-needs-contrast {
     filter: invert(1) brightness(1.14) contrast(1.04);
     opacity: 0.82;

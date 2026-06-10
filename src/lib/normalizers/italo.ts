@@ -138,11 +138,11 @@ const ITALO_OPERATOR = "Italo";
 const INVALID_TIME = new Set(["", "00:00", "01:00"]);
 
 export const ITALO_FALLBACK_STATIONS: ItaloStationInfo[] = [
-  { code: "MC_", name: "Milano Centrale", rfiLocationCode: "1728", slug: "milano-centrale", aliases: ["Milano", "Milan Centrale"] },
-  { code: "RRO", name: "Milano Rho Fiera", rfiLocationCode: "3098", slug: "milano-rho-fiera", aliases: ["Milano Expo Rho", "Rho Fiera Milano"] },
+  { code: "MC_", name: "Milano Centrale", rfiLocationCode: "1728", slug: "milano-centrale", aliases: ["Milano C.le", "Milan Centrale"] },
+  { code: "RRO", name: "Milano Rho Fiera", rfiLocationCode: "3098", slug: "milano-rho-fiera", aliases: ["Milano Expo Rho", "Rho Fiera Milano", "Rho Fiera"] },
   { code: "RMT", name: "Roma Termini", rfiLocationCode: "2416", slug: "roma-termini" },
   { code: "RTB", name: "Roma Tiburtina", rfiLocationCode: "2385", slug: "roma-tiburtina" },
-  { code: "SMN", name: "Firenze Santa Maria Novella", rfiLocationCode: "1325", slug: "firenze-santa-maria-novella", aliases: ["Firenze SMN"] },
+  { code: "SMN", name: "Firenze Santa Maria Novella", rfiLocationCode: "1325", slug: "firenze-santa-maria-novella", aliases: ["Firenze SMN", "Firenze S. M. Novella"] },
   { code: "BO2", name: "Bologna Centrale", rfiLocationCode: "942", slug: "bologna-centrale", aliases: ["Bologna centrale"] },
   { code: "AAV", name: "Reggio Emilia AV Mediopadana", rfiLocationCode: "4054", slug: "reggio-emilia-av-mediopadana", aliases: ["Mediopadana R.Emilia"] },
   { code: "OUE", name: "Torino Porta Susa", rfiLocationCode: "3163", slug: "torino-porta-susa", aliases: ["Torino Porta di Susa"] },
@@ -171,6 +171,22 @@ function normalizeName(value: unknown): string {
     .replace(/\s+/g, " ")
     .trim()
     .toUpperCase();
+}
+
+export function normalizeItaloStationName(value: unknown): string {
+  return asString(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[\u2019'`\u00b4]/g, " ")
+    .replace(/[.\-_/(),]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase();
+}
+
+export function normalizeRfiLocationCode(value: unknown): string {
+  const digits = asString(value).replace(/\D+/g, "");
+  return digits.replace(/^0+/, "") || digits;
 }
 
 function getTodayInRome(): string {
@@ -247,17 +263,17 @@ export function findItaloStation(stations: ItaloStationInfo[], query: { code?: u
     if (byCode) return byCode;
   }
 
-  const rfi = asString(query.rfiLocationCode);
+  const rfi = normalizeRfiLocationCode(query.rfiLocationCode);
   if (rfi) {
-    const byRfi = normalized.find((station) => asString(station.rfiLocationCode) === rfi);
+    const byRfi = normalized.find((station) => normalizeRfiLocationCode(station.rfiLocationCode) === rfi);
     if (byRfi) return byRfi;
   }
 
-  const name = normalizeName(query.name);
+  const name = normalizeItaloStationName(query.name);
   if (!name) return null;
   return normalized.find((station) => {
-    const candidates = [station.name, station.slug, ...(station.aliases || [])].map(normalizeName);
-    return candidates.some((candidate) => candidate === name || candidate.includes(name) || name.includes(candidate));
+    const candidates = [station.name, station.slug, ...(station.aliases || [])].map(normalizeItaloStationName);
+    return candidates.some((candidate) => candidate === name);
   }) || null;
 }
 

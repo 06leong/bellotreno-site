@@ -27,6 +27,8 @@ import {
 } from "../../src/lib/normalizers/trenord.ts";
 import type { TrenordNotice } from "../../src/lib/normalizers/trenord.ts";
 import {
+  findItaloStation,
+  normalizeRfiLocationCode,
   normalizeItaloStationBoard,
   normalizeItaloTrainPayload,
 } from "../../src/lib/normalizers/italo.ts";
@@ -137,6 +139,26 @@ test("Italo station board rows normalize to mergeable AV board rows", () => {
   assert.equal(rows[0].destinazione, "TORINO PORTA NUOVA");
   assert.equal(rows[0].ritardo, 10);
   assert.equal(rows[0].binarioEffettivoPartenzaDescrizione, "N/A");
+});
+
+test("Italo station resolver keeps ViaggiaTreno ids separate and uses strict station aliases", () => {
+  assert.equal(normalizeRfiLocationCode("S01700"), "1700");
+  assert.equal(normalizeRfiLocationCode("01700"), "1700");
+
+  const byViaggiaStationIdOnly = findItaloStation([], { rfiLocationCode: "S01700" });
+  assert.equal(byViaggiaStationIdOnly, null);
+
+  const byItaloRfiLocationCode = findItaloStation([], { rfiLocationCode: "1728" });
+  assert.equal(byItaloRfiLocationCode?.code, "MC_");
+
+  const byCaseInsensitiveName = findItaloStation([], { name: "MILANO CENTRALE" });
+  assert.equal(byCaseInsensitiveName?.code, "MC_");
+
+  const byAlias = findItaloStation([], { name: "Milano C.le" });
+  assert.equal(byAlias?.code, "MC_");
+
+  const nonMatchingMilanoStation = findItaloStation([], { name: "Milano Rogoredo" });
+  assert.equal(nonMatchingMilanoStation, null);
 });
 
 test("stop time status does not mark scheduled-only future stops as on time", () => {

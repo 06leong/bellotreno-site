@@ -208,6 +208,9 @@ const DARK_MODE_CONTRAST_LOGOS = new Set([
     'en.png',
     'espresso.png'
 ]);
+const LIGHT_MODE_CONTRAST_LOGOS = new Set([
+    'italo.svg'
+]);
 const TRENORD_LINE_COLORS: Readonly<Record<string, string>> = Object.freeze({
     RE: "#c02e25",
     RE80: "#205099",
@@ -282,6 +285,9 @@ function createIcon(name: string, className = 'material-symbols-outlined', optio
 
 function getCategoryLogoClass(src: unknown): string {
     const fileName = String(src || '').split('/').pop()?.toLowerCase() || '';
+    if (LIGHT_MODE_CONTRAST_LOGOS.has(fileName)) {
+        return 'category-logo category-logo-light-contrast';
+    }
     return DARK_MODE_CONTRAST_LOGOS.has(fileName)
         ? 'category-logo category-logo-needs-contrast'
         : 'category-logo';
