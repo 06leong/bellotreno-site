@@ -22,8 +22,8 @@ file-extension migration.
 
 | Area | Current state | Why it matters | Recommended split |
 | --- | --- | --- | --- |
-| Payload modeling | Several API edges still use `Record<string, unknown>` | TypeScript is most useful when upstream shapes are explicit. | Add named interfaces for stable ViaggiaTreno, Swiss, Trenord, and statistics payloads one feature at a time. |
-| `innerHTML` migration | Swiss and statistics still use controlled HTML/SVG templates | Escaping is present, but string templates remain easier to misuse in future edits. | Convert Swiss vehicle details first, then statistics charts/tooltips. |
+| Payload modeling | Statistics, Trenord, and ViaggiaTreno normalizer payloads now have named interfaces; Swiss browser formation data still has the broadest JSON boundary | TypeScript is most useful when upstream shapes are explicit. | Continue with Swiss formation payloads and then review remaining Function edge cases. |
+| `innerHTML` migration | Statistics table/metrics/category bars and Swiss loading states use DOM builders; Swiss full-card and statistics chart/SVG templates remain controlled HTML strings | Escaping is present, but string templates remain easier to misuse in future edits. | Convert the Swiss full-card template first, then statistics SVG/donut templates. |
 | Browser smoke tests | A fetch-based page smoke script exists; full interaction testing is still manual | CI catches build/type issues but not all user flows. | Extend smoke coverage later with a real browser runner for homepage search, station navigation, statistics, language, and theme. |
 | Statistics backend split | `rfi-proxy/statistics/app.py` remains large | Collector, scheduler, storage, and API code are tightly coupled. | Move code without behavior changes first: `config`, `storage`, `viaggiatreno_client`, `collector`, `scheduler`, `api`. |
 | i18n quality | Key parity is enforced | Copy length and layout still require review. | Keep parity in CI; use preview to check zh/en/it on desktop and mobile. |
@@ -32,17 +32,20 @@ file-extension migration.
 ## Recommended PR Sequence
 
 1. **Payload interface hardening**
-   - Replace broad records in one feature area at a time.
-   - Start with statistics or Swiss because they have the most nested data.
+   - Statistics and Trenord/ViaggiaTreno normalizer payloads now have named
+     interfaces.
+   - Continue with Swiss formation payloads because they have the most nested
+     data.
 
 2. **Swiss rendering safety**
-   - Move coach detail templates toward DOM builders or safer template helpers.
+   - Move the full formation card template toward DOM builders or safer template
+     helpers.
    - Preserve public `/api/swiss/*` interfaces.
 
 3. **Statistics rendering safety**
-   - Continue replacing chart/tooltips templates where dynamic values enter
-     HTML/SVG strings.
-   - Keep table rows on DOM builders.
+   - Continue replacing chart/SVG templates where dynamic values enter HTML/SVG
+     strings.
+   - Keep table rows, metric cards, tooltips, and category bars on DOM builders.
 
 4. **Browser interaction smoke tests**
    - Keep `npm run smoke:pages` for quick page availability checks.

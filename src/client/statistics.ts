@@ -3,7 +3,10 @@ export {};
 (function () {
     type StatisticsView = "trains" | "stations" | "relations" | "ranking";
     type StatusKind = "info" | "warning";
-    type JsonRecord = Record<string, unknown>;
+    type JsonValue = string | number | boolean | null | undefined | JsonValue[] | { [key: string]: JsonValue };
+    interface JsonRecord {
+        [key: string]: JsonValue;
+    }
     type QueryParamValue = string | number | boolean | null | undefined;
     type QueryParams = Record<string, QueryParamValue>;
     type TableColumn = "rank" | "train" | "route" | "category" | "operator" | "delay" | "status" | "station" | "code" | "relation" | "monitored" | "avgDelay" | "cancelled";
@@ -41,15 +44,52 @@ export {};
         route?: string;
         state?: string;
         station?: string;
+        station_code?: string;
         stationCode?: string;
         stationName?: string;
+        station_name?: string;
         status?: string;
         to?: string;
         total?: number;
         totalDelay?: number;
         train?: string | number;
         trainCategory?: string;
+        train_number?: string | number;
         trainNumber?: string | number;
+    }
+
+    interface StatisticsSummary extends JsonRecord {
+        categories?: ChartDatum[];
+        categoryCounts?: ChartDatum[];
+        collectionCadenceMinutes?: number | string;
+        collectionCompletedAt?: string;
+        completedAt?: string;
+        counts?: JsonRecord;
+        coverage?: JsonRecord;
+        delayTotals?: JsonRecord;
+        delays?: JsonRecord;
+        nextScheduledAt?: string;
+        punctuality?: JsonRecord;
+        snapshotTime?: string;
+        worst?: StatisticsTableItem;
+        worstTrain?: StatisticsTableItem;
+    }
+
+    interface StatisticsTimeseries extends JsonRecord {
+        points?: ChartDatum[];
+        running?: ChartDatum[];
+        trains?: ChartDatum[];
+        treniCircolanti?: ChartDatum[];
+    }
+
+    interface StatisticsItemsPayload extends JsonRecord {
+        count?: number;
+        items?: StatisticsTableItem[];
+        ranking?: StatisticsTableItem[];
+        relations?: StatisticsTableItem[];
+        stations?: StatisticsTableItem[];
+        total?: number;
+        trains?: StatisticsTableItem[];
     }
 
     interface StatisticsState {
@@ -59,10 +99,10 @@ export {};
         loading: boolean;
         page: number;
         pageSize: number;
-        summary: JsonRecord | null;
+        summary: StatisticsSummary | null;
         tableItems: StatisticsTableItem[];
         tableLoading: boolean;
-        timeseries: JsonRecord | null;
+        timeseries: StatisticsTimeseries | null;
         total: number;
     }
 
@@ -171,8 +211,8 @@ export {};
         return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {};
     }
 
-    function asArray(value: unknown): JsonRecord[] {
-        return Array.isArray(value) ? value.filter((item): item is JsonRecord => item !== null && typeof item === "object") : [];
+    function asArray<T extends JsonRecord = JsonRecord>(value: unknown): T[] {
+        return Array.isArray(value) ? value.filter((item): item is T => item !== null && typeof item === "object") : [];
     }
 
     function asNumber(value: unknown, fallback = 0): number {
@@ -223,14 +263,6 @@ export {};
     function categorySortIndex(value: unknown): number {
         const index = CATEGORY_ORDER.indexOf(categoryCode(value));
         return index === -1 ? Number.MAX_SAFE_INTEGER : index;
-    }
-
-    function categoryBadgeHtml(value: unknown): string {
-        const cat = categoryCode(value);
-        if (!cat || cat === "--") return "--";
-        const badgeKey = cat === "EC FR" ? "FR" : cat;
-        const badgeClass = (window.getBadgeClass ? window.getBadgeClass(badgeKey) : "") || "badge-statistics-fallback";
-        return `<span class="train-badge statistics-category-badge ${esc(badgeClass)}">${esc(cat)}</span>`;
     }
 
     function categoryBadgeElement(value: unknown): Text | HTMLSpanElement {
@@ -351,19 +383,19 @@ export {};
             .slice(0, 30);
     }
 
-    function normalizeSummary(payload: unknown): JsonRecord {
+    function normalizeSummary(payload: unknown): StatisticsSummary {
         const record = asRecord(payload);
-        return asRecord(record.summary || record);
+        return asRecord(record.summary || record) as StatisticsSummary;
     }
 
-    function normalizeTimeseries(payload: unknown): JsonRecord {
+    function normalizeTimeseries(payload: unknown): StatisticsTimeseries {
         const record = asRecord(payload);
-        return asRecord(record.timeseries || record);
+        return asRecord(record.timeseries || record) as StatisticsTimeseries;
     }
 
     function normalizeItems(payload: unknown): { items: StatisticsTableItem[]; total: number } {
-        const record = asRecord(payload);
-        const items = asArray(record.items || record.trains || record.stations || record.relations || record.ranking || payload) as StatisticsTableItem[];
+        const record = asRecord(payload) as StatisticsItemsPayload;
+        const items = asArray<StatisticsTableItem>(record.items || record.trains || record.stations || record.relations || record.ranking || payload);
         const total = asNumber(record.total || record.count || items.length, items.length);
         return { items, total };
     }
@@ -372,33 +404,57 @@ export {};
         const select = $<HTMLSelectElement>("statisticsDate");
         if (!select) return;
         const days = state.days.length ? state.days : [{ date: state.date || todayRome() }];
-        select.innerHTML = days.map((day) => `
-            <option value="${esc(day.date)}"${day.date === state.date ? " selected" : ""}>
-                ${esc(day.label || day.date)}${day.finalized ? "" : ` - ${tr("statistics_live", "live")}`}
-            </option>
-        `).join("");
+        const options = days.map((day) => {
+            const option = document.createElement("option");
+            option.value = day.date;
+            option.selected = day.date === state.date;
+            option.textContent = `${day.label || day.date}${day.finalized ? "" : ` - ${tr("statistics_live", "live")}`}`;
+            return option;
+        });
+        replaceChildrenSafe(select, options);
     }
 
     function fillCategorySelect(): void {
         const select = $<HTMLSelectElement>("statisticsCategory");
         if (!select) return;
         const current = select.value;
-        select.innerHTML = `<option value="">${esc(tr("statistics_all_categories", "All categories"))}</option>`
-            + CATEGORY_OPTIONS.map((cat) => `<option value="${esc(cat)}">${esc(cat)}</option>`).join("");
+        const allOption = document.createElement("option");
+        allOption.value = "";
+        allOption.textContent = tr("statistics_all_categories", "All categories");
+        const options = CATEGORY_OPTIONS.map((cat) => {
+            const option = document.createElement("option");
+            option.value = cat;
+            option.textContent = cat;
+            return option;
+        });
+        replaceChildrenSafe(select, [allOption, ...options]);
         select.value = current;
     }
 
-    function metricCard(id: string, icon: string, label: string, value: string, note = ""): string {
-        return `
-            <div class="statistics-metric" data-stat-metric="${esc(id)}">
-                <span class="material-symbols-outlined">${esc(icon)}</span>
-                <div>
-                    <small>${esc(label)}</small>
-                    <strong>${esc(value)}</strong>
-                    ${note ? `<em>${esc(note)}</em>` : ""}
-                </div>
-            </div>
-        `;
+    function metricCardElement(id: string, icon: string, label: string, value: string, note = ""): HTMLDivElement {
+        const card = document.createElement("div");
+        card.className = "statistics-metric";
+        card.dataset.statMetric = id;
+
+        const iconEl = document.createElement("span");
+        iconEl.className = "material-symbols-outlined";
+        iconEl.textContent = icon;
+
+        const body = document.createElement("div");
+        const labelEl = document.createElement("small");
+        labelEl.textContent = label;
+        const valueEl = document.createElement("strong");
+        valueEl.textContent = value;
+        body.append(labelEl, valueEl);
+
+        if (note) {
+            const noteEl = document.createElement("em");
+            noteEl.textContent = note;
+            body.appendChild(noteEl);
+        }
+
+        card.append(iconEl, body);
+        return card;
     }
 
     function summaryCounts(): SummaryCounts {
@@ -490,20 +546,27 @@ export {};
         const worstNote = worst
             ? [worstRoute, worst?.delay ? `+${worst.delay} ${tr("minutes", "min")}` : ""].filter(Boolean).join(" - ")
             : "";
-        el.innerHTML = [
-            metricCard("running", "directions_railway", tr("statistics_running_now", "Running now"), formatNumber(values.running)),
-            metricCard("circulated", "today", tr("statistics_circulated_today", "Operated today"), formatNumber(values.circulated)),
-            metricCard("monitored", "visibility", tr("statistics_monitored", "Monitored"), formatNumber(values.monitored)),
-            metricCard("regular", "verified", tr("statistics_regular", "Regular"), formatNumber(values.regular)),
-            metricCard("cancelled", "cancel", tr("statistics_cancelled", "Cancelled"), formatNumber(values.cancelled)),
-            metricCard("rescheduled", "published_with_changes", tr("statistics_rescheduled", "Rescheduled"), formatNumber(values.rescheduled)),
-            metricCard("avg_delay", "timer", tr("statistics_avg_delay", "Average delay"), formatMinutes(values.avgDelay)),
-            metricCard("worst", "warning", tr("statistics_worst_train", "Worst train"), worstLabel, worstNote)
-        ].join("");
+        replaceChildrenSafe(el, [
+            metricCardElement("running", "directions_railway", tr("statistics_running_now", "Running now"), formatNumber(values.running)),
+            metricCardElement("circulated", "today", tr("statistics_circulated_today", "Operated today"), formatNumber(values.circulated)),
+            metricCardElement("monitored", "visibility", tr("statistics_monitored", "Monitored"), formatNumber(values.monitored)),
+            metricCardElement("regular", "verified", tr("statistics_regular", "Regular"), formatNumber(values.regular)),
+            metricCardElement("cancelled", "cancel", tr("statistics_cancelled", "Cancelled"), formatNumber(values.cancelled)),
+            metricCardElement("rescheduled", "published_with_changes", tr("statistics_rescheduled", "Rescheduled"), formatNumber(values.rescheduled)),
+            metricCardElement("avg_delay", "timer", tr("statistics_avg_delay", "Average delay"), formatMinutes(values.avgDelay)),
+            metricCardElement("worst", "warning", tr("statistics_worst_train", "Worst train"), worstLabel, worstNote)
+        ]);
     }
 
     function emptyChart(message = tr("statistics_no_chart_data", "No chart data")): string {
         return `<div class="statistics-empty-chart">${esc(message)}</div>`;
+    }
+
+    function emptyChartElement(message = tr("statistics_no_chart_data", "No chart data")): HTMLDivElement {
+        const element = document.createElement("div");
+        element.className = "statistics-empty-chart";
+        element.textContent = message;
+        return element;
     }
 
     function pointValue(point: JsonRecord): number {
@@ -594,7 +657,11 @@ export {};
             if (!tooltip) return;
             const label = point.dataset.label || "";
             const value = point.dataset.value || "";
-            tooltip.innerHTML = `<strong>${esc(value)}</strong><span>${esc(label)}</span>`;
+            const valueEl = document.createElement("strong");
+            valueEl.textContent = value;
+            const labelEl = document.createElement("span");
+            labelEl.textContent = label;
+            replaceChildrenSafe(tooltip, [valueEl, labelEl]);
             tooltip.style.left = `${(asNumber(point.dataset.x, 0) / 680) * 100}%`;
             tooltip.style.top = `${(asNumber(point.dataset.y, 0) / 260) * 100}%`;
             tooltip.hidden = false;
@@ -700,7 +767,13 @@ export {};
                 const value = target.dataset.value || "";
                 const percent = target.dataset.percent || "";
                 selected.hidden = false;
-                selected.innerHTML = `<b>${esc(label)}</b><strong>${esc(value)}</strong><span>${esc(percent)}</span>`;
+                const labelEl = document.createElement("b");
+                labelEl.textContent = label;
+                const valueEl = document.createElement("strong");
+                valueEl.textContent = value;
+                const percentEl = document.createElement("span");
+                percentEl.textContent = percent;
+                replaceChildrenSafe(selected, [labelEl, valueEl, percentEl]);
                 wrap.querySelectorAll<HTMLElement>(".statistics-donut-segment, .statistics-legend-row").forEach((item) => {
                     item.classList.toggle("active", item.dataset.label === label);
                 });
@@ -723,9 +796,9 @@ export {};
         });
     }
 
-    function renderCategoryChart(categories: unknown): string {
+    function categoryChartData(categories: unknown): Array<{ label: string; value: number }> {
         const buckets = new Map<string, number>();
-        asArray(categories).forEach((item) => {
+        asArray<ChartDatum>(categories).forEach((item) => {
             const label = chartCategoryCode(item.label || item.category || item.name || item.code || "--");
             const value = asNumber(item.value ?? item.count ?? item.total, 0);
             if (!label || label === "--" || value <= 0) return;
@@ -737,19 +810,38 @@ export {};
                 if (order !== 0) return order;
                 return b.value - a.value;
             });
-        if (!data.length) return emptyChart();
+        return data;
+    }
+
+    function renderCategoryChart(element: HTMLElement, categories: unknown): void {
+        const data = categoryChartData(categories);
+        if (!data.length) {
+            replaceChildrenSafe(element, [emptyChartElement()]);
+            return;
+        }
         const max = Math.max(...data.map((item) => item.value), 1);
-        return `
-            <div class="statistics-bars">
-                ${data.map((item) => `
-                    <div class="statistics-bar-row">
-                        <span>${categoryBadgeHtml(item.label)}</span>
-                        <div><i style="width:${Math.max(2, (item.value / max) * 100)}%;background:${esc(categoryColor(item.label))}"></i></div>
-                        <strong>${esc(formatNumber(item.value))}</strong>
-                    </div>
-                `).join("")}
-            </div>
-        `;
+        const wrap = document.createElement("div");
+        wrap.className = "statistics-bars";
+        data.forEach((item) => {
+            const row = document.createElement("div");
+            row.className = "statistics-bar-row";
+
+            const label = document.createElement("span");
+            label.appendChild(categoryBadgeElement(item.label));
+
+            const bar = document.createElement("div");
+            const fill = document.createElement("i");
+            fill.style.width = `${Math.max(2, (item.value / max) * 100)}%`;
+            fill.style.background = categoryColor(item.label);
+            bar.appendChild(fill);
+
+            const value = document.createElement("strong");
+            value.textContent = formatNumber(item.value);
+
+            row.append(label, bar, value);
+            wrap.appendChild(row);
+        });
+        replaceChildrenSafe(element, [wrap]);
     }
 
     function renderCharts(): void {
@@ -792,7 +884,7 @@ export {};
         }
         const categoryChart = $("statisticsCategoryChart");
         if (categoryChart) {
-            categoryChart.innerHTML = renderCategoryChart(summary.categories || summary.categoryCounts || []);
+            renderCategoryChart(categoryChart, summary.categories || summary.categoryCounts || []);
         }
     }
 

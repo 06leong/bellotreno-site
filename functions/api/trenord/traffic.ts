@@ -19,7 +19,9 @@ const ALLOWED_HOSTS = new Set([
 ]);
 
 type CorsHeaderMap = Record<string, string>;
-type TrenordUnavailableResult = { available: false; reason: string } & Record<string, unknown>;
+type JsonValue = string | number | boolean | null | undefined | JsonValue[] | { [key: string]: JsonValue };
+type JsonObject = { [key: string]: JsonValue };
+type TrenordUnavailableResult = { available: false; reason: string } & JsonObject;
 type HttpError = Error & { status?: number };
 
 let direttriciCache: {
@@ -44,7 +46,7 @@ function json(data: unknown, status = 200, extraHeaders: HeadersInit = {}): Resp
     });
 }
 
-function unavailable(reason: string, extra: Record<string, unknown> = {}, status = 200, headers: HeadersInit = {}): Response {
+function unavailable(reason: string, extra: JsonObject = {}, status = 200, headers: HeadersInit = {}): Response {
     return json({ available: false, reason, ...extra }, status, headers);
 }
 
@@ -154,7 +156,7 @@ function normalizeDirettriciPayload(payload: unknown): TrenordDirettrice[] {
     if (Array.isArray(payload)) return payload;
     if (!payload || typeof payload !== "object") return [];
 
-    const record = payload as Record<string, unknown>;
+    const record = payload as { items?: unknown; data?: unknown; [key: string]: unknown };
     if (Array.isArray(record.items)) return record.items as TrenordDirettrice[];
     if (Array.isArray(record.data)) return record.data as TrenordDirettrice[];
     return Object.values(record).filter((item): item is TrenordDirettrice => Boolean(

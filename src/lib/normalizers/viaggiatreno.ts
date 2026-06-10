@@ -18,6 +18,19 @@ export interface StopTimeStatusInput {
   displayedMs?: unknown;
 }
 
+export interface PartialCancellationPayload {
+  fermateSoppresse?: unknown;
+  subTitle?: unknown;
+  subtitle?: unknown;
+}
+
+interface SuppressedStopRecord {
+  descrizione?: unknown;
+  name?: unknown;
+  nome?: unknown;
+  stazione?: unknown;
+}
+
 export function normalizeStationMatchName(value: unknown): string {
   return String(value || "")
     .normalize("NFD")
@@ -72,14 +85,14 @@ export function findStopIndexByName(stops: ViaggiaTrenoStop[], name: unknown): n
 
 export function collectSuppressedStopNames(data: unknown): string[] {
   const names: string[] = [];
-  const recordData = (data || {}) as Record<string, unknown>;
+  const recordData = (data || {}) as PartialCancellationPayload;
   const raw = recordData.fermateSoppresse;
   if (!Array.isArray(raw)) return names;
   for (const item of raw) {
     if (typeof item === "string") {
       names.push(item);
     } else if (item && typeof item === "object") {
-      const record = item as Record<string, unknown>;
+      const record = item as SuppressedStopRecord;
       names.push(String(record.stazione || record.nome || record.name || record.descrizione || ""));
     }
   }
@@ -90,7 +103,7 @@ export function collectSuppressedStopNames(data: unknown): string[] {
  * Infer cancelled/boundary stops from ViaggiaTreno subtitle conventions.
  *
  */
-export function buildPartialCancellationState(data: Record<string, unknown>, stops: ViaggiaTrenoStop[]): PartialCancellationState[] {
+export function buildPartialCancellationState(data: PartialCancellationPayload, stops: ViaggiaTrenoStop[]): PartialCancellationState[] {
   const state = (Array.isArray(stops) ? stops : []).map((stop) => ({
     cancelled: Number(stop?.actualFermataType) === 3,
     boundary: "" as PartialCancellationState["boundary"],

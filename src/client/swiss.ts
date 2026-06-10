@@ -1635,14 +1635,21 @@ export {};
         const card = document.getElementById("swissFormationCard");
         if (card) {
             card.style.display = "none";
-            card.innerHTML = "";
+            card.replaceChildren();
         }
     }
 
     function renderLoadingCard() {
         const card = document.getElementById("swissFormationCard");
         if (!card) return;
-        card.innerHTML = `<div class="swiss-loading"><span class="loading loading-spinner loading-sm text-primary"></span><span>${esc(tr("swiss_loading", "Loading train formation..."))}</span></div>`;
+        const loading = document.createElement("div");
+        loading.className = "swiss-loading";
+        const spinner = document.createElement("span");
+        spinner.className = "loading loading-spinner loading-sm text-primary";
+        const label = document.createElement("span");
+        label.textContent = tr("swiss_loading", "Loading train formation...");
+        loading.append(spinner, label);
+        card.replaceChildren(loading);
         card.style.display = "block";
     }
 

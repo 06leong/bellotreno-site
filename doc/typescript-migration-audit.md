@@ -89,18 +89,21 @@ from `rfi-proxy/`.
 ## Remaining Hardening
 
 The full source migration is complete for active JavaScript surfaces, and the
-browser runtime now passes TypeScript with `strict: true`. Remaining work is no
-longer about renaming files; it is about improving domain models, reducing broad
-`Record<string, unknown>` boundaries, and lowering rendering risk.
+browser runtime now passes TypeScript with `strict: true`. Follow-up hardening
+has already added named payload interfaces for statistics, Trenord, and
+ViaggiaTreno normalizer boundaries, and has moved statistics metrics/table/
+category rendering plus Swiss loading states onto DOM builders. Remaining work
+is no longer about renaming files; it is about finishing the largest Swiss
+payload/rendering boundary and lowering chart-template risk.
 
 Recommended hardening order:
 
-1. Replace broad `Record<string, unknown>` boundaries with named payload
+1. Continue replacing broad Swiss formation JSON boundaries with named payload
    interfaces where the upstream shape is stable enough to model.
 2. Move reusable pure helpers from client files into `src/lib/normalizers/` or
    a new typed client utility module when they can be tested without the DOM.
-3. Replace remaining string-template `innerHTML` surfaces according to
-   `doc/innerhtml-audit.md`.
+3. Replace remaining Swiss full-card and statistics chart/SVG `innerHTML`
+   surfaces according to `doc/innerhtml-audit.md`.
 4. Keep global `window.*` declarations in `src/types/bellotreno-globals.d.ts`
    as a compatibility boundary only. New feature code should prefer imports.
 5. Extend smoke coverage from the current fetch-based page check to browser
@@ -133,4 +136,4 @@ layout. The recommended path is:
 | Tooling scripts | Complete |
 | Client runtime | Complete |
 | Documentation | Complete |
-| Hardening | Partially complete; client strict mode is enabled, remaining work is payload modeling and innerHTML reduction |
+| Hardening | Partially complete; statistics/Trenord/ViaggiaTreno payload boundaries and several DOM rendering surfaces are improved; remaining work is Swiss payload/rendering and statistics chart templates |

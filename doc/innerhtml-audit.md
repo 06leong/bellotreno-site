@@ -6,8 +6,8 @@ This note tracks the current migration path away from unsafe HTML string output.
 
 - `src/client/main.ts`: train details, timeline stops, service messages, partial-cancellation indicators, disambiguation choices, recent searches, and most SmartCaring surfaces now use DOM builders.
 - `src/client/station.ts`: station departure/arrival rows and Swiss route badges now use DOM builders.
-- `src/client/swiss.ts`: Swiss formation stop selector, coach strip, vehicle details.
-- `src/client/statistics.ts`: summary cards and charts still use controlled HTML/SVG templates. Query table rows use DOM builders instead of HTML string templates.
+- `src/client/swiss.ts`: Swiss formation full-card template still uses a controlled HTML string. Loading/hidden states now use DOM builders.
+- `src/client/statistics.ts`: summary cards, table rows, category bars, chart tooltip, and donut selected state use DOM builders. The remaining string templates are chart/SVG containers.
 - `src/client/infomobilita.ts`: RFI/Infomobilita news content now uses DOM builders.
 - `src/client/about.ts`: localized About-page content uses trusted in-repo HTML strings and is loaded through Astro/Vite as TypeScript. Keep this static unless the content becomes CMS/API driven.
 - `src/client/not-found.ts`: 404 terminal output uses DOM builders and no longer writes dynamic strings through `innerHTML`.
@@ -27,8 +27,8 @@ This note tracks the current migration path away from unsafe HTML string output.
 
 ## Migration priority
 
-1. Swiss vehicle details and coach strip in `src/client/swiss.ts`.
-2. Remaining statistics chart/tooltips templates in `src/client/statistics.ts`.
+1. Swiss formation full-card template in `src/client/swiss.ts`.
+2. Remaining statistics chart/SVG templates in `src/client/statistics.ts`.
 3. `src/client/about.ts` can stay lower priority because content is static and in-repo, but it should move to structured content if the page becomes CMS/API driven.
 4. Any future high-risk page added under `src/client/`.
 
