@@ -278,9 +278,11 @@ Trenord Traffic info is intentionally implemented as a same-origin Pages Functio
 | `src/client/infomobilita.ts` | RFI RSS 公告页 |
 | `src/client/statistics.ts` | 统计 dashboard、chart、表格和 CSV link |
 | `src/client/swiss.ts` | Swiss formation fetch、timeline merge、coach strip |
+| `src/client/about.ts` | 关于页面的多语言静态内容 |
+| `src/client/not-found.ts` | 404 终端主题和设备识别效果 |
 | `src/client/theme-init-source.ts` | 导出纯 JavaScript bootstrap 字符串，由 `BaseLayout.astro` 内联到 head，避免主题/语言闪烁 |
 
-`BaseLayout.astro` 固定先导入 `config.ts`、`i18n.ts`、`common.ts`，各页面再通过 `slot="scripts"` 导入自己的模块。新的浏览器代码不应再放回 `public/scripts/`。
+`BaseLayout.astro` 固定先导入 `config.ts`、`i18n.ts`、`common.ts`，各页面再通过 `slot="scripts"` 导入自己的模块。新的浏览器代码不应再放回 `public/scripts/`。可以用 `npm run smoke:pages` 对本地服务器或通过 `SMOKE_BASE_URL` 指定的 Cloudflare Pages Preview 做快速页面可用性检查。
 
 `theme-init-source.ts` 本身是 TypeScript 模块，但导出的字符串必须是浏览器可直接执行的普通 JavaScript。不要再用 `?raw` 把带 TypeScript 类型标注的源码直接注入 inline script。
 
@@ -356,6 +358,7 @@ Cloudflare Pages 部署后，浏览器可能继续使用旧资源。项目现在
 | 车站搜索、最近搜索、车次详情站名跳转分散 | `station-navigation.ts` 统一生成 `/station?id=&name=&type=` URL，避免模块加载顺序造成静默无动作 |
 | Swiss Formation 同号误匹配 | `swiss.ts` 只对 EC/EN 默认尝试；REG/RE/RV/S/IR 必须命中边境站提示。当前边境提示保留 `CHIASSO`、`DOMODOSSOLA`、`LUINO`、`TIRANO`、`STABIO`，移除 Porto Ceresio、Ponte Tresa、Gaggiolo |
 | Swiss 车辆重复与关闭状态污染 | 以 EVN 作为真实车辆 identity 合并多段记录；`Closed` / `GeschlossenBetrieblich` 按当前 selected stop 的 active segment 判断，不再全程 OR 合并 |
+| 404 页内联 JavaScript 和动态 `innerHTML` | 移入 `src/client/not-found.ts`，并改用 DOM builder |
 | 统计页面类别和查询交互 | `statistics.ts` 维护 `CATEGORY_ORDER`，包含 `EC FR`、`NCL`、`IR`、`TS` 等；图表只展示实际出现类别，查询表中的车次/车站尽量可点击 |
 | 部分取消区间不易读 | `main.ts` 根据 `subTitle`、`fermateSoppresse`、`actualFermataType` 计算 partial cancellation state，取消停站用红色 timeline 和 `Cancelled stop` 标签 |
 | Cloudflare Pages 新部署后旧 JS 残留 | Astro/Vite hashed assets + `_headers` 共同处理缓存失效 |

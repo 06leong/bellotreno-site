@@ -10,8 +10,8 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "check": "npm run check:js && npm run check:types && npm run test:js && npm run check:i18n && npm run check:python",
-    "check:js": "tsx scripts/check-js-syntax.ts",
+    "check": "npm run check:no-raw-js && npm run check:types && npm run test:js && npm run check:i18n && npm run check:python",
+    "check:no-raw-js": "tsx scripts/check-no-raw-js.ts",
     "check:types": "npm run check:types:normalizers && npm run check:types:functions && npm run check:types:node && npm run check:types:client",
     "check:types:normalizers": "tsc -p tsconfig.normalizers.json",
     "check:types:functions": "tsc -p tsconfig.functions.json",
@@ -21,6 +21,7 @@
     "check:python": "python -m py_compile rfi-proxy/app.py rfi-proxy/statistics/app.py && python -m unittest discover -s tests/python",
     "test:js": "node --import tsx --test tests/js/*.test.ts",
     "audit:innerhtml": "tsx scripts/audit-innerhtml.ts",
+    "smoke:pages": "tsx scripts/smoke-pages.ts",
     "preview": "astro preview",
     "astro": "astro"
   },

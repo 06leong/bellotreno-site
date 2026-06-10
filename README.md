@@ -123,8 +123,13 @@ Pages Functions used for token-protected server-side API calls.
 
 Runtime JavaScript source should not be added under `public/scripts/`. Browser
 code is authored as TypeScript and bundled by Astro/Vite into hashed assets.
+`npm run check:no-raw-js` fails if raw `.js`, `.mjs`, or `.cjs` source files are
+added outside generated/dependency directories.
 Fonts are configured through Astro's Fonts API so generated font files are served
 from the built site instead of loading Google Fonts at page runtime.
+
+For a quick deployed-page smoke check, run `npm run smoke:pages` against a local
+server or set `SMOKE_BASE_URL` to a Cloudflare Pages Preview URL.
 
 ## Disclaimer
 

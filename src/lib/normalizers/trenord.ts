@@ -49,6 +49,22 @@ export interface TrenordTrafficInformationResult {
   notices: TrenordNotice[];
 }
 
+interface TrenordTrainRecord {
+  [key: string]: unknown;
+  category?: unknown;
+  direction?: unknown;
+  direttrice?: unknown;
+  direttrice_security?: unknown;
+  line?: unknown;
+  operator?: unknown;
+  operator_name?: unknown;
+  train?: unknown;
+  train_category?: unknown;
+  train_operator?: unknown;
+  trainId?: unknown;
+  train_id?: unknown;
+}
+
 function asString(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   const text = String(value).trim();
@@ -61,15 +77,15 @@ function asOptionalNumber(value: unknown): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" ? value as Record<string, unknown> : {};
+function asTrainRecord(value: unknown): TrenordTrainRecord {
+  return value && typeof value === "object" ? value as TrenordTrainRecord : {};
 }
 
-function hasDirettrice(train: Record<string, unknown>): boolean {
+function hasDirettrice(train: TrenordTrainRecord): boolean {
   return Boolean(asString(train.direttrice) || asString(train.direttrice_security));
 }
 
-function isTrainLikeRecord(record: Record<string, unknown>): boolean {
+function isTrainLikeRecord(record: TrenordTrainRecord): boolean {
   return Boolean(
     asString(record.train_id)
     || asString(record.trainId)
@@ -84,10 +100,10 @@ function isTrainLikeRecord(record: Record<string, unknown>): boolean {
  */
 function collectTrainCandidates(
   value: unknown,
-  candidates: Record<string, unknown>[] = [],
+  candidates: TrenordTrainRecord[] = [],
   seen = new WeakSet<object>(),
   depth = 0,
-): Record<string, unknown>[] {
+): TrenordTrainRecord[] {
   if (value === null || value === undefined || depth > 8) return candidates;
 
   if (Array.isArray(value)) {
@@ -99,7 +115,7 @@ function collectTrainCandidates(
   if (seen.has(value)) return candidates;
   seen.add(value);
 
-  const record = value as Record<string, unknown>;
+  const record = asTrainRecord(value);
   if (hasDirettrice(record) || isTrainLikeRecord(record)) {
     candidates.push(record);
   }
@@ -117,7 +133,7 @@ function collectTrainCandidates(
   return candidates;
 }
 
-export function getTrenordTrainRecord(payload: unknown): Record<string, unknown> {
+export function getTrenordTrainRecord(payload: unknown): TrenordTrainRecord {
   const candidates = collectTrainCandidates(payload);
 
   return candidates.find(hasDirettrice) || candidates[0] || {};

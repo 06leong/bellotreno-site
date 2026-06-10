@@ -12,14 +12,17 @@ Functions.
 npm run dev         # start Astro dev server
 npm run build       # production build to dist/
 npm run check       # full local quality gate, same baseline as CI
+npm run check:no-raw-js # fail if raw .js/.mjs/.cjs source files are added
 npm run check:types # TypeScript checks for every scoped project
 npm run test:js     # Node test runner through tsx for tests/js/*.test.ts
+npm run smoke:pages # fetch smoke test against local/preview pages
 npm run preview     # serve built output locally
 ```
 
 `npm run check` is the minimum gate before pushing. It runs:
 
-- raw JavaScript syntax audit for any remaining `.js` / `.mjs` files;
+- raw JavaScript source guard for `.js`, `.mjs`, and `.cjs` files outside
+  generated/dependency directories;
 - TypeScript checks for normalizers, Cloudflare Pages Functions, Node
   scripts/tests, and browser runtime modules;
 - Node tests under `tests/js/`;
@@ -50,6 +53,8 @@ typed guards, local interfaces, normalizers, or explicit fallback behavior.
 
 Do not add new browser source under `public/scripts/`. Runtime code must be
 authored in TypeScript and bundled by Astro/Vite into hashed `/_astro/*` assets.
+Use `SMOKE_BASE_URL=https://your-preview.pages.dev npm run smoke:pages` after a
+preview deploy to catch missing page entries before deeper manual testing.
 
 ## Runtime Modules
 
@@ -79,10 +84,21 @@ Important modules:
   links.
 - `swiss.ts`: Swiss formation fetch/cache, timeline merge, coach strip, and
   vehicle detail rendering.
+- `about.ts`: localized About-page content rendered from typed, in-repo static
+  sections.
+- `not-found.ts`: 404 terminal theme/device effect with DOM builders.
 
 `src/types/bellotreno-globals.d.ts` is the compatibility boundary for existing
 `window.*` globals. Prefer normal imports for new code; add globals only when an
 Astro template or legacy browser boundary genuinely needs them.
+
+## Encoding
+
+Repository text files are UTF-8. PowerShell can display UTF-8 Chinese or Italian
+accented text incorrectly when its output encoding/code page is not UTF-8; do not
+classify that as source corruption by sight alone. Confirm with `rg`, `git diff`,
+or a build/typecheck. If the file itself contains mojibake, fix the source text
+directly instead of documenting around it.
 
 ## Styling And Fonts
 

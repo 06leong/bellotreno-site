@@ -11,7 +11,10 @@ const ALLOWED_HOSTS = new Set([
     "[::1]"
 ]);
 
-type JsonRecord = Record<string, unknown>;
+type JsonValue = string | number | boolean | null | undefined | JsonValue[] | { [key: string]: JsonValue };
+interface JsonRecord {
+    [key: string]: JsonValue;
+}
 type CorsHeaderMap = Record<string, string>;
 
 interface SwissStopPoint {

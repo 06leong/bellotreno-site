@@ -19,6 +19,16 @@ export interface SwissVehicleSegment {
   trolleyStatus?: string;
 }
 
+export interface SwissStopSector {
+  accessToPreviousVehicle?: boolean;
+  arrivalTime?: string;
+  departureTime?: string;
+  name?: string;
+  sectors?: string;
+  track?: string;
+  uic?: number | string;
+}
+
 export interface SwissVehicle {
   evn?: string;
   countryCode?: string | number;
@@ -34,7 +44,7 @@ export interface SwissVehicle {
   vehicleWillBePutAway?: boolean;
   trolleyStatus?: string;
   segments?: SwissVehicleSegment[];
-  stopSectors?: Record<string, unknown>[];
+  stopSectors?: SwissStopSector[];
 }
 
 export const SWISS_BORDER_HINTS = new Set(["CHIASSO", "DOMODOSSOLA", "LUINO", "TIRANO", "STABIO"]);

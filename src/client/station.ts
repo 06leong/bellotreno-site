@@ -719,7 +719,7 @@ document.addEventListener('astro:page-load', () => {
     _stBoardType = isStationBoardType(requestedBoardType) ? requestedBoardType : 'partenze';
 
     // Register language change hook for this page.
-    // common.js fires onLanguageChanged during its own astro:page-load (which runs first),
+    // common.ts fires onLanguageChanged during its own astro:page-load (which runs first),
     // so this hook is for user-initiated language switches that happen later.
     window.onLanguageChanged = function () {
         if (_stId) void _stLoadBoard();
