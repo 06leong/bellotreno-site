@@ -1,4 +1,4 @@
-import { normalizeItaloStations } from "../../../src/lib/normalizers/italo.ts";
+import { normalizeItaloStationName, normalizeItaloStations } from "../../../src/lib/normalizers/italo.ts";
 import {
     corsHeaders,
     fetchItaloStations,
@@ -7,17 +7,6 @@ import {
     resolveItaloStation,
     unavailable,
 } from "./_shared.ts";
-
-function normalizeSearch(value: unknown): string {
-    return String(value || "")
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/[’'`´]/g, " ")
-        .replace(/[.\-_/(),]/g, " ")
-        .replace(/\s+/g, " ")
-        .trim()
-        .toUpperCase();
-}
 
 export async function onRequestOptions(context: PagesContext): Promise<Response> {
     return new Response(null, {
@@ -38,9 +27,10 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     const q = url.searchParams.get("q") || "";
     const rfi = url.searchParams.get("rfi") || "";
     const code = url.searchParams.get("code") || "";
+    const viaggiaStationId = url.searchParams.get("viaggiaStationId") || "";
 
-    if (rfi || code) {
-        const station = await resolveItaloStation({ code, rfiLocationCode: rfi });
+    if (rfi || code || viaggiaStationId) {
+        const station = await resolveItaloStation({ code, rfiLocationCode: rfi, viaggiaStationId });
         return json({
             available: Boolean(station),
             provider: "italo",
@@ -49,10 +39,10 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     }
 
     const stations = normalizeItaloStations(await fetchItaloStations());
-    const query = normalizeSearch(q);
+    const query = normalizeItaloStationName(q);
     const filtered = query
         ? stations.filter((station) => {
-            const candidates = [station.code, station.name, station.slug, ...(station.aliases || [])].map(normalizeSearch);
+            const candidates = [station.code, station.name, station.viaggiaName, station.slug, ...(station.aliases || [])].map(normalizeItaloStationName);
             return candidates.some((candidate) => candidate.includes(query) || query.includes(candidate));
         }).slice(0, 20)
         : stations;

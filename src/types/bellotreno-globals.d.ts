@@ -42,7 +42,6 @@ declare global {
     COUNTER_URL?: string;
     ITALO_STATION_BASE?: string;
     ITALO_STATIONS_BASE?: string;
-    ITALO_STATION_CODE_MAP?: Record<string, string>;
     ITALO_TRAIN_BASE?: string;
     NOTIFY_BASE?: string;
     PROXY_BASE?: string;

@@ -2,6 +2,7 @@
 // BelloTreno © 2026
 
 import { registerStationNavigationGlobal, type StationBoardType } from './station-navigation.js';
+import { findItaloStation } from '../lib/normalizers/italo.js';
 
 export {};
 
@@ -125,48 +126,11 @@ async function fetchViaggiaStationBoard(stationId: string, type: StationBoardTyp
 }
 
 function resolveItaloStationCode(stationId: string, stationName: string): string {
-    if (_stItaloCode) return _stItaloCode;
-    const map = window.ITALO_STATION_CODE_MAP || {};
-    const mapped = map[normalizeRfiStationId(stationId)];
-    if (mapped) return mapped;
-
-    const normalized = normalizeItaloStationName(stationName);
-    const byName: Record<string, string> = {
-        'MILANO CENTRALE': 'MC_',
-        'MILANO C LE': 'MC_',
-        'MILANO RHO FIERA': 'RRO',
-        'MILANO EXPO RHO': 'RRO',
-        'RHO FIERA MILANO': 'RRO',
-        'RHO FIERA': 'RRO',
-        'ROMA TERMINI': 'RMT',
-        'ROMA TIBURTINA': 'RTB',
-        'FIRENZE SANTA MARIA NOVELLA': 'SMN',
-        'FIRENZE SMN': 'SMN',
-        'FIRENZE S M NOVELLA': 'SMN',
-        'BOLOGNA CENTRALE': 'BO2',
-        'REGGIO EMILIA AV MEDIOPADANA': 'AAV',
-        'MEDIOPADANA R EMILIA': 'AAV',
-        'TORINO PORTA SUSA': 'OUE',
-        'TORINO PORTA DI SUSA': 'OUE',
-        'TORINO PORTA NUOVA': 'TOP'
-    };
-    return byName[normalized] || '';
-}
-
-function normalizeRfiStationId(value: unknown): string {
-    const digits = String(value || '').replace(/\D+/g, '');
-    return digits.replace(/^0+/, '') || digits;
-}
-
-function normalizeItaloStationName(value: unknown): string {
-    return String(value || '')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[\u2019'`\u00b4]/g, ' ')
-        .replace(/[.\-_/(),]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .toUpperCase();
+    return findItaloStation([], {
+        code: _stItaloCode,
+        name: stationName,
+        viaggiaStationId: stationId
+    })?.code || '';
 }
 
 async function fetchItaloStationBoard(stationId: string, stationName: string, type: StationBoardType = 'partenze'): Promise<StationBoardTrain[]> {
@@ -176,6 +140,7 @@ async function fetchItaloStationBoard(stationId: string, stationName: string, ty
     const params = new URLSearchParams({ type });
     const code = resolveItaloStationCode(stationId, stationName);
     if (code) params.set('code', code);
+    if (stationId) params.set('viaggiaStationId', stationId);
     if (stationName) params.set('name', stationName);
 
     try {

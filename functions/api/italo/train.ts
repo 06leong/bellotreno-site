@@ -2,7 +2,7 @@ import { normalizeItaloTrainPayload, type ItaloTrainPayload } from "../../../src
 import {
     ITALO_BASE_URL,
     corsHeaders,
-    italoFetchHeaders,
+    fetchItaloJson,
     json,
     requestIsAllowed,
     unavailable,
@@ -33,19 +33,24 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     upstreamUrl.searchParams.set("TrainNumber", trainNumber);
 
     try {
-        const upstream = await fetch(upstreamUrl.toString(), {
-            headers: italoFetchHeaders()
+        const upstream = await fetchItaloJson<ItaloTrainPayload>(upstreamUrl, {
+            attempts: 3,
+            cacheKey: `italo-train:${trainNumber}`,
+            cacheTtlMs: 20_000,
+            timeoutMs: 8000,
         });
 
         if (!upstream.ok) {
-            return unavailable("upstream_error", 200, {
+            return unavailable(upstream.reason, 200, {
                 ...headers,
                 "cache-control": "no-store"
             });
         }
 
-        const raw = await upstream.json() as ItaloTrainPayload;
-        return json(normalizeItaloTrainPayload(raw), 200, headers);
+        return json(normalizeItaloTrainPayload(upstream.value), 200, {
+            ...headers,
+            "cache-control": "public, max-age=20"
+        });
     } catch {
         return unavailable("upstream_error", 200, {
             ...headers,

@@ -112,18 +112,6 @@ const CAT_IMAGE_MAP = {
 window.CLIENT_LINK_MAP = CLIENT_LINK_MAP;
 window.CAT_IMAGE_MAP = CAT_IMAGE_MAP;
 window.CAT_MAP = CAT_MAP;
-window.ITALO_STATION_CODE_MAP = {
-    "1728": "MC_",
-    "3098": "RRO",
-    "2416": "RMT",
-    "2385": "RTB",
-    "1325": "SMN",
-    "942": "BO2",
-    "4054": "AAV",
-    "3163": "OUE",
-    "2876": "TOP"
-};
-
 /**
  * 根据列车类别代码返回对应的 badge CSS 类名。
  * 集中管理，供 main.ts 和 station.ts 共同使用。

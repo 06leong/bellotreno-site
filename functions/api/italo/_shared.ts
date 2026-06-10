@@ -1,6 +1,7 @@
 import {
     findItaloStation,
     normalizeItaloStations,
+    type ItaloStationLookupQuery,
     type ItaloStationInfo,
 } from "../../../src/lib/normalizers/italo.ts";
 
@@ -23,6 +24,22 @@ const ALLOWED_HOST_SUFFIXES = [
 
 type CorsHeaderMap = Record<string, string>;
 
+interface ItaloJsonCacheEntry {
+    expiresAt: number;
+    value: unknown;
+}
+
+interface ItaloJsonFetchOptions {
+    attempts?: number;
+    cacheKey?: string;
+    cacheTtlMs?: number;
+    timeoutMs?: number;
+}
+
+type ItaloJsonFetchResult<T> =
+    | { ok: true; value: T }
+    | { ok: false; reason: string; status?: number };
+
 let stationCache: {
     expiresAt: number;
     promise: Promise<ItaloStationInfo[]> | null;
@@ -32,6 +49,8 @@ let stationCache: {
     promise: null,
     stations: null,
 };
+
+const jsonCache = new Map<string, ItaloJsonCacheEntry>();
 
 export function json(data: unknown, status = 200, extraHeaders: HeadersInit = {}): Response {
     return new Response(JSON.stringify(data), {
@@ -95,9 +114,86 @@ export function unavailable(reason: string, status = 200, headers: HeadersInit =
 export function italoFetchHeaders(): HeadersInit {
     return {
         "accept": "application/json, text/plain, */*",
-        "referer": `${ITALO_BASE_URL}/`,
-        "user-agent": "Mozilla/5.0 BelloTreno-Italo/1.0"
+        "accept-language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
+        "cache-control": "no-cache",
+        "pragma": "no-cache",
+        "referer": `${ITALO_BASE_URL}/it`,
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
     };
+}
+
+function isTransientItaloStatus(status: number): boolean {
+    return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
+}
+
+function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        return await fetch(url, {
+            ...init,
+            signal: controller.signal,
+        });
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
+export async function fetchItaloJson<T>(url: string | URL, options: ItaloJsonFetchOptions = {}): Promise<ItaloJsonFetchResult<T>> {
+    const requestUrl = url.toString();
+    const cacheKey = options.cacheKey || "";
+    const cached = cacheKey ? jsonCache.get(cacheKey) : null;
+    if (cached && cached.expiresAt > Date.now()) {
+        return { ok: true, value: cached.value as T };
+    }
+
+    const attempts = Math.max(1, options.attempts ?? 2);
+    const timeoutMs = Math.max(1000, options.timeoutMs ?? 8000);
+    let lastReason = "upstream_error";
+    let lastStatus: number | undefined;
+
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+        try {
+            const response = await fetchWithTimeout(requestUrl, {
+                headers: italoFetchHeaders(),
+            }, timeoutMs);
+
+            if (response.ok) {
+                let value: T;
+                try {
+                    value = await response.json() as T;
+                } catch {
+                    lastReason = "upstream_parse_error";
+                    break;
+                }
+                if (cacheKey && options.cacheTtlMs && options.cacheTtlMs > 0) {
+                    jsonCache.set(cacheKey, {
+                        expiresAt: Date.now() + options.cacheTtlMs,
+                        value,
+                    });
+                }
+                return { ok: true, value };
+            }
+
+            lastStatus = response.status;
+            lastReason = `upstream_http_${response.status}`;
+            if (!isTransientItaloStatus(response.status)) break;
+        } catch (error) {
+            lastReason = error instanceof DOMException && error.name === "AbortError"
+                ? "upstream_timeout"
+                : "upstream_network_error";
+        }
+
+        if (attempt < attempts - 1) {
+            await sleep(150 * (attempt + 1));
+        }
+    }
+
+    return { ok: false, reason: lastReason, status: lastStatus };
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -228,6 +324,6 @@ export async function fetchItaloStations(): Promise<ItaloStationInfo[]> {
     return stationCache.promise;
 }
 
-export async function resolveItaloStation(query: { code?: unknown; name?: unknown; rfiLocationCode?: unknown }): Promise<ItaloStationInfo | null> {
+export async function resolveItaloStation(query: ItaloStationLookupQuery): Promise<ItaloStationInfo | null> {
     return findItaloStation(await fetchItaloStations(), query);
 }

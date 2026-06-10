@@ -2,7 +2,7 @@ import { normalizeItaloStationBoard, type ItaloStationPayload } from "../../../s
 import {
     ITALO_BASE_URL,
     corsHeaders,
-    italoFetchHeaders,
+    fetchItaloJson,
     json,
     requestIsAllowed,
     resolveItaloStation,
@@ -34,9 +34,10 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     const code = (url.searchParams.get("code") || "").trim();
     const name = (url.searchParams.get("name") || "").trim();
     const rfi = (url.searchParams.get("rfi") || "").trim();
+    const viaggiaStationId = (url.searchParams.get("viaggiaStationId") || "").trim();
     const type = boardType(url.searchParams.get("type"));
 
-    const station = await resolveItaloStation({ code, name, rfiLocationCode: rfi });
+    const station = await resolveItaloStation({ code, name, rfiLocationCode: rfi, viaggiaStationId });
     if (!station?.code) {
         return unavailable("station_not_found", 200, headers);
     }
@@ -45,25 +46,30 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     upstreamUrl.searchParams.set("CodiceStazione", station.code);
 
     try {
-        const upstream = await fetch(upstreamUrl.toString(), {
-            headers: italoFetchHeaders()
+        const upstream = await fetchItaloJson<ItaloStationPayload>(upstreamUrl, {
+            attempts: 2,
+            cacheKey: `italo-station:${station.code}:${type}`,
+            cacheTtlMs: 20_000,
+            timeoutMs: 8000,
         });
 
         if (!upstream.ok) {
-            return unavailable("upstream_error", 200, {
+            return unavailable(upstream.reason, 200, {
                 ...headers,
                 "cache-control": "no-store"
             });
         }
 
-        const raw = await upstream.json() as ItaloStationPayload;
         return json({
             available: true,
             provider: "italo",
             station,
-            lastUpdate: raw?.LastUpdate || null,
-            trains: normalizeItaloStationBoard(raw, station.code, type),
-        }, 200, headers);
+            lastUpdate: upstream.value?.LastUpdate || null,
+            trains: normalizeItaloStationBoard(upstream.value, station.code, type),
+        }, 200, {
+            ...headers,
+            "cache-control": "public, max-age=20"
+        });
     } catch {
         return unavailable("upstream_error", 200, {
             ...headers,
