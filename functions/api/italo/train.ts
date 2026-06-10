@@ -3,6 +3,7 @@ import {
     ITALO_BASE_URL,
     corsHeaders,
     fetchItaloJson,
+    italoProxyConfig,
     json,
     requestIsAllowed,
     unavailable,
@@ -31,12 +32,14 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
 
     const upstreamUrl = new URL(`${ITALO_BASE_URL}/api/RicercaTrenoService`);
     upstreamUrl.searchParams.set("TrainNumber", trainNumber);
+    const proxy = italoProxyConfig(context.env);
 
     try {
         const upstream = await fetchItaloJson<ItaloTrainPayload>(upstreamUrl, {
             attempts: 3,
             cacheKey: `italo-train:${trainNumber}`,
             cacheTtlMs: 20_000,
+            proxy,
             timeoutMs: 8000,
         });
 

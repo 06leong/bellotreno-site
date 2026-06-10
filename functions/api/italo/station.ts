@@ -3,6 +3,7 @@ import {
     ITALO_BASE_URL,
     corsHeaders,
     fetchItaloJson,
+    italoProxyConfig,
     json,
     requestIsAllowed,
     resolveItaloStation,
@@ -36,8 +37,9 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     const rfi = (url.searchParams.get("rfi") || "").trim();
     const viaggiaStationId = (url.searchParams.get("viaggiaStationId") || "").trim();
     const type = boardType(url.searchParams.get("type"));
+    const proxy = italoProxyConfig(context.env);
 
-    const station = await resolveItaloStation({ code, name, rfiLocationCode: rfi, viaggiaStationId });
+    const station = await resolveItaloStation({ code, name, rfiLocationCode: rfi, viaggiaStationId }, proxy);
     if (!station?.code) {
         return unavailable("station_not_found", 200, headers);
     }
@@ -50,6 +52,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
             attempts: 2,
             cacheKey: `italo-station:${station.code}:${type}`,
             cacheTtlMs: 20_000,
+            proxy,
             timeoutMs: 8000,
         });
 

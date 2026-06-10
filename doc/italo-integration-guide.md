@@ -53,6 +53,58 @@ successful-response cache to reduce repeated upstream hits during rapid
 searches. It still returns an unavailable payload when the upstream cannot be
 reached, rather than fabricating stale realtime data.
 
+In production, Italo API traffic should use the VPS `rfi-proxy` path instead of
+Cloudflare Pages direct `fetch()`. Italo is served behind Cloudflare, and Pages
+egress can receive an upstream `403` even though the same API URL opens in a
+normal browser. This is not a browser CORS failure: the browser calls
+BelloTreno's same-origin `/api/italo/*` endpoint successfully, and the `403`
+comes from the server-side request from Pages to Italo.
+
+The Pages Function supports these proxy settings:
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `ITALO_PROXY_BASE_URL` | production | proxy endpoint, for example `https://api.bellotreno.org/` |
+| `ITALO_PROXY_TOKEN` | when calling VPS directly | value sent as `X-Bello-Token` to `rfi-proxy` |
+| `ITALO_PROXY_CALLER_ORIGIN` | optional | referer used when the proxy endpoint is the public Worker; defaults to `https://bellotreno.org` |
+
+`RFI_PROXY_BASE_URL` and `RFI_PROXY_TOKEN` are accepted as fallback names, but
+new Italo deployments should prefer the Italo-specific names so the runtime
+configuration remains explicit.
+
+If `ITALO_PROXY_BASE_URL` points directly to the VPS proxy, set
+`ITALO_PROXY_TOKEN` to the same secret used by the VPS `SECURITY_TOKEN`. The
+token is injected only inside the Pages Function and is never exposed to browser
+code.
+
+If `ITALO_PROXY_BASE_URL` points to the existing public Worker
+`https://ah.bellotreno.workers.dev/`, the Worker must also allow Italo targets:
+the VPS token remains in the Worker's `RFI_PROXY_TOKEN` secret, and
+`ITALO_PROXY_TOKEN` is not required in Pages for that route.
+
+```js
+function targetAllowed(value) {
+  if (!value) return false;
+  try {
+    const host = new URL(value).hostname.toLowerCase();
+    return (
+      host === "viaggiatreno.it" ||
+      host.endsWith(".viaggiatreno.it") ||
+      host === "rfi.it" ||
+      host.endsWith(".rfi.it") ||
+      host === "italotreno.com" ||
+      host.endsWith(".italotreno.com")
+    );
+  } catch {
+    return false;
+  }
+}
+```
+
+That Worker remains outside this repository, so its allowlist must be deployed
+separately. The VPS `rfi-proxy` in this repository also has to be redeployed
+after pulling the image that includes `italotreno.com` in its own allowlist.
+
 ## Station Codes
 
 Italo station codes are not ViaggiaTreno station ids. BelloTreno keeps those

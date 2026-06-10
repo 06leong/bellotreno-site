@@ -2,7 +2,7 @@
 
 This folder contains the VPS-side services used by BelloTreno:
 
-- `rfi-proxy`: the existing ViaggiaTreno/RFI proxy on port `8080`.
+- `rfi-proxy`: the ViaggiaTreno/RFI/Italo proxy on port `8080`.
 - `bellotreno-statistics`: the statistics collector/API on port `8081`.
 
 Both services are started by the same `docker-compose.yml` and share the external Docker network `bellotreno-network`.
@@ -105,6 +105,32 @@ If path routing is inconvenient, use a separate host:
 ```text
 https://stats-api.bellotreno.org/v1 -> bellotreno-statistics:8081/v1
 ```
+
+## Realtime proxy allowlist
+
+The `rfi-proxy` service accepts only targets under these base domains:
+
+- `viaggiatreno.it`
+- `rfi.it`
+- `italotreno.com`
+
+Every request still requires `X-Bello-Token: <RFI_PROXY_SECURITY_TOKEN>`.
+For Italo in Viaggio, the proxy uses `curl_cffi` Chrome impersonation plus an
+Italo referer and JSON accept headers. This is required because Cloudflare Pages
+direct `fetch()` can receive upstream `403` responses from
+`italoinviaggio.italotreno.com` even when the same URL works in a normal browser.
+
+Cloudflare Pages should call this proxy for `/api/italo/*` with:
+
+```text
+ITALO_PROXY_BASE_URL=https://api.bellotreno.org/
+ITALO_PROXY_TOKEN=<same secret as RFI_PROXY_SECURITY_TOKEN>
+```
+
+If the public Cloudflare Worker `https://ah.bellotreno.workers.dev/` is used as
+the token-injecting broker instead, that Worker must also add `italotreno.com`
+and its subdomains to its own target allowlist. In that route, the VPS token
+stays in the Worker's `RFI_PROXY_TOKEN` secret rather than in Pages.
 
 ## Statistics API auth
 

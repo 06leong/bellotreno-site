@@ -2,6 +2,7 @@ import { normalizeItaloStationName, normalizeItaloStations } from "../../../src/
 import {
     corsHeaders,
     fetchItaloStations,
+    italoProxyConfig,
     json,
     requestIsAllowed,
     resolveItaloStation,
@@ -28,9 +29,10 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     const rfi = url.searchParams.get("rfi") || "";
     const code = url.searchParams.get("code") || "";
     const viaggiaStationId = url.searchParams.get("viaggiaStationId") || "";
+    const proxy = italoProxyConfig(context.env);
 
     if (rfi || code || viaggiaStationId) {
-        const station = await resolveItaloStation({ code, rfiLocationCode: rfi, viaggiaStationId });
+        const station = await resolveItaloStation({ code, rfiLocationCode: rfi, viaggiaStationId }, proxy);
         return json({
             available: Boolean(station),
             provider: "italo",
@@ -38,7 +40,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
         }, 200, headers);
     }
 
-    const stations = normalizeItaloStations(await fetchItaloStations());
+    const stations = normalizeItaloStations(await fetchItaloStations(proxy));
     const query = normalizeItaloStationName(q);
     const filtered = query
         ? stations.filter((station) => {

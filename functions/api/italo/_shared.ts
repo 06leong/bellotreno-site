@@ -33,12 +33,25 @@ interface ItaloJsonFetchOptions {
     attempts?: number;
     cacheKey?: string;
     cacheTtlMs?: number;
+    proxy?: ItaloProxyConfig | null;
     timeoutMs?: number;
 }
 
 type ItaloJsonFetchResult<T> =
     | { ok: true; value: T }
     | { ok: false; reason: string; status?: number };
+
+export interface ItaloProxyConfig {
+    baseUrl: string;
+    callerOrigin?: string;
+    token?: string;
+}
+
+interface ItaloFetchTarget {
+    headers: HeadersInit;
+    reasonPrefix: "upstream" | "upstream_proxy";
+    url: string;
+}
 
 let stationCache: {
     expiresAt: number;
@@ -122,6 +135,76 @@ export function italoFetchHeaders(): HeadersInit {
     };
 }
 
+export function italoHtmlFetchHeaders(): HeadersInit {
+    return {
+        "accept": "text/html,application/xhtml+xml",
+        "accept-language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
+        "referer": `${ITALO_BASE_URL}/`,
+        "user-agent": "Mozilla/5.0 BelloTreno-Italo/1.0"
+    };
+}
+
+function cleanEnvValue(value: string | undefined): string {
+    return (value || "").trim();
+}
+
+export function italoProxyConfig(env: PagesEnv): ItaloProxyConfig | null {
+    const baseUrl = cleanEnvValue(env.ITALO_PROXY_BASE_URL) || cleanEnvValue(env.RFI_PROXY_BASE_URL);
+    if (!baseUrl) return null;
+
+    const token = cleanEnvValue(env.ITALO_PROXY_TOKEN) || cleanEnvValue(env.RFI_PROXY_TOKEN);
+    const callerOrigin = cleanEnvValue(env.ITALO_PROXY_CALLER_ORIGIN) || "https://bellotreno.org";
+    return {
+        baseUrl,
+        callerOrigin,
+        ...(token ? { token } : {}),
+    };
+}
+
+function normalizeCallerReferer(callerOrigin: string | undefined): string | null {
+    try {
+        const origin = new URL(callerOrigin || "https://bellotreno.org").origin;
+        return `${origin}/`;
+    } catch {
+        return "https://bellotreno.org/";
+    }
+}
+
+function proxyFetchHeaders(proxy: ItaloProxyConfig): HeadersInit {
+    return {
+        "accept": "application/json, text/plain, */*",
+        "accept-language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
+        "referer": normalizeCallerReferer(proxy.callerOrigin) || "https://bellotreno.org/",
+        ...(proxy.token ? { "x-bello-token": proxy.token } : {}),
+    };
+}
+
+function buildProxyUrl(targetUrl: string, proxy: ItaloProxyConfig): string {
+    const proxyUrl = new URL(proxy.baseUrl);
+    proxyUrl.searchParams.set("url", targetUrl);
+    return proxyUrl.toString();
+}
+
+function italoFetchTarget(
+    requestUrl: string,
+    proxy: ItaloProxyConfig | null | undefined,
+    directHeaders: HeadersInit = italoFetchHeaders(),
+): ItaloFetchTarget {
+    if (proxy?.baseUrl) {
+        return {
+            headers: proxyFetchHeaders(proxy),
+            reasonPrefix: "upstream_proxy",
+            url: buildProxyUrl(requestUrl, proxy),
+        };
+    }
+
+    return {
+        headers: directHeaders,
+        reasonPrefix: "upstream",
+        url: requestUrl,
+    };
+}
+
 function isTransientItaloStatus(status: number): boolean {
     return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
 }
@@ -151,15 +234,22 @@ export async function fetchItaloJson<T>(url: string | URL, options: ItaloJsonFet
         return { ok: true, value: cached.value as T };
     }
 
+    let target: ItaloFetchTarget;
+    try {
+        target = italoFetchTarget(requestUrl, options.proxy);
+    } catch {
+        return { ok: false, reason: "upstream_proxy_config_error" };
+    }
+
     const attempts = Math.max(1, options.attempts ?? 2);
     const timeoutMs = Math.max(1000, options.timeoutMs ?? 8000);
-    let lastReason = "upstream_error";
+    let lastReason = `${target.reasonPrefix}_error`;
     let lastStatus: number | undefined;
 
     for (let attempt = 0; attempt < attempts; attempt += 1) {
         try {
-            const response = await fetchWithTimeout(requestUrl, {
-                headers: italoFetchHeaders(),
+            const response = await fetchWithTimeout(target.url, {
+                headers: target.headers,
             }, timeoutMs);
 
             if (response.ok) {
@@ -180,12 +270,12 @@ export async function fetchItaloJson<T>(url: string | URL, options: ItaloJsonFet
             }
 
             lastStatus = response.status;
-            lastReason = `upstream_http_${response.status}`;
+            lastReason = `${target.reasonPrefix}_http_${response.status}`;
             if (!isTransientItaloStatus(response.status)) break;
         } catch (error) {
             lastReason = error instanceof DOMException && error.name === "AbortError"
-                ? "upstream_timeout"
-                : "upstream_network_error";
+                ? `${target.reasonPrefix}_timeout`
+                : `${target.reasonPrefix}_network_error`;
         }
 
         if (attempt < attempts - 1) {
@@ -285,17 +375,20 @@ function parseStationCoding(text: string): ItaloStationInfo[] {
     return [];
 }
 
-export async function fetchItaloStations(): Promise<ItaloStationInfo[]> {
+export async function fetchItaloStations(proxy: ItaloProxyConfig | null = null): Promise<ItaloStationInfo[]> {
     const now = Date.now();
     if (stationCache.stations && stationCache.expiresAt > now) return stationCache.stations;
     if (stationCache.promise) return stationCache.promise;
 
-    stationCache.promise = fetch(`${ITALO_BASE_URL}/it/stazione`, {
-        headers: {
-            "accept": "text/html,application/xhtml+xml",
-            "referer": `${ITALO_BASE_URL}/`,
-            "user-agent": "Mozilla/5.0 BelloTreno-Italo/1.0"
-        }
+    let target: ItaloFetchTarget;
+    try {
+        target = italoFetchTarget(`${ITALO_BASE_URL}/it/stazione`, proxy, italoHtmlFetchHeaders());
+    } catch {
+        target = italoFetchTarget(`${ITALO_BASE_URL}/it/stazione`, null, italoHtmlFetchHeaders());
+    }
+
+    stationCache.promise = fetch(target.url, {
+        headers: target.headers,
     }).then(async (response) => {
         if (!response.ok) throw new Error("upstream_station_list_error");
         const text = await response.text();
@@ -324,6 +417,9 @@ export async function fetchItaloStations(): Promise<ItaloStationInfo[]> {
     return stationCache.promise;
 }
 
-export async function resolveItaloStation(query: ItaloStationLookupQuery): Promise<ItaloStationInfo | null> {
-    return findItaloStation(await fetchItaloStations(), query);
+export async function resolveItaloStation(
+    query: ItaloStationLookupQuery,
+    proxy: ItaloProxyConfig | null = null,
+): Promise<ItaloStationInfo | null> {
+    return findItaloStation(await fetchItaloStations(proxy), query);
 }
