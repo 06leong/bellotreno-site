@@ -23,6 +23,11 @@ type JsonValue = string | number | boolean | null | undefined | JsonValue[] | { 
 type JsonObject = { [key: string]: JsonValue };
 type TrenordUnavailableResult = { available: false; reason: string } & JsonObject;
 type HttpError = Error & { status?: number };
+type TrenordProxyConfig = {
+    baseUrl: string;
+    callerOrigin?: string;
+    token?: string;
+};
 
 let direttriciCache: {
     expiresAt: number;
@@ -91,6 +96,64 @@ function corsHeaders(request: Request): CorsHeaderMap {
     };
 }
 
+function cleanEnvValue(value: string | undefined): string {
+    return (value || "").trim();
+}
+
+function trenordProxyConfig(env: PagesEnv): TrenordProxyConfig | null {
+    const baseUrl = cleanEnvValue(env.TRENORD_PROXY_BASE_URL)
+        || cleanEnvValue(env.ITALO_PROXY_BASE_URL)
+        || cleanEnvValue(env.RFI_PROXY_BASE_URL);
+    if (!baseUrl) return null;
+
+    const token = cleanEnvValue(env.TRENORD_PROXY_TOKEN)
+        || cleanEnvValue(env.ITALO_PROXY_TOKEN)
+        || cleanEnvValue(env.RFI_PROXY_TOKEN);
+    const callerOrigin = cleanEnvValue(env.ITALO_PROXY_CALLER_ORIGIN) || "https://bellotreno.org";
+    return {
+        baseUrl,
+        callerOrigin,
+        ...(token ? { token } : {}),
+    };
+}
+
+function normalizeCallerReferer(callerOrigin: string | undefined): string {
+    try {
+        return `${new URL(callerOrigin || "https://bellotreno.org").origin}/`;
+    } catch {
+        return "https://bellotreno.org/";
+    }
+}
+
+function proxiedUrl(targetUrl: string, proxy: TrenordProxyConfig): string {
+    const url = new URL(proxy.baseUrl);
+    url.searchParams.set("url", targetUrl);
+    return url.toString();
+}
+
+function trenordFetchTarget(targetUrl: string, proxy: TrenordProxyConfig | null): { headers: HeadersInit; url: string } {
+    if (proxy?.baseUrl) {
+        return {
+            url: proxiedUrl(targetUrl, proxy),
+            headers: {
+                "accept": "application/json, text/plain, */*",
+                "accept-language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
+                "referer": normalizeCallerReferer(proxy.callerOrigin),
+                ...(proxy.token ? { "x-bello-token": proxy.token } : {}),
+            },
+        };
+    }
+
+    return {
+        url: targetUrl,
+        headers: {
+            "accept": "application/json, text/plain, */*",
+            "referer": "https://www.trenord.it/en/routes-and-timetables/journey/real-time/",
+            "user-agent": "Mozilla/5.0"
+        },
+    };
+}
+
 function arrayBufferToWordArray(buffer: ArrayBuffer): CryptoJS.lib.WordArray {
     const bytes = new Uint8Array(buffer);
     const words: number[] = [];
@@ -126,7 +189,12 @@ export function decryptTrenordBffPayload(buffer: ArrayBuffer, secret: string): u
     }
 }
 
-export async function fetchTrenordTrainBff(trainNumber: string, date: string, secret: string): Promise<unknown> {
+export async function fetchTrenordTrainBff(
+    trainNumber: string,
+    date: string,
+    secret: string,
+    proxy: TrenordProxyConfig | null = null,
+): Promise<unknown> {
     const train = String(trainNumber || "").replace(/\D+/g, "");
     if (!train || !/^\d{4}-\d{2}-\d{2}$/.test(String(date || ""))) {
         throw new Error("bad_request");
@@ -134,13 +202,10 @@ export async function fetchTrenordTrainBff(trainNumber: string, date: string, se
 
     const url = new URL(`${TRAIN_BFF_BASE}/${encodeURIComponent(train)}`);
     url.searchParams.set("date", date);
+    const target = trenordFetchTarget(url.toString(), proxy);
 
-    const response = await fetch(url.toString(), {
-        headers: {
-            "accept": "application/json, text/plain, */*",
-            "referer": "https://www.trenord.it/en/routes-and-timetables/journey/real-time/",
-            "user-agent": "Mozilla/5.0"
-        }
+    const response = await fetch(target.url, {
+        headers: target.headers
     });
 
     if (!response.ok) {
@@ -164,7 +229,7 @@ function normalizeDirettriciPayload(payload: unknown): TrenordDirettrice[] {
     ));
 }
 
-export async function fetchTrenordDirettrici(): Promise<TrenordDirettrice[]> {
+export async function fetchTrenordDirettrici(proxy: TrenordProxyConfig | null = null): Promise<TrenordDirettrice[]> {
     const now = Date.now();
     if (direttriciCache.data && direttriciCache.expiresAt > now) {
         return direttriciCache.data;
@@ -173,12 +238,10 @@ export async function fetchTrenordDirettrici(): Promise<TrenordDirettrice[]> {
         return direttriciCache.promise;
     }
 
-    direttriciCache.promise = fetch(DIRETTRICI_URL, {
-        headers: {
-            "accept": "application/json, text/plain, */*",
-            "referer": "https://www.trenord.it/en/routes-and-timetables/journey/real-time/",
-            "user-agent": "Mozilla/5.0"
-        }
+    const target = trenordFetchTarget(DIRETTRICI_URL, proxy);
+
+    direttriciCache.promise = fetch(target.url, {
+        headers: target.headers
     }).then(async (response) => {
         if (!response.ok) {
             const error: HttpError = new Error("upstream_direttrici_error");
@@ -201,10 +264,15 @@ export async function fetchTrenordDirettrici(): Promise<TrenordDirettrice[]> {
     return direttriciCache.promise;
 }
 
-export async function getTrenordTrafficInformation(trainNumber: string, date: string, secret: string): Promise<TrenordTrafficInformationResult> {
+export async function getTrenordTrafficInformation(
+    trainNumber: string,
+    date: string,
+    secret: string,
+    proxy: TrenordProxyConfig | null = null,
+): Promise<TrenordTrafficInformationResult> {
     const [trainPayload, direttrici] = await Promise.all([
-        fetchTrenordTrainBff(trainNumber, date, secret),
-        fetchTrenordDirettrici()
+        fetchTrenordTrainBff(trainNumber, date, secret, proxy),
+        fetchTrenordDirettrici(proxy)
     ]);
 
     return normalizeTrenordTrafficInformation(
@@ -247,7 +315,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     }
 
     try {
-        const result = await getTrenordTrafficInformation(trainNumber, date, secret);
+        const result = await getTrenordTrafficInformation(trainNumber, date, secret, trenordProxyConfig(context.env));
         return json(result, 200, headers);
     } catch (error: unknown) {
         const reason = error instanceof Error ? error.message : "upstream_error";

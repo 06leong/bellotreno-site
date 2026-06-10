@@ -130,7 +130,7 @@ secrets:
 | `/api/italo/*` | `ITALO_PROXY_BASE_URL`, `ITALO_PROXY_TOKEN` |
 | `/api/swiss/formation` | `SWISS_TRAIN_FORMATION_API_KEY` |
 | `/api/statistics/*` | `STATISTICS_API_BASE_URL`, `STATISTICS_API_TOKEN` |
-| `/api/trenord/traffic` | `TRENORD_BFF_SECRET` |
+| `/api/trenord/traffic` | `TRENORD_BFF_SECRET`, optional `TRENORD_PROXY_BASE_URL`, `TRENORD_PROXY_TOKEN` |
 
 Never expose tokens through `PUBLIC_*`. `PUBLIC_*` variables are visible in the
 browser and are only acceptable for public analytics/config values such as

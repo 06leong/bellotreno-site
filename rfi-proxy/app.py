@@ -12,8 +12,9 @@ CORS(app)
 SECURITY_TOKEN = os.getenv("SECURITY_TOKEN", "")
 LOG_REQUESTS = os.getenv("LOG_REQUESTS", "false").lower() == "true"
 
-ALLOWED_BASE_DOMAINS = ("viaggiatreno.it", "rfi.it", "italotreno.com")
+ALLOWED_BASE_DOMAINS = ("viaggiatreno.it", "rfi.it", "italotreno.com", "trenord.it")
 ITALO_BASE_DOMAINS = ("italotreno.com",)
+TRENORD_BASE_DOMAINS = ("trenord.it",)
 CHROME_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -39,6 +40,10 @@ def is_italo_url(target_url):
     return host_matches(hostname_for(target_url), ITALO_BASE_DOMAINS)
 
 
+def is_trenord_url(target_url):
+    return host_matches(hostname_for(target_url), TRENORD_BASE_DOMAINS)
+
+
 def is_italo_api_url(target_url):
     try:
         return urlparse(target_url).path.startswith("/api/")
@@ -58,6 +63,16 @@ def upstream_headers(target_url):
             "Accept": accept,
             "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
             "Referer": "https://italoinviaggio.italotreno.com/it",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
+        }
+
+    if is_trenord_url(target_url):
+        return {
+            "User-Agent": CHROME_USER_AGENT,
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Referer": "https://www.trenord.it/en/routes-and-timetables/journey/real-time/",
             "Cache-Control": "no-cache",
             "Pragma": "no-cache",
         }

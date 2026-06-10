@@ -2,7 +2,7 @@
 
 This folder contains the VPS-side services used by BelloTreno:
 
-- `rfi-proxy`: the ViaggiaTreno/RFI/Italo proxy on port `8080`.
+- `rfi-proxy`: the ViaggiaTreno/RFI/Italo/Trenord proxy on port `8080`.
 - `bellotreno-statistics`: the statistics collector/API on port `8081`.
 
 Both services are started by the same `docker-compose.yml` and share the external Docker network `bellotreno-network`.
@@ -113,12 +113,14 @@ The `rfi-proxy` service accepts only targets under these base domains:
 - `viaggiatreno.it`
 - `rfi.it`
 - `italotreno.com`
+- `trenord.it`
 
 Every request still requires `X-Bello-Token: <RFI_PROXY_SECURITY_TOKEN>`.
 For Italo in Viaggio, the proxy uses `curl_cffi` Chrome impersonation plus an
 Italo referer and JSON accept headers. This is required because Cloudflare Pages
 direct `fetch()` can receive upstream `403` responses from
 `italoinviaggio.italotreno.com` even when the same URL works in a normal browser.
+Trenord BFF traffic uses the same proxy pattern with a Trenord journey referer.
 
 Cloudflare Pages should call this proxy for `/api/italo/*` with:
 

@@ -226,7 +226,7 @@ Pages Functions are in this repo and are written in TypeScript:
 | `/api/italo/*` | Italo in Viaggio via VPS proxy | `ITALO_PROXY_BASE_URL`, `ITALO_PROXY_TOKEN` |
 | `/api/swiss/formation` | OpenTransportData.swiss `formations_full` | `SWISS_TRAIN_FORMATION_API_KEY` |
 | `/api/statistics/*` | VPS statistics API | `STATISTICS_API_BASE_URL`, `STATISTICS_API_TOKEN` |
-| `/api/trenord/traffic` | Trenord BFF + direttrici feeds | `TRENORD_BFF_SECRET` |
+| `/api/trenord/traffic` | Trenord BFF + direttrici feeds via VPS proxy when configured | `TRENORD_BFF_SECRET`, optional `TRENORD_PROXY_BASE_URL`, `TRENORD_PROXY_TOKEN` |
 
 These functions validate request origin/referer where appropriate and avoid
 exposing upstream tokens to browser code.
@@ -406,6 +406,8 @@ Cloudflare Pages variables:
 | `ITALO_PROXY_BASE_URL` | Plain text | Italo proxy endpoint, e.g. `https://api.bellotreno.org/` |
 | `ITALO_PROXY_TOKEN` | Secret | token injected as `X-Bello-Token` when calling the VPS proxy directly |
 | `ITALO_PROXY_CALLER_ORIGIN` | Plain text | optional referer origin when `ITALO_PROXY_BASE_URL` points to the public Worker |
+| `TRENORD_PROXY_BASE_URL` | Plain text | optional Trenord proxy endpoint; falls back to `ITALO_PROXY_BASE_URL` when unset |
+| `TRENORD_PROXY_TOKEN` | Secret | optional Trenord proxy token; falls back to `ITALO_PROXY_TOKEN` when unset |
 | `SWISS_TRAIN_FORMATION_API_KEY` | Secret | OpenTransportData.swiss Train Formation token |
 | `STATISTICS_API_BASE_URL` | Plain text | statistics upstream, e.g. `https://stats-api.bellotreno.org/v1` |
 | `STATISTICS_API_TOKEN` | Secret | token injected into statistics API requests |
