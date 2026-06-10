@@ -26,6 +26,10 @@ import {
   normalizeTrenordTrafficInformation,
 } from "../../src/lib/normalizers/trenord.ts";
 import type { TrenordNotice } from "../../src/lib/normalizers/trenord.ts";
+import {
+  normalizeItaloStationBoard,
+  normalizeItaloTrainPayload,
+} from "../../src/lib/normalizers/italo.ts";
 
 test("statistics category helpers preserve special categories and regional aliases", () => {
   assert.equal(categoryCode("ECFR"), "EC FR");
@@ -52,6 +56,87 @@ test("statistics category helpers preserve special categories and regional alias
 test("station name matching is accent and punctuation tolerant", () => {
   assert.equal(normalizeStationMatchName("DOMEGLIARA-S. AMBROGIO"), "DOMEGLIARA S AMBROGIO");
   assert.equal(normalizeStationMatchName("Genova Brignole"), "GENOVA BRIGNOLE");
+});
+
+test("Italo train payload normalizes to AV train details", () => {
+  const result = normalizeItaloTrainPayload({
+    IsEmpty: false,
+    LastUpdate: "10:18",
+    TrainSchedule: {
+      TrainNumber: "9908",
+      RfiTrainNumber: "9908",
+      DepartureDate: "06:40",
+      DepartureStation: "RMT",
+      DepartureStationDescription: "Roma Termini",
+      ArrivalDate: "11:41",
+      ArrivalStation: "TOP",
+      ArrivalStationDescription: "Torino Porta Nuova",
+      Distruption: { DelayAmount: 15, LocationCode: "LGA", RunningState: 2 },
+      StazionePartenza: {
+        LocationCode: "RMT",
+        LocationDescription: "Roma Termini",
+        RfiLocationCode: "2416",
+        EstimatedDepartureTime: "06:40",
+        ActualDepartureTime: "06:41",
+        StationNumber: 0,
+      },
+      StazioniFerme: [{
+        LocationCode: "RTB",
+        LocationDescription: "Roma Tiburtina",
+        RfiLocationCode: "2385",
+        EstimatedArrivalTime: "06:45",
+        ActualArrivalTime: "06:49",
+        EstimatedDepartureTime: "06:48",
+        ActualDepartureTime: "06:52",
+        StationNumber: 1,
+      }],
+      StazioniNonFerme: [{
+        LocationCode: "MC_",
+        LocationDescription: "Milano Centrale",
+        RfiLocationCode: "1728",
+        EstimatedArrivalTime: "10:20",
+        ActualArrivalTime: "10:35",
+        EstimatedDepartureTime: "10:30",
+        ActualDepartureTime: "",
+        StationNumber: 5,
+      }],
+    },
+  }, "2026-06-10");
+
+  assert.equal(result.available, true);
+  if (result.available) {
+    assert.equal(result.provider, "italo");
+    assert.equal(result.compNumeroTreno, "AV 9908");
+    assert.equal(result.codiceCliente, "ITALO");
+    assert.equal(result.fermate[0].stazione, "Roma Termini");
+    assert.equal(result.fermate[0].id, "2416");
+    assert.equal(result.fermate.at(-1)?.stazione, "Milano Centrale");
+    assert.equal(result.fermate.at(-1)?.arrivoReale, null);
+    assert.deepEqual(result.compRitardoAndamento, ["con un ritardo di 15 min"]);
+  }
+});
+
+test("Italo station board rows normalize to mergeable AV board rows", () => {
+  const rows = normalizeItaloStationBoard({
+    IsEmpty: false,
+    LastUpdate: "10:20",
+    ListaTreniPartenza: [{
+      DescrizioneLocalita: "TORINO PORTA NUOVA",
+      Numero: "9908",
+      Ritardo: 10,
+      OraPassaggio: "10:30",
+      NuovoOrario: "10:40",
+      Binario: "N/A",
+      Informazioni: "CARROZZA 1 IN CODA AL TRENO",
+    }],
+  }, "MC_", "partenze");
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].provider, "italo");
+  assert.equal(rows[0].compNumeroTreno, "AV 9908");
+  assert.equal(rows[0].destinazione, "TORINO PORTA NUOVA");
+  assert.equal(rows[0].ritardo, 10);
+  assert.equal(rows[0].binarioEffettivoPartenzaDescrizione, "N/A");
 });
 
 test("stop time status does not mark scheduled-only future stops as on time", () => {
