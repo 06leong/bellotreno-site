@@ -1,0 +1,72 @@
+import { normalizeItaloTrainPayload, type ItaloTrainPayload } from "../../../src/lib/normalizers/italo.ts";
+import {
+    ITALO_BASE_URL,
+    corsHeaders,
+    fetchItaloJson,
+    italoProxyConfig,
+    json,
+    requestIsAllowed,
+    unavailable,
+} from "./_shared.ts";
+
+export async function onRequestOptions(context: PagesContext): Promise<Response> {
+    return new Response(null, {
+        status: 204,
+        headers: corsHeaders(context.request)
+    });
+}
+
+export async function onRequestGet(context: PagesContext): Promise<Response> {
+    const request = context.request;
+    const headers = corsHeaders(request);
+
+    if (!requestIsAllowed(request)) {
+        return unavailable("forbidden", 403, headers);
+    }
+
+    const url = new URL(request.url);
+    const trainNumber = (url.searchParams.get("number") || url.searchParams.get("train") || "").replace(/\D+/g, "");
+    if (!trainNumber) {
+        return unavailable("bad_request", 400, headers);
+    }
+
+    const upstreamUrl = new URL(`${ITALO_BASE_URL}/api/RicercaTrenoService`);
+    upstreamUrl.searchParams.set("TrainNumber", trainNumber);
+    const proxy = italoProxyConfig(context.env);
+
+    try {
+        const upstream = await fetchItaloJson<ItaloTrainPayload>(upstreamUrl, {
+            attempts: 3,
+            cacheKey: `italo-train:${trainNumber}`,
+            cacheTtlMs: 20_000,
+            proxy,
+            timeoutMs: 8000,
+        });
+
+        if (!upstream.ok) {
+            return unavailable(upstream.reason, 200, {
+                ...headers,
+                "cache-control": "no-store"
+            });
+        }
+
+        return json(normalizeItaloTrainPayload(upstream.value), 200, {
+            ...headers,
+            "cache-control": "public, max-age=20"
+        });
+    } catch {
+        return unavailable("upstream_error", 200, {
+            ...headers,
+            "cache-control": "no-store"
+        });
+    }
+}
+
+export async function onRequest(context: PagesContext): Promise<Response> {
+    if (context.request.method === "OPTIONS") return onRequestOptions(context);
+    if (context.request.method === "GET") return onRequestGet(context);
+    return unavailable("method_not_allowed", 405, {
+        ...corsHeaders(context.request),
+        "allow": "GET, OPTIONS"
+    });
+}

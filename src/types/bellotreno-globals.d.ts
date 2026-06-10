@@ -40,6 +40,9 @@ declare global {
     CLIENT_LINK_MAP?: Record<string, string>;
     CLIENT_MAP?: Record<string, string>;
     COUNTER_URL?: string;
+    ITALO_STATION_BASE?: string;
+    ITALO_STATIONS_BASE?: string;
+    ITALO_TRAIN_BASE?: string;
     NOTIFY_BASE?: string;
     PROXY_BASE?: string;
     SWISS_EC_BASE?: string;

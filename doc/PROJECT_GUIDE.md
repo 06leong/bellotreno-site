@@ -149,8 +149,8 @@ request -> token validation -> URL extraction -> target host allowlist
 Important behavior:
 
 - `X-Bello-Token` must match the VPS `SECURITY_TOKEN`.
-- Target URLs are restricted to `viaggiatreno.it`, `rfi.it`, and their
-  subdomains to prevent open-proxy abuse.
+- Target URLs are restricted to `viaggiatreno.it`, `rfi.it`, `italotreno.com`,
+  and their subdomains to prevent open-proxy abuse.
 - Hop-by-hop headers such as `content-encoding` and `transfer-encoding` are
   filtered before responding.
 - The container uses `expose`, not public `ports`; a reverse proxy such as Nginx
@@ -223,6 +223,7 @@ Pages Functions are in this repo and are written in TypeScript:
 
 | Function | Upstream | Secret/config |
 | --- | --- | --- |
+| `/api/italo/*` | Italo in Viaggio via VPS proxy | `ITALO_PROXY_BASE_URL`, `ITALO_PROXY_TOKEN` |
 | `/api/swiss/formation` | OpenTransportData.swiss `formations_full` | `SWISS_TRAIN_FORMATION_API_KEY` |
 | `/api/statistics/*` | VPS statistics API | `STATISTICS_API_BASE_URL`, `STATISTICS_API_TOKEN` |
 | `/api/trenord/traffic` | Trenord BFF + direttrici feeds | `TRENORD_BFF_SECRET` |
@@ -392,6 +393,7 @@ Remaining hardening:
 | Cloudflare Worker | Origin/Referer allowlist | Blocks unrelated sites from using the public proxy |
 | Worker to VPS | `X-Bello-Token` | Prevents bypassing the Worker and calling the VPS directly |
 | VPS proxy | target host allowlist | Prevents open-proxy abuse |
+| Pages Function to Italo proxy | `ITALO_PROXY_TOKEN` | Keeps the VPS proxy token out of browser code |
 | Pages Function to Swiss API | Cloudflare Pages Secret | Keeps formation token out of browser code |
 | Pages Function to statistics API | `STATISTICS_API_TOKEN` | Keeps statistics API protected |
 | Pages Function to Trenord BFF | `TRENORD_BFF_SECRET` | Keeps Trenord secret out of the browser and repository |
@@ -401,6 +403,9 @@ Cloudflare Pages variables:
 
 | Variable | Type | Purpose |
 | --- | --- | --- |
+| `ITALO_PROXY_BASE_URL` | Plain text | Italo proxy endpoint, e.g. `https://api.bellotreno.org/` |
+| `ITALO_PROXY_TOKEN` | Secret | token injected as `X-Bello-Token` when calling the VPS proxy directly |
+| `ITALO_PROXY_CALLER_ORIGIN` | Plain text | optional referer origin when `ITALO_PROXY_BASE_URL` points to the public Worker |
 | `SWISS_TRAIN_FORMATION_API_KEY` | Secret | OpenTransportData.swiss Train Formation token |
 | `STATISTICS_API_BASE_URL` | Plain text | statistics upstream, e.g. `https://stats-api.bellotreno.org/v1` |
 | `STATISTICS_API_TOKEN` | Secret | token injected into statistics API requests |

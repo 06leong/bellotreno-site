@@ -26,6 +26,12 @@ import {
   normalizeTrenordTrafficInformation,
 } from "../../src/lib/normalizers/trenord.ts";
 import type { TrenordNotice } from "../../src/lib/normalizers/trenord.ts";
+import {
+  findItaloStation,
+  normalizeRfiLocationCode,
+  normalizeItaloStationBoard,
+  normalizeItaloTrainPayload,
+} from "../../src/lib/normalizers/italo.ts";
 
 test("statistics category helpers preserve special categories and regional aliases", () => {
   assert.equal(categoryCode("ECFR"), "EC FR");
@@ -52,6 +58,197 @@ test("statistics category helpers preserve special categories and regional alias
 test("station name matching is accent and punctuation tolerant", () => {
   assert.equal(normalizeStationMatchName("DOMEGLIARA-S. AMBROGIO"), "DOMEGLIARA S AMBROGIO");
   assert.equal(normalizeStationMatchName("Genova Brignole"), "GENOVA BRIGNOLE");
+});
+
+test("Italo train payload normalizes to AV train details", () => {
+  const result = normalizeItaloTrainPayload({
+    IsEmpty: false,
+    LastUpdate: "10:18",
+    TrainSchedule: {
+      TrainNumber: "9908",
+      RfiTrainNumber: "9908",
+      DepartureDate: "06:40",
+      DepartureStation: "RMT",
+      DepartureStationDescription: "Roma Termini",
+      ArrivalDate: "11:41",
+      ArrivalStation: "TOP",
+      ArrivalStationDescription: "Torino Porta Nuova",
+      Distruption: { DelayAmount: 15, LocationCode: "LGA", RunningState: 2 },
+      StazionePartenza: {
+        LocationCode: "RMT",
+        LocationDescription: "Roma Termini",
+        RfiLocationCode: "2416",
+        EstimatedDepartureTime: "06:40",
+        ActualDepartureTime: "06:41",
+        StationNumber: 0,
+      },
+      StazioniFerme: [{
+        LocationCode: "RTB",
+        LocationDescription: "Roma Tiburtina",
+        RfiLocationCode: "2385",
+        EstimatedArrivalTime: "06:45",
+        ActualArrivalTime: "06:49",
+        EstimatedDepartureTime: "06:48",
+        ActualDepartureTime: "06:52",
+        StationNumber: 1,
+      }],
+      StazioniNonFerme: [{
+        LocationCode: "MC_",
+        LocationDescription: "Milano Centrale",
+        RfiLocationCode: "1728",
+        EstimatedArrivalTime: "10:20",
+        ActualArrivalTime: "10:35",
+        EstimatedDepartureTime: "10:30",
+        ActualDepartureTime: "",
+        StationNumber: 5,
+      }],
+    },
+  }, "2026-06-10");
+
+  assert.equal(result.available, true);
+  if (result.available) {
+    assert.equal(result.provider, "italo");
+    assert.equal(result.compNumeroTreno, "AV 9908");
+    assert.equal(result.codiceCliente, "ITALO");
+    assert.equal(result.fermate[0].stazione, "ROMA TERMINI");
+    assert.equal(result.fermate[0].id, "S08409");
+    assert.equal(result.fermate.at(-1)?.stazione, "MILANO CENTRALE");
+    assert.equal(result.fermate.at(-1)?.id, "S01700");
+    assert.equal(result.fermate.at(-1)?.arrivoReale, null);
+    assert.deepEqual(result.compRitardoAndamento, ["con un ritardo di 15 min"]);
+  }
+});
+
+test("Italo station board rows normalize to mergeable AV board rows", () => {
+  const rows = normalizeItaloStationBoard({
+    IsEmpty: false,
+    LastUpdate: "10:20",
+    ListaTreniPartenza: [{
+      DescrizioneLocalita: "TORINO PORTA NUOVA",
+      Numero: "9908",
+      Ritardo: 10,
+      OraPassaggio: "10:30",
+      NuovoOrario: "10:40",
+      Binario: "N/A",
+      Informazioni: "CARROZZA 1 IN CODA AL TRENO",
+    }],
+  }, "MC_", "partenze");
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].provider, "italo");
+  assert.equal(rows[0].compNumeroTreno, "AV 9908");
+  assert.equal(rows[0].destinazione, "TORINO PORTA NUOVA");
+  assert.equal(rows[0].ritardo, 10);
+  assert.equal(rows[0].binarioEffettivoPartenzaDescrizione, "N/A");
+});
+
+test("Italo station resolver keeps ids typed and uses confirmed station aliases", () => {
+  assert.equal(normalizeRfiLocationCode("S01700"), "1700");
+  assert.equal(normalizeRfiLocationCode("01700"), "1700");
+
+  const byViaggiaStationIdOnly = findItaloStation([], { rfiLocationCode: "S01700" });
+  assert.equal(byViaggiaStationIdOnly, null);
+
+  const byConfirmedViaggiaStationId = findItaloStation([], { viaggiaStationId: "S01700" });
+  assert.equal(byConfirmedViaggiaStationId?.code, "MC_");
+
+  const byItaloRfiLocationCode = findItaloStation([], { rfiLocationCode: "1728" });
+  assert.equal(byItaloRfiLocationCode?.code, "MC_");
+
+  const ambiguousRfiLocationCode = findItaloStation([], { rfiLocationCode: "2925" });
+  assert.equal(ambiguousRfiLocationCode, null);
+
+  assert.equal(findItaloStation([], { code: "RHA" })?.viaggiaStationId, "S03213");
+  assert.equal(findItaloStation([], { code: "TSC" })?.viaggiaStationId, "S03317");
+
+  const byCaseInsensitiveName = findItaloStation([], { name: "MILANO CENTRALE" });
+  assert.equal(byCaseInsensitiveName?.code, "MC_");
+
+  const byAlias = findItaloStation([], { name: "Milano C.le" });
+  assert.equal(byAlias?.code, "MC_");
+
+  const matchingMilanoRogoredo = findItaloStation([], { name: "Milano Rogoredo" });
+  assert.equal(matchingMilanoRogoredo?.code, "RG_");
+});
+
+test("Italo 8918 payload maps timeline stops to ViaggiaTreno station pages", () => {
+  const result = normalizeItaloTrainPayload({
+    IsEmpty: false,
+    LastUpdate: "15:20",
+    TrainSchedule: {
+      TrainNumber: "8918",
+      RfiTrainNumber: "8918",
+      DepartureDate: "13:35",
+      DepartureStation: "NAC",
+      DepartureStationDescription: "Napoli",
+      ArrivalDate: "20:56",
+      ArrivalStation: "TSC",
+      ArrivalStationDescription: "Trieste C.le",
+      Distruption: { DelayAmount: 8, LocationCode: "RTB", RunningState: 2 },
+      StazionePartenza: {
+        LocationCode: "NAC",
+        LocationDescription: "Napoli",
+        RfiLocationCode: "1888",
+        EstimatedDepartureTime: "13:35",
+        ActualDepartureTime: "13:44",
+        StationNumber: 0,
+      },
+      StazioniFerme: [{
+        LocationCode: "RTB",
+        LocationDescription: "Roma Tiburtina",
+        RfiLocationCode: "2385",
+        EstimatedArrivalTime: "15:02",
+        ActualArrivalTime: "15:10",
+        EstimatedDepartureTime: "15:05",
+        ActualDepartureTime: "15:13",
+        StationNumber: 2,
+      }],
+      StazioniNonFerme: [
+        {
+          LocationCode: "F__",
+          LocationDescription: "Ferrara",
+          RfiLocationCode: "1309",
+          EstimatedArrivalTime: "17:50",
+          ActualArrivalTime: "17:58",
+          EstimatedDepartureTime: "17:52",
+          ActualDepartureTime: "",
+          StationNumber: 5,
+        },
+        {
+          LocationCode: "RHA",
+          LocationDescription: "Trieste Airport",
+          RfiLocationCode: "2925",
+          EstimatedArrivalTime: "20:22",
+          ActualArrivalTime: "20:30",
+          EstimatedDepartureTime: "20:24",
+          ActualDepartureTime: "",
+          StationNumber: 11,
+        },
+        {
+          LocationCode: "TSC",
+          LocationDescription: "Trieste C.le",
+          RfiLocationCode: "2925",
+          EstimatedArrivalTime: "20:56",
+          ActualArrivalTime: "21:04",
+          StationNumber: 13,
+        },
+      ],
+    },
+  }, "2026-06-10");
+
+  assert.equal(result.available, true);
+  if (result.available) {
+    assert.equal(result.origine, "NAPOLI CENTRALE");
+    assert.equal(result.destinazione, "TRIESTE CENTRALE");
+    assert.equal(result.fermate[0].stazione, "NAPOLI CENTRALE");
+    assert.equal(result.fermate[0].id, "S09218");
+    assert.equal(result.fermate[0].italoStationName, "Napoli");
+    assert.equal(result.fermate.find((stop) => stop.italoLocationCode === "F__")?.id, "S05712");
+    assert.equal(result.fermate.find((stop) => stop.italoLocationCode === "RHA")?.id, "S03213");
+    assert.equal(result.fermate.find((stop) => stop.italoLocationCode === "RHA")?.stazione, "TRIESTE AIRPORT");
+    assert.equal(result.fermate.find((stop) => stop.italoLocationCode === "TSC")?.id, "S03317");
+    assert.equal(result.fermate.find((stop) => stop.italoLocationCode === "TSC")?.stazione, "TRIESTE CENTRALE");
+  }
 });
 
 test("stop time status does not mark scheduled-only future stops as on time", () => {

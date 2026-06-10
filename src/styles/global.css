@@ -626,6 +626,16 @@ html[data-lang-loading] .hero-typewriter span {
     transition: filter 0.2s ease, opacity 0.2s ease;
 }
 
+.category-logo-light-contrast {
+    filter: brightness(0) saturate(100%) invert(15%) sepia(37%) saturate(2344%) hue-rotate(340deg) brightness(93%) contrast(94%);
+    opacity: 0.94;
+}
+
+[data-theme="dark"] .category-logo-light-contrast {
+    filter: none;
+    opacity: 1;
+}
+
 [data-theme="dark"] .category-logo-needs-contrast {
     filter: invert(1) brightness(1.14) contrast(1.04);
     opacity: 0.82;
@@ -2595,6 +2605,7 @@ button.swiss-section-title {
 
 /* Individual badge colors 閳?ORIGINAL HEX 閳?DO NOT CHANGE */
 .badge-regional     { background-color: #70a84a; }
+.badge-italo        { background-color: #982719; }
 .badge-arrow        { background-color: #bc3433; }
 .badge-intercity    { background-color: #008ad8; }
 .badge-international{ background-color: #3c8149; }

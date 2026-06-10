@@ -90,6 +90,7 @@ interface TrainData extends JsonRecord {
     numeroTreno?: string | number;
     origine?: string;
     origineEstera?: string;
+    provider?: string;
     provvedimento?: number | string | null;
     stazioneUltimoRilevamento?: string;
     subTitle?: string;
@@ -187,12 +188,14 @@ let currentTrainCategory = '';
 let currentSwissFormationData: SwissFormationPayload | null = null;
 let swissRequestSeq = 0;
 let currentTrenordLineInfo: TrenordLineInfo | null = null;
+let currentItaloTrainNumber: string | null = null;
 let lastLoadedTrainSearch = '';
 
 
 const API_BASE = window.API_BASE;
 const NOTIFY_BASE = window.NOTIFY_BASE;
 const TRENORD_TRAFFIC_BASE = window.TRENORD_TRAFFIC_BASE || "/api/trenord/traffic";
+const ITALO_TRAIN_BASE = window.ITALO_TRAIN_BASE || "/api/italo/train";
 const translations = window.translations || {};
 const CLIENT_MAP = window.CLIENT_MAP || {};
 const CLIENT_LINK_MAP = window.CLIENT_LINK_MAP || {};
@@ -204,6 +207,9 @@ const DARK_MODE_CONTRAST_LOGOS = new Set([
     'nj.png',
     'en.png',
     'espresso.png'
+]);
+const LIGHT_MODE_CONTRAST_LOGOS = new Set([
+    'italo.svg'
 ]);
 const TRENORD_LINE_COLORS: Readonly<Record<string, string>> = Object.freeze({
     RE: "#c02e25",
@@ -279,6 +285,9 @@ function createIcon(name: string, className = 'material-symbols-outlined', optio
 
 function getCategoryLogoClass(src: unknown): string {
     const fileName = String(src || '').split('/').pop()?.toLowerCase() || '';
+    if (LIGHT_MODE_CONTRAST_LOGOS.has(fileName)) {
+        return 'category-logo category-logo-light-contrast';
+    }
     return DARK_MODE_CONTRAST_LOGOS.has(fileName)
         ? 'category-logo category-logo-needs-contrast'
         : 'category-logo';
@@ -900,10 +909,7 @@ async function startSearch(input: string, options: SearchOptions = {}): Promise<
             const autoRes = await fetch(`${API_BASE}/cercaNumeroTrenoTrenoAutocomplete/${trainNumber}`);
             const autoText = await autoRes.text();
             if (!autoText.trim()) {
-                const msg = window.currentLang === 'zh' ? "未找到该车次" :
-                    window.currentLang === 'it' ? "Treno non trovato" :
-                        "Train not found";
-                return alert(msg);
+                return loadItaloDetailsOrAlert(trainNumber, options);
             }
 
             const lines = autoText.trim().split('\n');
@@ -913,6 +919,8 @@ async function startSearch(input: string, options: SearchOptions = {}): Promise<
                 fetchDetails(lines[0].split('|')[1], options);
             }
         } catch (err) {
+            const loaded = await fetchItaloDetails(trainNumber, options);
+            if (loaded) return;
             const msg = window.currentLang === 'zh' ? "搜索失败" :
                 window.currentLang === 'it' ? "Ricerca fallita" :
                     "Search failed";
@@ -1049,9 +1057,58 @@ function showStationDisambiguation(stations: StationSearchResult[]): void {
 }
 
 
+async function loadItaloDetailsOrAlert(trainNumber: string, options: SearchOptions = {}): Promise<void> {
+    const loaded = await fetchItaloDetails(trainNumber, options);
+    if (loaded) return;
+
+    const msg = window.currentLang === 'zh' ? "未找到该车次" :
+        window.currentLang === 'it' ? "Treno non trovato" :
+            "Train not found";
+    alert(msg);
+}
+
+async function fetchItaloDetails(trainNumber: string, options: SearchOptions = {}): Promise<boolean> {
+    const cleanTrainNumber = String(trainNumber || '').replace(/\D+/g, '');
+    if (!cleanTrainNumber || !ITALO_TRAIN_BASE) return false;
+
+    currentTriple = null;
+    currentItaloTrainNumber = cleanTrainNumber;
+    currentSmartCaringData = null;
+    currentTrenordLineInfo = null;
+    currentSwissFormationData = null;
+    swissRequestSeq++;
+
+    const scCard = document.getElementById('smartCaringCard');
+    if (scCard) scCard.style.display = 'none';
+    if (window.BelloSwiss) window.BelloSwiss.hideFormationCard();
+
+    try {
+        const res = await fetch(`${ITALO_TRAIN_BASE}?number=${encodeURIComponent(cleanTrainNumber)}`, {
+            headers: { accept: 'application/json' }
+        });
+        if (!res.ok) return false;
+
+        const data = asRecord(await res.json()) as TrainData & { available?: boolean; reason?: string };
+        if (data.available === false || data.provider !== 'italo') return false;
+
+        currentTrainData = data;
+        currentTrainCategory = resolveTrainCategory(data);
+        render(data);
+        applyTrainSearchUrl(`train=${encodeURIComponent(cleanTrainNumber)}`, options.urlMode || 'push');
+        lastLoadedTrainSearch = `train=${encodeURIComponent(cleanTrainNumber)}`;
+        saveRecentSearch(`AV ${cleanTrainNumber}`, data);
+        return true;
+    } catch (error) {
+        console.error('Italo train detail fetch failed:', error);
+        return false;
+    }
+}
+
+
 
 async function fetchDetails(triple: string, options: SearchOptions = {}): Promise<void> {
     if (!parseTrainTriple(triple)) return;
+    currentItaloTrainNumber = null;
     currentTriple = triple;
     currentSmartCaringData = null;
     currentTrenordLineInfo = null;
@@ -1121,13 +1178,17 @@ async function loadSwissFormation(data: TrainData, triple: string, requestSeq: n
 
 
 async function refreshTrainData(): Promise<void> {
-    if (!currentTriple) return;
+    if (!currentTriple && !currentItaloTrainNumber) return;
     const refreshBtn = document.querySelector<HTMLElement>('.refresh-btn');
     if (refreshBtn) {
         refreshBtn.style.opacity = '0.5';
         refreshBtn.style.pointerEvents = 'none';
     }
-    await fetchDetails(currentTriple, { urlMode: 'none' });
+    if (currentItaloTrainNumber) {
+        await fetchItaloDetails(currentItaloTrainNumber, { urlMode: 'none' });
+    } else if (currentTriple) {
+        await fetchDetails(currentTriple, { urlMode: 'none' });
+    }
     if (refreshBtn) {
         setTimeout(() => {
             refreshBtn.style.opacity = '1';
@@ -1659,6 +1720,12 @@ function getTrainOperationDate(data: TrainData): string {
 }
 
 function fetchTrafficInformation(data: TrainData): void {
+    if (data.provider === 'italo') {
+        const card = document.getElementById('smartCaringCard');
+        if (card) card.style.display = 'none';
+        currentSmartCaringData = null;
+        return;
+    }
     if (isTrenordTrain(data)) {
         fetchTrenordTrafficInformation(data);
         return;

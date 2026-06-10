@@ -2,6 +2,7 @@
 // BelloTreno © 2026
 
 import { registerStationNavigationGlobal, type StationBoardType } from './station-navigation.js';
+import { findItaloStation } from '../lib/normalizers/italo.js';
 
 export {};
 
@@ -17,6 +18,7 @@ interface StationBoardTrain {
     compNumeroTreno?: string | null;
     compOrarioArrivo?: string | null;
     compOrarioEffettivoArrivo?: string | null;
+    compOrarioEffettivoPartenza?: string | null;
     compOrarioPartenza?: string | null;
     destinazione?: string | null;
     destinazioneEstera?: string | null;
@@ -25,8 +27,10 @@ interface StationBoardTrain {
     numeroTreno?: string | number | null;
     origine?: string | null;
     origineEstera?: string | null;
+    provider?: string;
     provvedimento?: number | string | null;
     ritardo?: number | null;
+    source?: string;
     [key: string]: unknown;
 }
 
@@ -101,7 +105,7 @@ function getItalianTimeString(): string {
 }
 
 
-async function fetchStationBoard(stationId: string, type: StationBoardType = 'partenze'): Promise<StationBoardTrain[]> {
+async function fetchViaggiaStationBoard(stationId: string, type: StationBoardType = 'partenze'): Promise<StationBoardTrain[]> {
     const timeString = getItalianTimeString();
     const encodedTime = encodeURIComponent(timeString);
     
@@ -119,6 +123,60 @@ async function fetchStationBoard(stationId: string, type: StationBoardType = 'pa
         console.error('Failed to fetch station board:', error);
         throw error;
     }
+}
+
+function resolveItaloStationCode(stationId: string, stationName: string): string {
+    return findItaloStation([], {
+        code: _stItaloCode,
+        name: stationName,
+        viaggiaStationId: stationId
+    })?.code || '';
+}
+
+async function fetchItaloStationBoard(stationId: string, stationName: string, type: StationBoardType = 'partenze'): Promise<StationBoardTrain[]> {
+    const endpoint = window.ITALO_STATION_BASE || '/api/italo/station';
+    if (!endpoint) return [];
+
+    const params = new URLSearchParams({ type });
+    const code = resolveItaloStationCode(stationId, stationName);
+    if (code) params.set('code', code);
+    if (stationId) params.set('viaggiaStationId', stationId);
+    if (stationName) params.set('name', stationName);
+
+    try {
+        const response = await fetch(`${endpoint}?${params.toString()}`, {
+            headers: { accept: 'application/json' }
+        });
+        if (!response.ok) return [];
+        const data = await response.json();
+        if (!data?.available || !Array.isArray(data.trains)) return [];
+        return data.trains;
+    } catch (error) {
+        console.error('Failed to fetch Italo station board:', error);
+        return [];
+    }
+}
+
+function boardSortTime(train: StationBoardTrain, type: StationBoardType): number {
+    const raw = type === 'arrivi'
+        ? train.compOrarioArrivo || train.compOrarioEffettivoArrivo || ''
+        : train.compOrarioPartenza || train.compOrarioEffettivoPartenza || '';
+    const match = String(raw).match(/(\d{1,2}):(\d{2})/);
+    if (!match) return Number.MAX_SAFE_INTEGER;
+    return Number(match[1]) * 60 + Number(match[2]);
+}
+
+async function fetchStationBoard(stationId: string, type: StationBoardType = 'partenze'): Promise<StationBoardTrain[]> {
+    const [viaggiaResult, italoResult] = await Promise.allSettled([
+        fetchViaggiaStationBoard(stationId, type),
+        fetchItaloStationBoard(stationId, _stName, type)
+    ]);
+
+    const viaggiaData = viaggiaResult.status === 'fulfilled' ? viaggiaResult.value : [];
+    const italoData = italoResult.status === 'fulfilled' ? italoResult.value : [];
+    if (viaggiaResult.status === 'rejected' && !italoData.length) throw viaggiaResult.reason;
+
+    return [...viaggiaData, ...italoData].sort((left, right) => boardSortTime(left, type) - boardSortTime(right, type));
 }
 
 const OPERATOR_MAP = window.CLIENT_MAP || {};
@@ -313,6 +371,7 @@ function formatArrivalData(train: StationBoardTrain, currentLang: Language = 'zh
 
 let _stId = '';
 let _stName = '';
+let _stItaloCode = '';
 let _stBoardType: StationBoardType = 'partenze';
 let _stBoardSeq = 0;
 const ST_SWISS_MAX_LOOKUPS = 10;
@@ -406,6 +465,7 @@ function _stVisibleRouteName(train: StationBoardTrain): string {
 }
 
 function _stShouldTrySwiss(train: StationBoardTrain): boolean {
+    if (train.provider === 'italo' || train.source === 'italo') return false;
     if (!window.BelloSwiss) return false;
     const visibleRoute = _stVisibleRouteName(train);
     const category = window.BelloSwiss.getCategory ? window.BelloSwiss.getCategory(train) : '';
@@ -715,6 +775,7 @@ document.addEventListener('astro:page-load', () => {
     const params = new URLSearchParams(window.location.search);
     _stId        = params.get('id') || '';
     _stName      = decodeURIComponent(params.get('name') || '');
+    _stItaloCode = params.get('italo') || '';
     const requestedBoardType = params.get('type') || undefined;
     _stBoardType = isStationBoardType(requestedBoardType) ? requestedBoardType : 'partenze';
 

@@ -8,6 +8,9 @@ window.PROXY_BASE = "https://ah.bellotreno.workers.dev";
 window.API_BASE = window.PROXY_BASE + "/?url=https://www.viaggiatreno.it/infomobilita/resteasy/viaggiatreno";
 window.NOTIFY_BASE = "https://notify.bellotreno.workers.dev";
 window.TRENORD_TRAFFIC_BASE = "/api/trenord/traffic";
+window.ITALO_TRAIN_BASE = "/api/italo/train";
+window.ITALO_STATION_BASE = "/api/italo/station";
+window.ITALO_STATIONS_BASE = "/api/italo/stations";
 window.COUNTER_URL = "https://site-counter.bellotreno.workers.dev/";
 
 const CLIENT_MAP = {
@@ -18,7 +21,8 @@ const CLIENT_MAP = {
     77: "FS Treni Turistici Italiani",
     910: "Ferrovie del Sud Est",
     63: "Trenord",
-    64: "ÖBB"
+    64: "ÖBB",
+    "ITALO": "Italo"
 };
 window.CLIENT_MAP = CLIENT_MAP;
 
@@ -28,10 +32,12 @@ const CLIENT_LINK_MAP = {
     "Ferrovie del Sud Est": "https://www.trenitalia.com",
     "Trenord": "https://www.trenord.it",
     "ÖBB": "https://www.oebb.at",
-    "FS Treni Turistici Italiani": "https://www.fstrenituristici.it"
+    "FS Treni Turistici Italiani": "https://www.fstrenituristici.it",
+    "Italo": "https://www.italotreno.com"
 };
 
 const CAT_MAP = {
+    "AV": "Alta Velocità",
     "REG": "Regionale",
     "RV": "Regionale Veloce",
     "MET": "Metropolitan",
@@ -99,18 +105,19 @@ const CAT_IMAGE_MAP = {
     "63-RE": "pic/regn.png",
     "64-EC": "pic/RJ.png",
     "64-EN": "pic/NJ.png",
-    "77-EXP": "pic/TTI.png"
+    "77-EXP": "pic/TTI.png",
+    "ITALO-AV": "pic/italo.svg"
 };
 
 window.CLIENT_LINK_MAP = CLIENT_LINK_MAP;
 window.CAT_IMAGE_MAP = CAT_IMAGE_MAP;
 window.CAT_MAP = CAT_MAP;
-
 /**
  * 根据列车类别代码返回对应的 badge CSS 类名。
  * 集中管理，供 main.ts 和 station.ts 共同使用。
  */
 window.getBadgeClass = function (catCode) {
+    if (catCode === 'AV') return 'badge-italo';
     if (['REG', 'RE', 'RV', 'MET'].includes(catCode)) return 'badge-regional';
     if (['FR', 'FB', 'FA'].includes(catCode)) return 'badge-arrow';
     if (['IC', 'ICN'].includes(catCode)) return 'badge-intercity';

@@ -2,6 +2,11 @@ export {};
 
 declare global {
   interface PagesEnv {
+    ITALO_PROXY_BASE_URL?: string;
+    ITALO_PROXY_CALLER_ORIGIN?: string;
+    ITALO_PROXY_TOKEN?: string;
+    RFI_PROXY_BASE_URL?: string;
+    RFI_PROXY_TOKEN?: string;
     STATISTICS_API_BASE_URL?: string;
     STATISTICS_API_TOKEN?: string;
     SWISS_TRAIN_FORMATION_API_BASE_URL?: string;
