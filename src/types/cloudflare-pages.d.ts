@@ -15,6 +15,8 @@ declare global {
     SWISS_TRAIN_FORMATION_FULL_PATH?: string;
     SWISS_TRAIN_FORMATION_USER_AGENT?: string;
     TRENORD_BFF_SECRET?: string;
+    TRENORD_PROXY_BASE_URL?: string;
+    TRENORD_PROXY_TOKEN?: string;
   }
 
   interface PagesContext<Params extends Record<string, string | string[]> = Record<string, string | string[]>> {
