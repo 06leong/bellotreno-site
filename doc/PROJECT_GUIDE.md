@@ -1,9 +1,9 @@
 # BelloTreno
 
 BelloTreno is a real-time Italian railway information dashboard. It combines a
-static Astro frontend, Cloudflare edge services, a VPS-side ViaggiaTreno proxy,
-Cloudflare Pages Functions, Swiss train formation data, Trenord line notices,
-and a separate statistics collector.
+static Astro frontend, Cloudflare edge services, a VPS-side realtime-data proxy,
+Cloudflare Pages Functions, Italo in Viaggio data, Swiss train formation data,
+Trenord line notices, and a separate statistics collector.
 
 Live site: https://bellotreno.org/
 
@@ -16,10 +16,12 @@ BelloTreno currently has five main pages:
 
 - `/`: train search, station search, live train details, timeline, SmartCaring
   operating history, Trenord traffic information, and Swiss formation enrichment
-  when available.
+  when available. It also supports Italo train-number lookup for confirmed Italo
+  services.
 - `/station`: Italian station departure and arrival boards, with platform
   changes, weather, delays, cancellations, reroutes, and conservative Swiss
-  cross-border endpoint completion.
+  cross-border endpoint completion. Confirmed Italo station boards are merged
+  into matching ViaggiaTreno station pages.
 - `/infomobilita`: RFI public travel notices with regional filters.
 - `/statistics`: daily observable railway operations, including running trains,
   status distribution, punctuality, categories, train search, station search,
@@ -32,15 +34,18 @@ The main data paths are:
    `ah.bellotreno.workers.dev`, which forwards through the VPS `rfi-proxy`.
    The VPS uses `curl_cffi` to mimic a browser TLS fingerprint before calling
    the official APIs.
-2. **Swiss OpenTransportData formation data**: a Cloudflare Pages Function reads
+2. **Italo in Viaggio real-time data**: `/api/italo/*` Pages Functions resolve
+   confirmed Italo station mappings and call Italo train/station endpoints
+   through the VPS proxy when configured.
+3. **Swiss OpenTransportData formation data**: a Cloudflare Pages Function reads
    the Train Formation token from Pages Secrets and calls the Swiss upstream
    server-side. The browser never sees the token.
-3. **Statistics aggregate data**: `/api/statistics/*` proxies to the VPS
+4. **Statistics aggregate data**: `/api/statistics/*` proxies to the VPS
    `bellotreno-statistics` service, currently deployed at
    `https://stats-api.bellotreno.org/v1`. The collector scans station registry
    data, `partenze`/`arrivi` boards, and `andamentoTreno`, then stores SQLite
    and JSON aggregate output.
-4. **Trenord line notices**: `/api/trenord/traffic` fetches Trenord train BFF
+5. **Trenord line notices**: `/api/trenord/traffic` fetches Trenord train BFF
    data and the `direttrici` feed, maps a train to a line, and returns normalized
    line-level notice data for the collapsed Traffic info card.
 
@@ -75,11 +80,11 @@ Cloudflare Worker: ah.bellotreno.workers.dev
 Linux VPS: api.bellotreno.org
   - rfi-docker-proxy, Flask + Gunicorn
   - Validates token
-  - Allows only viaggiatreno.it and rfi.it targets
+  - Allows only approved railway upstream domains
   - Uses curl_cffi browser fingerprint impersonation
   |
   v
-ViaggiaTreno / RFI official APIs
+ViaggiaTreno / RFI / Italo / Trenord official or passenger-facing APIs
 ```
 
 ```text
@@ -89,7 +94,7 @@ User browser
   v
 Cloudflare Worker: notify.bellotreno.workers.dev
   - Origin allowlist
-  - Calls ViaggiaTreno SmartCaring API directly
+  - Calls ViaggiaTreno SmartCaring through the VPS proxy
   - Returns today/recent/history/stats
   - Cache-Control: max-age=120
 ```
@@ -102,13 +107,15 @@ User browser
 Cloudflare Pages Functions: bellotreno.org/api/*
   - /api/swiss/formation
   - /api/statistics/*
+  - /api/italo/*
   - /api/trenord/traffic
   - Reads Pages Secrets
   - Does not expose API tokens to browser code
   |
   +--> OpenTransportData.swiss Train Formation API
   +--> VPS statistics API: stats-api.bellotreno.org/v1
-  +--> Trenord upstream BFF and direttrici feeds
+  +--> Italo in Viaggio through rfi-proxy when configured
+  +--> Trenord upstream BFF and direttrici feeds through rfi-proxy when configured
 ```
 
 ### Official API Constraints
@@ -150,7 +157,7 @@ Important behavior:
 
 - `X-Bello-Token` must match the VPS `SECURITY_TOKEN`.
 - Target URLs are restricted to `viaggiatreno.it`, `rfi.it`, `italotreno.com`,
-  and their subdomains to prevent open-proxy abuse.
+  `trenord.it`, and their subdomains to prevent open-proxy abuse.
 - Hop-by-hop headers such as `content-encoding` and `transfer-encoding` are
   filtered before responding.
 - The container uses `expose`, not public `ports`; a reverse proxy such as Nginx
@@ -298,6 +305,8 @@ fetch("https://ah.bellotreno.workers.dev/?url=https://www.viaggiatreno.it/.../ce
 fetch("https://ah.bellotreno.workers.dev/?url=https://www.viaggiatreno.it/.../andamentoTreno/{originStationId}/{trainNumber}/{timestamp}")
 
 // 5. The client renders the timeline, status, notices, and eligible enrichments.
+// If ViaggiaTreno returns no train identity, supported Italo train numbers fall
+// back to /api/italo/train.
 ```
 
 ### UI And UX Features
@@ -445,6 +454,7 @@ Backend
 
 Data sources
   ViaggiaTreno REST API
+  Italo in Viaggio public realtime endpoints
   RFI RSS feeds
   OpenTransportData.swiss Train Formation API
   Trenord upstream feeds
