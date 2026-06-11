@@ -15,6 +15,15 @@ const DEFAULT_STATISTICS_API_BASE_URL = "https://stats-api.bellotreno.org/v1";
 
 type StatisticsParams = { path?: string | string[] };
 type CorsHeaderMap = Record<string, string>;
+type StatisticsCacheEntry = {
+    body: ArrayBuffer;
+    contentType: string;
+    expiresAt: number;
+    status: number;
+};
+
+const statisticsResponseCache = new Map<string, StatisticsCacheEntry>();
+const MAX_CACHE_ENTRIES = 120;
 
 function json(data: unknown, status = 200, extraHeaders: HeadersInit = {}): Response {
     return new Response(JSON.stringify(data), {
@@ -88,6 +97,73 @@ function buildUpstreamUrl(baseUrl: string, path: string, requestUrl: URL): URL {
     return upstream;
 }
 
+function cacheTtlSeconds(path: string): number {
+    if (path.endsWith("export.csv")) return 0;
+    if (path === "days") return 300;
+    if (path === "summary" || path === "timeseries") return 120;
+    if (path === "trains" || path === "stations/search" || path === "relations" || path === "ranking") return 60;
+    if (path.startsWith("stations/")) return 120;
+    return 60;
+}
+
+function cacheControlHeader(ttlSeconds: number): string {
+    if (ttlSeconds <= 0) return "no-store";
+    return `public, max-age=${ttlSeconds}, stale-while-revalidate=${Math.max(ttlSeconds * 2, 60)}`;
+}
+
+function cacheKey(upstreamUrl: URL): string {
+    return upstreamUrl.toString();
+}
+
+function getCachedStatisticsResponse(key: string): StatisticsCacheEntry | null {
+    const cached = statisticsResponseCache.get(key);
+    if (!cached) return null;
+    if (cached.expiresAt <= Date.now()) {
+        statisticsResponseCache.delete(key);
+        return null;
+    }
+    return cached;
+}
+
+function trimStatisticsCache(): void {
+    const now = Date.now();
+    for (const [key, entry] of statisticsResponseCache) {
+        if (entry.expiresAt <= now) statisticsResponseCache.delete(key);
+    }
+    while (statisticsResponseCache.size > MAX_CACHE_ENTRIES) {
+        const firstKey = statisticsResponseCache.keys().next().value;
+        if (!firstKey) break;
+        statisticsResponseCache.delete(firstKey);
+    }
+}
+
+function setCachedStatisticsResponse(key: string, ttlSeconds: number, entry: Omit<StatisticsCacheEntry, "expiresAt">): void {
+    if (ttlSeconds <= 0) return;
+    trimStatisticsCache();
+    statisticsResponseCache.set(key, {
+        ...entry,
+        expiresAt: Date.now() + ttlSeconds * 1000
+    });
+}
+
+function statisticsResponse(
+    entry: Omit<StatisticsCacheEntry, "expiresAt">,
+    extraHeaders: HeadersInit,
+    cacheControl: string,
+    cacheStatus: "HIT" | "MISS",
+): Response {
+    const responseHeaders = new Headers(extraHeaders);
+    responseHeaders.set("cache-control", cacheControl);
+    responseHeaders.set("x-bellotreno-cache", cacheStatus);
+    responseHeaders.set("x-content-type-options", "nosniff");
+    responseHeaders.set("content-type", entry.contentType);
+
+    return new Response(entry.body.slice(0), {
+        status: entry.status,
+        headers: responseHeaders
+    });
+}
+
 export async function onRequestOptions({ request }: PagesContext<StatisticsParams>): Promise<Response> {
     return new Response(null, {
         status: 204,
@@ -123,21 +199,34 @@ export async function onRequestGet({ request, env, params }: PagesContext<Statis
         headers.set("X-Bello-Stats-Token", env.STATISTICS_API_TOKEN);
     }
 
+    const ttlSeconds = cacheTtlSeconds(path);
+    const responseCacheControl = cacheControlHeader(ttlSeconds);
+    const key = cacheKey(upstreamUrl);
+    const cached = ttlSeconds > 0 ? getCachedStatisticsResponse(key) : null;
+    if (cached) {
+        return statisticsResponse(cached, extraHeaders, responseCacheControl, "HIT");
+    }
+
     try {
         const upstream = await fetch(upstreamUrl.toString(), {
             method: "GET",
             headers
         });
 
-        const responseHeaders = new Headers(extraHeaders);
-        responseHeaders.set("cache-control", "no-store");
-        responseHeaders.set("x-content-type-options", "nosniff");
-        responseHeaders.set("content-type", upstream.headers.get("content-type") || "application/json; charset=utf-8");
+        const body = await upstream.arrayBuffer();
+        const contentType = upstream.headers.get("content-type") || "application/json; charset=utf-8";
+        const entry = {
+            body,
+            contentType,
+            status: upstream.status
+        };
 
-        return new Response(upstream.body, {
-            status: upstream.status,
-            headers: responseHeaders
-        });
+        if (upstream.ok) {
+            setCachedStatisticsResponse(key, ttlSeconds, entry);
+            return statisticsResponse(entry, extraHeaders, responseCacheControl, "MISS");
+        }
+
+        return statisticsResponse(entry, extraHeaders, "no-store", "MISS");
     } catch {
         return json({ available: false, reason: "upstream_error" }, 502, extraHeaders);
     }
