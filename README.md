@@ -16,16 +16,18 @@ a cleaner interface for railway enthusiasts and travelers.
 Live site: [bellotreno.org](https://bellotreno.org/)
 
 This is a personal railway data research project. It is not affiliated with
-Trenitalia, RFI, FS Italiane, SBB, Trenord, TILO, or OpenTransportData.swiss.
+Trenitalia, RFI, FS Italiane, Italo, SBB, Trenord, TILO, or
+OpenTransportData.swiss.
 
 ## What It Does
 
 BelloTreno helps users inspect the current state of Italian railway services:
 
 - Search a train number and view its route, status, delay, platforms, stop list,
-  and last known position.
+  and last known position, including supported Italo high-speed services.
 - Open station boards for departures and arrivals, including platform changes and
-  destination information.
+  destination information. Supported Italo departures and arrivals are merged
+  into matching ViaggiaTreno station pages.
 - Read RFI travel notices and filter public disruption information by region.
 - View supported Swiss cross-border train formations, including coach order,
   platform sectors, accessibility, bicycle, seat, and vehicle details.
@@ -42,8 +44,9 @@ BelloTreno helps users inspect the current state of Italian railway services:
 ### Train Details
 
 The main search page is built around train-number lookup. It keeps the
-ViaggiaTreno result as the authoritative Italian data source, then adds extra
-information only when a compatible source is available.
+ViaggiaTreno result as the authoritative FS/RFI-linked data source, falls back
+to Italo in Viaggio for supported Italo train numbers, then adds extra
+information when a compatible source is available.
 
 ### Station Boards
 
@@ -70,6 +73,8 @@ distribution.
 BelloTreno combines public and externally proxied railway data:
 
 - ViaggiaTreno train and station running data.
+- Italo in Viaggio public realtime train and station-board data for supported
+  high-speed services.
 - RFI public travel notice feeds.
 - ViaggiaTreno SmartCaring notices for supported services.
 - OpenTransportData.swiss Train Formation Service for selected Swiss cross-border
