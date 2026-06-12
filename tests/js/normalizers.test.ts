@@ -19,6 +19,12 @@ import {
   mergeSwissVehicleRecords,
   normalizeSwissStationName,
   shouldQuerySwissFormation,
+  swissVehicleElementNumber,
+  swissVehicleFamilyDisplayLabel,
+  swissVehicleFamily,
+  swissVehicleSeries,
+  swissVehicleUnitKey,
+  swissVehicleUnitSerial,
 } from "../../src/lib/normalizers/swiss.ts";
 import {
   extractTrenordNoticeUrls,
@@ -377,6 +383,27 @@ test("Swiss vehicle records merge by EVN without global closed pollution", () =>
   assert.equal(merged.length, 1);
   assert.equal(merged[0].closed, false);
   assert.equal(merged[0].segments?.length, 2);
+});
+
+test("Swiss vehicle family resolves RABe 524 and Astoro aliases", () => {
+  const rabe524ByEvn = { evn: "94 85 2 524 002-4" };
+  assert.equal(swissVehicleSeries(rabe524ByEvn), "524");
+  assert.equal(swissVehicleFamily(rabe524ByEvn), "rabe524");
+  assert.equal(swissVehicleElementNumber(rabe524ByEvn), "2");
+  assert.equal(swissVehicleElementNumber({ vehicleNumber: "2524002" }), "2");
+  assert.equal(swissVehicleUnitSerial(rabe524ByEvn), "002");
+  assert.equal(swissVehicleUnitSerial({ number: 2524002 }), "002");
+  assert.equal(swissVehicleUnitKey(rabe524ByEvn), "524:002");
+  assert.equal(swissVehicleUnitKey({ number: 2524002 }), "524:002");
+  assert.equal(swissVehicleFamilyDisplayLabel({ evn: "94 85 2 524 314-3" }), "RABe 524/ETR 524 FLIRT - No.314");
+
+  assert.equal(swissVehicleFamily({ typeCodeName: "ABt524(F/ETCS)", evn: "94 85 2 524 002-4" }), "rabe524");
+  assert.equal(swissVehicleFamily({ typeCodeName: "B524(F)", evn: "94 85 3 524 002-2" }), "rabe524");
+  assert.equal(swissVehicleFamily({ typeCodeName: "Bt524(F/ETCS)", evn: "94 85 1 524 002-0" }), "rabe524");
+  assert.equal(swissVehicleFamily({ typeCodeName: "ABt524(ETCS)", evn: "94 85 2 524 107-1" }), "rabe524");
+  assert.equal(swissVehicleFamily({ typeCodeName: "RABe 503 Astoro" }), "astoro");
+  assert.equal(swissVehicleFamily({ typeCodeName: "ETR.610" }), "astoro");
+  assert.equal(swissVehicleFamilyDisplayLabel({ typeCodeName: "ETR.610" }), "ETR 610 / RABe 503 New Pendolino");
 });
 
 test("Trenord traffic information resolves S9 primary direttrice", () => {

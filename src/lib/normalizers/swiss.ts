@@ -47,6 +47,21 @@ export interface SwissVehicle {
   stopSectors?: SwissStopSector[];
 }
 
+export type SwissVehicleFamily = "" | "giruno" | "astoro" | "rabe524";
+
+export interface SwissVehicleFamilyInput {
+  buildTypeCode?: string | number | null;
+  checkNumber?: string | number | null;
+  classCode?: string | number | null;
+  countryCode?: string | number | null;
+  evn?: string | null;
+  number?: string | number | null;
+  parentEvn?: string | null;
+  typeCode?: string | number | null;
+  typeCodeName?: string | number | null;
+  vehicleNumber?: string | number | null;
+}
+
 export const SWISS_BORDER_HINTS = new Set(["CHIASSO", "DOMODOSSOLA", "LUINO", "TIRANO", "STABIO"]);
 
 export function normalizeSwissStationName(value: unknown): string {
@@ -166,6 +181,123 @@ export function mergeSwissVehicleRecords(records: SwissVehicle[]): SwissVehicle[
   }
 
   return [...merged.values()].sort((a, b) => Number(a.position || 0) - Number(b.position || 0));
+}
+
+export function swissVehicleSeries(vehicle: SwissVehicleFamilyInput | null | undefined): string {
+  const typeTexts = [
+    vehicle?.typeCodeName,
+    vehicle?.typeCode,
+    vehicle?.classCode,
+  ].map((value) => String(value || "").trim()).filter(Boolean);
+
+  for (const text of typeTexts) {
+    const parenthesized = text.match(/\((501|503|524|610)\)/);
+    if (parenthesized) return parenthesized[1];
+    const compact = text.toUpperCase().replace(/[^A-Z0-9]+/g, "");
+    if (compact.includes("GIRUNO") || compact.includes("RABE501")) return "501";
+    if (compact.includes("ASTORO") || compact.includes("RABE503")) return "503";
+    if (compact.includes("ETR610") || compact.includes("ETR.610")) return "610";
+    if (/(?:^|[A-Z])524(?:$|[^0-9])/.test(compact)) return "524";
+    if (/(?:^|[^0-9])503(?:$|[^0-9])/.test(compact)) return "503";
+    if (/(?:^|[^0-9])610(?:$|[^0-9])/.test(compact)) return "610";
+    if (/(?:^|[^0-9])501(?:$|[^0-9])/.test(compact)) return "501";
+  }
+
+  const vehicleNumberSeries = swissVehicleNumberBlockSeries(vehicle);
+  if (vehicleNumberSeries) return vehicleNumberSeries;
+  if (swissVehicleUnitSerial(vehicle)) return "524";
+  return "";
+}
+
+export function swissVehicleFamily(vehicle: SwissVehicleFamilyInput | null | undefined): SwissVehicleFamily {
+  const series = swissVehicleSeries(vehicle);
+  if (series === "501") return "giruno";
+  if (series === "503" || series === "610") return "astoro";
+  if (series === "524") return "rabe524";
+  return "";
+}
+
+export function swissVehicleFamilyBaseLabel(family: SwissVehicleFamily): string {
+  if (family === "giruno") return "RABe 501 Giruno";
+  if (family === "astoro") return "ETR 610 / RABe 503 New Pendolino";
+  if (family === "rabe524") return "RABe 524/ETR 524 FLIRT";
+  return "";
+}
+
+export function swissVehicleFamilyDisplayLabel(vehicle: SwissVehicleFamilyInput | null | undefined): string {
+  const family = swissVehicleFamily(vehicle);
+  const baseLabel = swissVehicleFamilyBaseLabel(family);
+  if (!baseLabel) return "";
+
+  if (family === "rabe524") {
+    const serial = swissVehicleUnitSerial(vehicle);
+    return serial ? `${baseLabel} - No.${serial}` : baseLabel;
+  }
+
+  return baseLabel;
+}
+
+export function swissVehicleUnitSerial(vehicle: SwissVehicleFamilyInput | null | undefined): string {
+  const candidates = [
+    vehicle?.number,
+    vehicle?.vehicleNumber,
+    vehicle?.evn,
+    vehicle?.parentEvn,
+  ];
+
+  for (const candidate of candidates) {
+    const digits = String(candidate || "").replace(/\D+/g, "");
+    const match = digits.match(/[1-9]?524(\d{3})/);
+    if (match) return match[1];
+  }
+
+  return "";
+}
+
+function swissVehicleNumberBlockSeries(vehicle: SwissVehicleFamilyInput | null | undefined): string {
+  const candidates = [
+    vehicle?.vehicleNumber,
+    vehicle?.evn,
+    vehicle?.parentEvn,
+    vehicle?.number,
+  ];
+
+  for (const candidate of candidates) {
+    const digits = String(candidate || "").replace(/\D+/g, "");
+    const match = digits.match(/[1-9](501|503|524|610)\d{3}/);
+    if (match) return match[1];
+  }
+
+  return "";
+}
+
+export function swissVehicleElementNumber(vehicle: SwissVehicleFamilyInput | null | undefined): string {
+  const candidates = [
+    vehicle?.number,
+    vehicle?.vehicleNumber,
+    vehicle?.evn,
+    vehicle?.parentEvn,
+  ];
+
+  for (const candidate of candidates) {
+    const digits = String(candidate || "").replace(/\D+/g, "");
+    const match = digits.match(/([1-9])524\d{3}/);
+    if (match) return match[1];
+  }
+
+  return "";
+}
+
+export function swissVehicleUnitKey(vehicle: SwissVehicleFamilyInput | null | undefined): string {
+  const family = swissVehicleFamily(vehicle);
+  const number = Number(vehicle?.number || 0);
+  if (family === "astoro" && number) return `610:${number >= 10 ? Math.ceil(number / 10) : 1}`;
+  if (family === "giruno" && number) return `501:${Math.max(1, Math.ceil(number / 20))}`;
+  if (family === "rabe524") {
+    const serial = swissVehicleUnitSerial(vehicle);
+    return serial ? `524:${serial}` : "";
+  }
+  return "";
 }
 
 /**

@@ -1069,6 +1069,7 @@ The production BelloTreno integration is intentionally narrower than a full Swis
 - `closed`, `vehicleWillBePutAway`, and `trolleyStatus` are segment properties. They must be evaluated against the selected stop or active route segment, not OR-merged globally.
 - `accessToPreviousVehicle=false` means no through passage to the previous vehicle. It is not a closed-car signal.
 - Coach display uses the normalized vehicle list for stable identity and details, while the selected stop provides the current track, sectors, and no-passage view.
+- Vehicle family labels should not rely only on `typeCodeName`. RABe 524 may appear as `ABt524(F/ETCS)`, `B524(F)`, `Bt524(F/ETCS)`, or only through an EVN such as `94 85 2 524 002-4`; display it as `RABe 524/ETR 524 FLIRT - No.xxx` when the `524 xxx` EVN block is present. ETR 610 / RABe 503 should be labelled as `ETR 610 / RABe 503 New Pendolino`.
 - Sector labels are normalized and displayed in station-facing order from A onward. For ETR 610 and RABe 501/Giruno coupled sets, the UI keeps each unit contiguous and avoids duplicate provider positions interleaving cars.
 - `formationShortString` is useful as a stop-level hint, but it is not the authoritative identity source. It should supplement vehicle details, not replace EVN-based normalization.
 - Station board enrichment is conservative. Swiss data may replace `Chiasso`, `Domodossola`, or empty endpoints when ViaggiaTreno is clearly truncated, but it must not replace a valid Italian origin or terminal.
