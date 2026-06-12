@@ -2137,8 +2137,12 @@ button.swiss-section-title {
 }
 
 .swiss-coach-strip {
-    overflow-x: auto;
     padding: 2px 0 12px;
+}
+
+.swiss-coach-scroll {
+    overflow-x: auto;
+    padding-bottom: 12px;
     scrollbar-width: thin;
 }
 
@@ -2172,19 +2176,29 @@ button.swiss-section-title {
 }
 
 .swiss-unit-segment {
-    min-height: 18px;
+    --unit-accent: var(--color-primary);
+    min-height: 30px;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--color-base-content);
-    opacity: 0.48;
-    font-size: 0.66rem;
-    font-weight: 750;
-    border-top: 1px solid color-mix(in oklch, var(--color-base-content) 12%, transparent);
-    padding-top: 5px;
+    color: var(--unit-accent);
+    font-size: 0.68rem;
+    font-weight: 850;
+    border: 1px solid color-mix(in oklch, var(--unit-accent) 26%, transparent);
+    border-top: 3px solid color-mix(in oklch, var(--unit-accent) 54%, transparent);
+    border-radius: 10px;
+    background: color-mix(in oklch, var(--unit-accent) 9%, transparent);
+    box-shadow:
+        inset 0 1px 0 color-mix(in oklch, #ffffff 10%, transparent),
+        0 1px 0 color-mix(in oklch, var(--color-base-content) 8%, transparent);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    padding: 6px 10px 5px;
+}
+
+.swiss-unit-segment-alt {
+    --unit-accent: var(--color-info);
 }
 
 .swiss-coach {

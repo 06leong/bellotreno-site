@@ -1,3 +1,11 @@
+import {
+    swissVehicleElementNumber,
+    swissVehicleFamily,
+    swissVehicleFamilyBaseLabel,
+    swissVehicleFamilyDisplayLabel,
+    swissVehicleUnitKey
+} from "../lib/normalizers/swiss.js";
+
 export {};
 
 (function () {
@@ -909,8 +917,16 @@ export {};
         return ["LK"].includes(String(coach?.classCode || "").toUpperCase());
     }
 
-    function vehicleDisplayNumber(vehicle: SwissVehicle | null, coach: CoachToken | null): string {
+    function rawVehicleDisplayNumber(vehicle: SwissVehicle | null, coach: CoachToken | null): string {
         return String(vehicle?.number || coach?.number || vehicle?.vehicleNumber || vehicle?.position || "--");
+    }
+
+    function vehicleDisplayNumber(vehicle: SwissVehicle | null, coach: CoachToken | null): string {
+        if (swissVehicleFamily(familyInput(vehicle, coach)) === "rabe524") {
+            const element = swissVehicleElementNumber(familyInput(vehicle, coach));
+            if (element) return element;
+        }
+        return rawVehicleDisplayNumber(vehicle, coach);
     }
 
     function coachQueuesByNumber(coaches: unknown): Map<string, CoachToken[]> {
@@ -1126,7 +1142,7 @@ export {};
     }
 
     function vehicleSortNumber(item: VehicleItem): number {
-        const parsed = Number.parseInt(vehicleDisplayNumber(item.vehicle, item.coach), 10);
+        const parsed = Number.parseInt(rawVehicleDisplayNumber(item.vehicle, item.coach), 10);
         return Number.isFinite(parsed) ? parsed : 9999;
     }
 
@@ -1334,10 +1350,14 @@ export {};
         return groups;
     }
 
-    function vehicleSeries(vehicle: SwissVehicle | null, coach: CoachToken | null = null): string {
-        const raw = String(vehicle?.typeCodeName || vehicle?.typeCode || coach?.classCode || "");
-        const match = raw.match(/\((\d{3})\)/);
-        return match ? match[1] : "";
+    function familyInput(vehicle: SwissVehicle | null, coach: CoachToken | null = null) {
+        return {
+            ...asRecord(vehicle),
+            classCode: coach?.classCode || undefined,
+            number: vehicle?.number || coach?.number || undefined,
+            typeCode: vehicle?.typeCode || undefined,
+            typeCodeName: vehicle?.typeCodeName || coach?.classCode || undefined
+        };
     }
 
     function vehicleTypeCodeName(vehicle: SwissVehicle | null, coach: CoachToken | null = null): string {
@@ -1353,37 +1373,28 @@ export {};
 
     function describeVehicleType(vehicle: SwissVehicle | null, coach: CoachToken | null = null): string {
         const raw = vehicleTypeCodeName(vehicle, coach);
-        if (!raw) return "";
-
-        const base = typeCodeBase(raw);
-        const baseUpper = base.toUpperCase();
         const parts: string[] = [];
-        if (baseUpper.startsWith("WR")) parts.push(tr("swiss_type_restaurant_area", "Restaurant"));
-        else if (baseUpper.startsWith("AB")) parts.push(tr("swiss_mixed_class", "Mixed 1st and 2nd class"));
-        else if (baseUpper.startsWith("A")) parts.push(tr("swiss_type_first_area", "1st class"));
-        else if (baseUpper.startsWith("B")) parts.push(tr("swiss_type_second_area", "2nd class"));
+        if (raw) {
+            const base = typeCodeBase(raw);
+            const baseUpper = base.toUpperCase();
+            if (baseUpper.startsWith("WR")) parts.push(tr("swiss_type_restaurant_area", "Restaurant"));
+            else if (baseUpper.startsWith("AB")) parts.push(tr("swiss_mixed_class", "Mixed 1st and 2nd class"));
+            else if (baseUpper.startsWith("A")) parts.push(tr("swiss_type_first_area", "1st class"));
+            else if (baseUpper.startsWith("B")) parts.push(tr("swiss_type_second_area", "2nd class"));
+        }
 
-        const series = vehicleSeries(vehicle, coach);
-        if (series === "501") parts.push(tr("swiss_type_giruno", "RABe 501 Giruno"));
-        else if (series === "610") parts.push(tr("swiss_type_etr610_short", "ETR 610"));
+        const familyLabel = swissVehicleFamilyDisplayLabel(familyInput(vehicle, coach));
+        if (familyLabel) parts.push(familyLabel);
 
-        return mergeUniqueBy<string>(parts.filter(Boolean), (part: string) => part).join(" · ");
+        return mergeUniqueBy<string>(parts.filter(Boolean), (part: string) => part).join(" / ");
     }
 
     function unitKeyForVehicle(vehicle: SwissVehicle | null): string {
-        const series = vehicleSeries(vehicle);
-        const number = Number(vehicle?.number || 0);
-        if (series === "610" && number) return `${series}:${number >= 10 ? Math.ceil(number / 10) : 1}`;
-        if (series === "501" && number) return `${series}:${Math.max(1, Math.ceil(number / 20))}`;
-        return "";
+        return swissVehicleUnitKey(familyInput(vehicle));
     }
 
     function unitKeyForCoach(coach: CoachToken | null): string {
-        const series = vehicleSeries(null, coach);
-        const number = Number(coach?.number || 0);
-        if (series === "610" && number) return `${series}:${number >= 10 ? Math.ceil(number / 10) : 1}`;
-        if (series === "501" && number) return `${series}:${Math.max(1, Math.ceil(number / 20))}`;
-        return "";
+        return swissVehicleUnitKey(familyInput(null, coach));
     }
 
     function vehicleUnitSortValue(vehicle: SwissVehicle): number {
@@ -1398,11 +1409,14 @@ export {};
         const [series, group] = String(key || "").split(":");
         if (!series || !group) return "";
         const trainType = series === "501"
-            ? tr("swiss_type_giruno", "RABe 501 Giruno")
+            ? swissVehicleFamilyBaseLabel("giruno")
             : series === "610"
-                ? tr("swiss_type_astoro", "ETR 610 / RABe 503 Astoro")
-                : series;
-        return `${tr("swiss_unit", "Unit")} ${group} · ${trainType}`;
+                ? swissVehicleFamilyBaseLabel("astoro")
+                : series === "524"
+                    ? swissVehicleFamilyBaseLabel("rabe524")
+                    : series;
+        if (series === "524") return `${trainType} - No.${group}`;
+        return `${tr("swiss_unit", "Unit")} ${group} - ${trainType}`;
     }
 
     function buildUnitGroups(items: VehicleItem[]): StripGroup[] {
@@ -1417,7 +1431,7 @@ export {};
                 groups.push({ key, start: index + 1, length: 1 });
             }
         });
-        return groups.length > 1 ? groups : [];
+        return groups;
     }
 
     function renderCoachCard(item: VehicleItem, index: number): string {
@@ -1517,17 +1531,19 @@ export {};
                 ${esc(sectorLabel(group.key))}
             </div>
         `).join("");
-        const unitGroups = buildUnitGroups(items).map((group) => `
-            <div class="swiss-unit-segment" style="grid-column:${group.start} / span ${group.length};grid-row:3;">
+        const unitGroups = buildUnitGroups(items).map((group, index) => `
+            <div class="swiss-unit-segment${index % 2 === 1 ? " swiss-unit-segment-alt" : ""}" style="grid-column:${group.start} / span ${group.length};grid-row:3;">
                 ${esc(unitLabel(group.key))}
             </div>
         `).join("");
 
         return `
-            <div class="swiss-formation-track" style="--vehicle-count:${items.length}">
-                ${groups}
-                ${items.map(renderCoachCard).join("")}
-                ${unitGroups}
+            <div class="swiss-coach-scroll">
+                <div class="swiss-formation-track" style="--vehicle-count:${items.length}">
+                    ${groups}
+                    ${items.map(renderCoachCard).join("")}
+                    ${unitGroups}
+                </div>
             </div>
             ${renderCoachLegend(items)}
         `;
@@ -1605,12 +1621,13 @@ export {};
             const fromTo = renderVehicleSegments(vehicle);
             const label = isLikelyLocomotive(vehicle) ? tr("swiss_loco", "Loco") : tr("swiss_vehicle", "Vehicle");
             const typeDescription = describeVehicleType(vehicle);
+            const displayNumber = vehicleDisplayNumber(vehicle, item.coach);
             return `
                 <div class="swiss-vehicle-row${vehicleIsClosedForDisplay(status, null) ? " swiss-vehicle-closed" : ""}">
                     <div class="swiss-vehicle-main">
                         <div class="swiss-vehicle-title">
                             <span class="swiss-vehicle-position">${esc(tr("swiss_position", "Pos."))} ${item.displayPosition || index + 1}</span>
-                            <span>${esc(label)} ${esc(vehicle.number || vehicle.vehicleNumber || "--")}</span>
+                            <span>${esc(label)} ${esc(displayNumber)}</span>
                             <span class="swiss-vehicle-type">${esc(vehicle.typeCodeName || vehicle.typeCode || "--")}</span>
                         </div>
                         ${typeDescription ? `<div class="swiss-vehicle-type-note">${esc(typeDescription)}</div>` : ""}
