@@ -1570,6 +1570,52 @@ GET /resteasy/news/infomobility
 
 实测经常返回空数组。
 
+**2026-06-12 样例 JSON 结构：**
+
+```ts
+type InfomobilityNotice = {
+  title: string;
+  link: string;
+  pubDate: number; // epoch milliseconds
+  description: string; // HTML escaped string
+  trainTags: string[];
+  regionTags: string[];
+  evidenzia: boolean;
+};
+```
+
+**2026-06-12 样例中观察到的全部 `title`：**
+
+1. `CIRCOLAZIONE REGOLARE SULLA RETE ALTA VELOCITÀ`
+2. `Linea Catanzaro Lido - Taranto: circolazione sospesa tra Montegiordano e Roseto dalle ore 6:00 del 10 giugno per un inconveniente tecnico alla linea`
+3. `INFOTRENI INTERCITY - EUROCITY`
+4. `INFOLAVORI ABRUZZO`
+5. `INFOLAVORI ALTO ADIGE`
+6. `INFOLAVORI BASILICATA`
+7. `INFOLAVORI CALABRIA`
+8. `INFOLAVORI CAMPANIA`
+9. `INFOLAVORI EMILIA-ROMAGNA`
+10. `INFOLAVORI FRIULI VENEZIA GIULIA`
+11. `INFOLAVORI LAZIO`
+12. `INFOLAVORI LIGURIA`
+13. `INFOLAVORI LOMBARDIA`
+14. `INFOLAVORI MARCHE`
+15. `INFOLAVORI MOLISE`
+16. `INFOLAVORI PIEMONTE`
+17. `INFOLAVORI PUGLIA`
+18. `INFOLAVORI SARDEGNA`
+19. `INFOLAVORI SICILIA`
+20. `INFOLAVORI TOSCANA`
+21. `INFOLAVORI TRENTINO`
+22. `INFOLAVORI UMBRIA`
+23. `INFOLAVORI VALLE D'AOSTA`
+24. `INFOLAVORI VENETO`
+
+该样例中，`/infomobilitaRSS/false` 与 JSON 前几条运行公告存在重叠，
+但 JSON 还包含更多按地区组织的 `INFOLAVORI` 条目。因此 BelloTreno
+将 NewsService JSON 与 `infomobilitaRSS/{true|false}` 保持为 Trenitalia
+下的独立子视图，而不是在前端直接合并。
+
 ---
 
 ### 系统与元数据

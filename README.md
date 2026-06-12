@@ -10,8 +10,9 @@
 
 BelloTreno is a real-time railway information website focused on Italian trains.
 It brings together train running details, station departure and arrival boards,
-RFI travel notices, cross-border formation data, and daily operating statistics in
-a cleaner interface for railway enthusiasts and travelers.
+RFI and Trenitalia infomobility notices, cross-border formation data, and daily
+operating statistics in a cleaner interface for railway enthusiasts and
+travelers.
 
 Live site: [bellotreno.org](https://bellotreno.org/)
 
@@ -28,7 +29,8 @@ BelloTreno helps users inspect the current state of Italian railway services:
 - Open station boards for departures and arrivals, including platform changes and
   destination information. Supported Italo departures and arrivals are merged
   into matching ViaggiaTreno station pages.
-- Read RFI travel notices and filter public disruption information by region.
+- Read RFI and Trenitalia infomobility notices, including operator news, RSS
+  circulation/lavori feeds, highlighted disruptions, and regional filters.
 - View supported Swiss cross-border train formations, including coach order,
   platform sectors, accessibility, bicycle, seat, and vehicle details.
 - Enrich selected EC, TILO, SBB/Trenord regional, and other Swiss-linked services
@@ -76,6 +78,7 @@ BelloTreno combines public and externally proxied railway data:
 - Italo in Viaggio public realtime train and station-board data for supported
   high-speed services.
 - RFI public travel notice feeds.
+- Trenitalia / ViaggiaTreno infomobility ticker, RSS, and NewsService feeds.
 - ViaggiaTreno SmartCaring notices for supported services.
 - OpenTransportData.swiss Train Formation Service for selected Swiss cross-border
   formations.

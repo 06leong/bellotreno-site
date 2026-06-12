@@ -4,7 +4,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
 <BaseLayout
     title="Infomobilità - BelloTreno"
-    description="Avvisi e aggiornamenti in tempo reale dell'infomobilità ferroviaria RFI. Notizie su scioperi, lavori e perturbazioni su tutta la rete ferroviaria italiana.">
+    description="Avvisi e aggiornamenti in tempo reale dell'infomobilità ferroviaria da Trenitalia e RFI. Notizie su circolazione, lavori e perturbazioni sulla rete ferroviaria italiana.">
     <Fragment slot="head"></Fragment>
     <Fragment slot="scripts">
         <script>
@@ -16,54 +16,134 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         <div class="text-center mt-10 mb-6">
             <h1
                 class="text-[2.5rem] font-bold mb-6 text-primary"
-                data-i18n="nav_infomobilita">出行信息</h1>
+                data-i18n="nav_infomobilita">Infomobility</h1>
 
             <div class="infomobilita-controls flex flex-col items-center gap-6">
-                <div class="flex justify-center mx-auto w-[480px] max-w-full bg-base-200/50 p-1 rounded-full border border-base-200 shadow-sm backdrop-blur">
+                <div class="info-provider-switch flex justify-center mx-auto w-[480px] max-w-full bg-base-200/50 p-1 rounded-full border border-base-200 shadow-sm backdrop-blur">
                     <button
-                        id="modeUpdatesBtn"
+                        id="providerTrenitaliaBtn"
                         type="button"
                         class="board-tab active flex-1 flex items-center justify-center gap-1.5 py-2 px-4 text-sm font-medium rounded-full cursor-pointer transition-all">
-                        <span class="material-symbols-outlined text-[1.25rem]">dynamic_feed</span>
-                        <span data-i18n="info_updates">实时更新</span>
+                        <span class="material-symbols-outlined text-[1.25rem]">train</span>
+                        <span data-i18n="info_provider_trenitalia">Trenitalia</span>
                     </button>
                     <button
-                        id="modeNoticesBtn"
+                        id="providerRfiBtn"
                         type="button"
                         class="board-tab flex-1 flex items-center justify-center gap-1.5 py-2 px-4 text-sm font-medium rounded-full cursor-pointer transition-all">
-                        <span class="material-symbols-outlined text-[1.25rem]">campaign</span>
-                        <span data-i18n="info_notices">旅行者须知</span>
+                        <span class="material-symbols-outlined text-[1.25rem]">account_balance</span>
+                        <span data-i18n="info_provider_rfi">RFI</span>
                     </button>
                 </div>
 
-                <div class="dropdown w-[480px] max-w-full mx-auto" id="regionDropdown">
-                    <div tabindex="0" role="button" class="btn btn-lg w-full bg-base-100/65 backdrop-blur-3xl shadow-glass custom-region-dropdown focus:outline-none focus:border-primary transition-all font-medium rounded-full flex justify-center hover:bg-base-100/75 h-14 min-h-[3.5rem]">
-                        <span id="regionBtnText" data-i18n="region_all" class="text-[1.125rem]">所有大区</span>
-                        <span class="material-symbols-outlined absolute right-5 opacity-70">expand_more</span>
+                <div id="trenitaliaControls" class="info-source-panel">
+                    <div class="info-feed-tabs flex justify-center mx-auto w-[640px] max-w-full bg-base-200/50 p-1 rounded-full border border-base-200 shadow-sm backdrop-blur">
+                        <button
+                            id="trenitaliaNewsBtn"
+                            type="button"
+                            class="board-tab active flex-1 flex items-center justify-center gap-1.5 py-2 px-3 text-sm font-medium rounded-full cursor-pointer transition-all">
+                            <span class="material-symbols-outlined text-[1.18rem]">newspaper</span>
+                            <span data-i18n="trenitalia_news_service">NewsService</span>
+                        </button>
+                        <button
+                            id="trenitaliaRssCirculationBtn"
+                            type="button"
+                            class="board-tab flex-1 flex items-center justify-center gap-1.5 py-2 px-3 text-sm font-medium rounded-full cursor-pointer transition-all">
+                            <span class="material-symbols-outlined text-[1.18rem]">rss_feed</span>
+                            <span data-i18n="trenitalia_rss_circulation">RSS circulation</span>
+                        </button>
+                        <button
+                            id="trenitaliaRssWorksBtn"
+                            type="button"
+                            class="board-tab flex-1 flex items-center justify-center gap-1.5 py-2 px-3 text-sm font-medium rounded-full cursor-pointer transition-all">
+                            <span class="material-symbols-outlined text-[1.18rem]">engineering</span>
+                            <span data-i18n="trenitalia_rss_works">RSS works</span>
+                        </button>
                     </div>
-                    <ul tabindex="0" class="dropdown-content z-[2] menu p-2 shadow-glass bg-base-100/80 backdrop-blur-3xl border border-base-content/10 rounded-box w-full max-h-64 flex-nowrap overflow-y-auto mt-2">
-                        <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="all" data-i18n="region_all">所有大区</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="abruzzo" data-i18n="region_abruzzo">Abruzzo</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="basilicata" data-i18n="region_basilicata">Basilicata</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="calabria" data-i18n="region_calabria">Calabria</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="campania" data-i18n="region_campania">Campania</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="emilia_romagna" data-i18n="region_emilia_romagna">Emilia Romagna</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="friuli_venezia_giulia" data-i18n="region_friuli_venezia_giulia">Friuli Venezia Giulia</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="lazio" data-i18n="region_lazio">Lazio</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="liguria" data-i18n="region_liguria">Liguria</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="lombardia" data-i18n="region_lombardia">Lombardia</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="marche" data-i18n="region_marche">Marche</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="molise" data-i18n="region_molise">Molise</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="piemonte" data-i18n="region_piemonte">Piemonte</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="puglia" data-i18n="region_puglia">Puglia</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="sardegna" data-i18n="region_sardegna">Sardegna</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="sicilia" data-i18n="region_sicilia">Sicilia</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="toscana" data-i18n="region_toscana">Toscana</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="trentino_alto_adige" data-i18n="region_trentino_alto_adige">Trentino Alto Adige</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="umbria" data-i18n="region_umbria">Umbria</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="valle_d_aosta" data-i18n="region_valle_d_aosta">Valle d'Aosta</a></li>
-                        <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="veneto" data-i18n="region_veneto">Veneto</a></li>
-                    </ul>
+
+                    <div class="dropdown w-[480px] max-w-full mx-auto" id="trenitaliaFilterDropdown">
+                        <div tabindex="0" role="button" class="btn btn-lg w-full bg-base-100/65 backdrop-blur-3xl shadow-glass custom-region-dropdown focus:outline-none focus:border-primary transition-all font-medium rounded-full flex justify-center hover:bg-base-100/75 h-14 min-h-[3.5rem]">
+                            <span id="trenitaliaFilterBtnText" data-i18n="trenitalia_filter_all" class="text-[1.05rem]">All Trenitalia notices</span>
+                            <span class="material-symbols-outlined absolute right-5 opacity-70">expand_more</span>
+                        </div>
+                        <ul tabindex="0" class="dropdown-content z-[2] menu p-2 shadow-glass bg-base-100/80 backdrop-blur-3xl border border-base-content/10 rounded-box w-full max-h-80 flex-nowrap overflow-y-auto mt-2">
+                            <li><a class="justify-center text-center py-3 text-base" data-trenitalia-filter-option data-trenitalia-filter="all" data-i18n="trenitalia_filter_all">All Trenitalia notices</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-trenitalia-filter-option data-trenitalia-filter="highlighted" data-i18n="trenitalia_filter_highlighted">Highlighted</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-trenitalia-filter-option data-trenitalia-filter="line_train" data-i18n="trenitalia_filter_line_train">Line and train disruptions</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-trenitalia-filter-option data-trenitalia-filter="infotreni" data-i18n="trenitalia_filter_infotreni">INFOTRENI</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-trenitalia-filter-option data-trenitalia-filter="infolavori" data-i18n="trenitalia_filter_infolavori">INFOLAVORI</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-trenitalia-filter-option data-trenitalia-filter="abruzzo" data-i18n="region_abruzzo">Abruzzo</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-trenitalia-filter-option data-trenitalia-filter="alto_adige" data-i18n="trenitalia_region_alto_adige">Alto Adige</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-trenitalia-filter-option data-trenitalia-filter="basilicata" data-i18n="region_basilicata">Basilicata</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-trenitalia-filter-option data-trenitalia-filter="calabria" data-i18n="region_calabria">Calabria</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-trenitalia-filter-option data-trenitalia-filter="campania" data-i18n="region_campania">Campania</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-trenitalia-filter-option data-trenitalia-filter="emilia_romagna" data-i18n="region_emilia_romagna">Emilia Romagna</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-trenitalia-filter-option data-trenitalia-filter="friuli_venezia_giulia" data-i18n="region_friuli_venezia_giulia">Friuli Venezia Giulia</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-trenitalia-filter-option data-trenitalia-filter="lazio" data-i18n="region_lazio">Lazio</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-trenitalia-filter-option data-trenitalia-filter="liguria" data-i18n="region_liguria">Liguria</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-trenitalia-filter-option data-trenitalia-filter="lombardia" data-i18n="region_lombardia">Lombardia</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-trenitalia-filter-option data-trenitalia-filter="marche" data-i18n="region_marche">Marche</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-trenitalia-filter-option data-trenitalia-filter="molise" data-i18n="region_molise">Molise</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-trenitalia-filter-option data-trenitalia-filter="piemonte" data-i18n="region_piemonte">Piemonte</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-trenitalia-filter-option data-trenitalia-filter="puglia" data-i18n="region_puglia">Puglia</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-trenitalia-filter-option data-trenitalia-filter="sardegna" data-i18n="region_sardegna">Sardegna</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-trenitalia-filter-option data-trenitalia-filter="sicilia" data-i18n="region_sicilia">Sicilia</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-trenitalia-filter-option data-trenitalia-filter="toscana" data-i18n="region_toscana">Toscana</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-trenitalia-filter-option data-trenitalia-filter="trentino" data-i18n="trenitalia_region_trentino">Trentino</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-trenitalia-filter-option data-trenitalia-filter="umbria" data-i18n="region_umbria">Umbria</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-trenitalia-filter-option data-trenitalia-filter="valle_d_aosta" data-i18n="region_valle_d_aosta">Valle d'Aosta</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-trenitalia-filter-option data-trenitalia-filter="veneto" data-i18n="region_veneto">Veneto</a></li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div id="rfiControls" class="info-source-panel" hidden>
+                    <div class="flex justify-center mx-auto w-[480px] max-w-full bg-base-200/50 p-1 rounded-full border border-base-200 shadow-sm backdrop-blur">
+                        <button
+                            id="modeUpdatesBtn"
+                            type="button"
+                            class="board-tab active flex-1 flex items-center justify-center gap-1.5 py-2 px-4 text-sm font-medium rounded-full cursor-pointer transition-all">
+                            <span class="material-symbols-outlined text-[1.25rem]">dynamic_feed</span>
+                            <span data-i18n="info_updates">Real-time updates</span>
+                        </button>
+                        <button
+                            id="modeNoticesBtn"
+                            type="button"
+                            class="board-tab flex-1 flex items-center justify-center gap-1.5 py-2 px-4 text-sm font-medium rounded-full cursor-pointer transition-all">
+                            <span class="material-symbols-outlined text-[1.25rem]">campaign</span>
+                            <span data-i18n="info_notices">Traveler notices</span>
+                        </button>
+                    </div>
+
+                    <div class="dropdown w-[480px] max-w-full mx-auto" id="regionDropdown">
+                        <div tabindex="0" role="button" class="btn btn-lg w-full bg-base-100/65 backdrop-blur-3xl shadow-glass custom-region-dropdown focus:outline-none focus:border-primary transition-all font-medium rounded-full flex justify-center hover:bg-base-100/75 h-14 min-h-[3.5rem]">
+                            <span id="regionBtnText" data-i18n="region_all" class="text-[1.125rem]">All Regions</span>
+                            <span class="material-symbols-outlined absolute right-5 opacity-70">expand_more</span>
+                        </div>
+                        <ul tabindex="0" class="dropdown-content z-[2] menu p-2 shadow-glass bg-base-100/80 backdrop-blur-3xl border border-base-content/10 rounded-box w-full max-h-64 flex-nowrap overflow-y-auto mt-2">
+                            <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="all" data-i18n="region_all">All Regions</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="abruzzo" data-i18n="region_abruzzo">Abruzzo</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="basilicata" data-i18n="region_basilicata">Basilicata</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="calabria" data-i18n="region_calabria">Calabria</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="campania" data-i18n="region_campania">Campania</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="emilia_romagna" data-i18n="region_emilia_romagna">Emilia Romagna</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="friuli_venezia_giulia" data-i18n="region_friuli_venezia_giulia">Friuli Venezia Giulia</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="lazio" data-i18n="region_lazio">Lazio</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="liguria" data-i18n="region_liguria">Liguria</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="lombardia" data-i18n="region_lombardia">Lombardia</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="marche" data-i18n="region_marche">Marche</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="molise" data-i18n="region_molise">Molise</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="piemonte" data-i18n="region_piemonte">Piemonte</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="puglia" data-i18n="region_puglia">Puglia</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="sardegna" data-i18n="region_sardegna">Sardegna</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="sicilia" data-i18n="region_sicilia">Sicilia</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="toscana" data-i18n="region_toscana">Toscana</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="trentino_alto_adige" data-i18n="region_trentino_alto_adige">Trentino Alto Adige</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="umbria" data-i18n="region_umbria">Umbria</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="valle_d_aosta" data-i18n="region_valle_d_aosta">Valle d'Aosta</a></li>
+                            <li><a class="justify-center text-center py-3 text-base" data-region-option data-region="veneto" data-i18n="region_veneto">Veneto</a></li>
+                        </ul>
+                    </div>
                 </div>
             </div>
 

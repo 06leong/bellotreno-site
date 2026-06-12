@@ -1,6 +1,16 @@
+import {
+  TRENITALIA_REGION_FILTERS,
+  classifyTrenitaliaNotice,
+  dedupeTrenitaliaNotices,
+  safeHttpUrl,
+  type TrenitaliaFilterKey,
+} from "../lib/normalizers/infomobilita.js";
+
 export {};
 
-type InfoMode = "updates" | "notices";
+type ProviderMode = "trenitalia" | "rfi";
+type RfiMode = "updates" | "notices";
+type TrenitaliaFeedMode = "news" | "rss-circulation" | "rss-works";
 type RegionKey =
   | "all"
   | "abruzzo"
@@ -24,16 +34,50 @@ type RegionKey =
   | "valle_d_aosta"
   | "veneto";
 
-interface RssCardData {
+interface RfiCardData {
   formattedDate: string;
   region: string;
   safeLink: string;
   title: string;
 }
 
-const translations = window.translations || {};
+interface TrenitaliaJsonNotice {
+  description?: string;
+  evidenzia?: boolean;
+  link?: string;
+  pubDate?: number;
+  regionTags?: string[];
+  title?: string;
+  trainTags?: string[];
+}
 
-const RSS_BASE_URLS: Record<InfoMode, string> = {
+interface TrenitaliaRssNotice {
+  contentElement: Element | null;
+  dateText: string;
+  evidence: boolean;
+  title: string;
+}
+
+interface NodeOptions {
+  attrs?: Record<string, unknown>;
+  className?: string;
+  dataset?: Record<string, unknown>;
+  href?: string;
+  rel?: string;
+  style?: Partial<CSSStyleDeclaration>;
+  target?: string;
+  text?: unknown;
+  type?: string;
+}
+
+type NodeChild = Node | string | number | boolean | null | undefined;
+
+const translations = window.translations || {};
+const VIAGGIATRENO_SERVICE_BASE = "https://www.viaggiatreno.it/infomobilita/resteasy/viaggiatreno";
+const VIAGGIATRENO_NEWS_BASE = "https://www.viaggiatreno.it/infomobilita/resteasy/news";
+const ALLOWED_DESCRIPTION_TAGS = new Set(["P", "BR", "B", "STRONG", "I", "EM", "U", "UL", "OL", "LI", "A"]);
+
+const RFI_RSS_BASE_URLS: Record<RfiMode, string> = {
   updates: "https://www.rfi.it/content/rfi/it/news-e-media/infomobilita.rss.updates",
   notices: "https://www.rfi.it/content/rfi/it/news-e-media/infomobilita.rss.notices",
 };
@@ -62,26 +106,97 @@ const REGIONS: Record<RegionKey, string> = {
   veneto: ".veneto",
 };
 
-let currentMode: InfoMode = "updates";
-let currentRegion: RegionKey = "all";
+let currentProvider: ProviderMode = "trenitalia";
+let currentRfiMode: RfiMode = "updates";
+let currentRfiRegion: RegionKey = "all";
+let currentTrenitaliaFeed: TrenitaliaFeedMode = "news";
+let currentTrenitaliaFilter: TrenitaliaFilterKey = "all";
 let currentFetchController: AbortController | null = null;
 
 document.addEventListener("astro:page-load", () => {
   bindInfomobilitaControls();
-  void fetchRSS();
+  renderProviderState();
+  void loadCurrentView();
 });
 
 window.onLanguageChanged = () => {
-  void fetchRSS();
+  void loadCurrentView();
 };
+
+function createNode<K extends keyof HTMLElementTagNameMap>(
+  tagName: K,
+  options: NodeOptions = {},
+  children: NodeChild | NodeChild[] = [],
+): HTMLElementTagNameMap[K] {
+  const node = document.createElement(tagName);
+  if (options.className) node.className = options.className;
+  if (options.text !== undefined) node.textContent = String(options.text);
+  if (options.type) node.setAttribute("type", options.type);
+  if (options.href) node.setAttribute("href", options.href);
+  if (options.target) node.setAttribute("target", options.target);
+  if (options.rel) node.setAttribute("rel", options.rel);
+  if (options.style) Object.assign(node.style, options.style);
+  if (options.attrs) {
+    Object.entries(options.attrs).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) node.setAttribute(key, String(value));
+    });
+  }
+  if (options.dataset) {
+    Object.entries(options.dataset).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) node.dataset[key] = String(value);
+    });
+  }
+
+  const childList = Array.isArray(children) ? children : [children];
+  childList.forEach((child) => {
+    if (child === undefined || child === null) return;
+    node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+  });
+  return node;
+}
+
+function createMaterialIcon(name: string, className = "material-symbols-outlined text-[16px]"): HTMLSpanElement {
+  return createNode("span", { className, text: name });
+}
+
+function getI18n(key: string): string {
+  const localizedValue = translations[window.currentLang || "en"]?.[key];
+  if (localizedValue) return localizedValue;
+
+  const fallbacks: Record<string, string> = {
+    info_details: "Details",
+    info_hide_details: "Hide details",
+    info_open_source: "Open source",
+    no_info_found: "No notices found",
+    read_more: "Read more",
+  };
+  return fallbacks[key] || key;
+}
 
 function isRegionKey(value: string | undefined): value is RegionKey {
   return Boolean(value && Object.prototype.hasOwnProperty.call(REGIONS, value));
 }
 
+function isTrenitaliaFilterKey(value: string | undefined): value is TrenitaliaFilterKey {
+  if (!value) return false;
+  return [
+    "all",
+    "highlighted",
+    "line_train",
+    "infotreni",
+    "infolavori",
+    ...TRENITALIA_REGION_FILTERS.map((region) => region.key),
+  ].includes(value);
+}
+
 function bindInfomobilitaControls(): void {
-  bindModeButton("modeUpdatesBtn", "updates");
-  bindModeButton("modeNoticesBtn", "notices");
+  bindProviderButton("providerTrenitaliaBtn", "trenitalia");
+  bindProviderButton("providerRfiBtn", "rfi");
+  bindTrenitaliaFeedButton("trenitaliaNewsBtn", "news");
+  bindTrenitaliaFeedButton("trenitaliaRssCirculationBtn", "rss-circulation");
+  bindTrenitaliaFeedButton("trenitaliaRssWorksBtn", "rss-works");
+  bindRfiModeButton("modeUpdatesBtn", "updates");
+  bindRfiModeButton("modeNoticesBtn", "notices");
 
   document.querySelectorAll<HTMLElement>("[data-region-option]").forEach((option) => {
     if (option.dataset.btBound) return;
@@ -90,44 +205,105 @@ function bindInfomobilitaControls(): void {
       event.preventDefault();
       const region = option.dataset.region;
       if (!isRegionKey(region)) return;
-      changeDropdownRegion(region, option.textContent?.trim() || "", option.dataset.i18n);
+      changeRfiRegion(region, option.textContent?.trim() || "", option.dataset.i18n);
+    });
+  });
+
+  document.querySelectorAll<HTMLElement>("[data-trenitalia-filter-option]").forEach((option) => {
+    if (option.dataset.btBound) return;
+    option.dataset.btBound = "true";
+    option.addEventListener("click", (event) => {
+      event.preventDefault();
+      const filter = option.dataset.trenitaliaFilter;
+      if (!isTrenitaliaFilterKey(filter)) return;
+      changeTrenitaliaFilter(filter, option.textContent?.trim() || "", option.dataset.i18n);
     });
   });
 }
 
-function bindModeButton(id: string, mode: InfoMode): void {
+function bindProviderButton(id: string, provider: ProviderMode): void {
   const button = document.getElementById(id);
   if (!button || button.dataset.btBound) return;
   button.dataset.btBound = "true";
   button.addEventListener("click", () => {
-    switchInfoMode(mode);
+    if (currentProvider === provider) return;
+    currentProvider = provider;
+    renderProviderState();
+    void loadCurrentView();
   });
 }
 
-function changeDropdownRegion(value: RegionKey, text: string, i18nKey?: string): void {
+function bindTrenitaliaFeedButton(id: string, feed: TrenitaliaFeedMode): void {
+  const button = document.getElementById(id);
+  if (!button || button.dataset.btBound) return;
+  button.dataset.btBound = "true";
+  button.addEventListener("click", () => {
+    if (currentTrenitaliaFeed === feed) return;
+    currentTrenitaliaFeed = feed;
+    renderProviderState();
+    void loadCurrentView();
+  });
+}
+
+function bindRfiModeButton(id: string, mode: RfiMode): void {
+  const button = document.getElementById(id);
+  if (!button || button.dataset.btBound) return;
+  button.dataset.btBound = "true";
+  button.addEventListener("click", () => {
+    if (currentRfiMode === mode) return;
+    currentRfiMode = mode;
+    renderProviderState();
+    void loadCurrentView();
+  });
+}
+
+function changeRfiRegion(value: RegionKey, text: string, i18nKey?: string): void {
   const btnText = document.getElementById("regionBtnText");
   if (btnText) {
     btnText.textContent = text;
-    if (i18nKey) {
-      btnText.setAttribute("data-i18n", i18nKey);
-    } else {
-      btnText.removeAttribute("data-i18n");
-    }
+    setI18nKey(btnText, i18nKey);
   }
 
-  currentRegion = value;
-  void fetchRSS();
+  currentRfiRegion = value;
+  void loadCurrentView();
   blurActiveElement();
 }
 
-function switchInfoMode(mode: InfoMode): void {
-  if (currentMode === mode) return;
-  currentMode = mode;
+function changeTrenitaliaFilter(value: TrenitaliaFilterKey, text: string, i18nKey?: string): void {
+  const btnText = document.getElementById("trenitaliaFilterBtnText");
+  if (btnText) {
+    btnText.textContent = text;
+    setI18nKey(btnText, i18nKey);
+  }
 
-  document.getElementById("modeUpdatesBtn")?.classList.toggle("active", mode === "updates");
-  document.getElementById("modeNoticesBtn")?.classList.toggle("active", mode === "notices");
+  currentTrenitaliaFilter = value;
+  void loadCurrentView();
+  blurActiveElement();
+}
 
-  void fetchRSS();
+function setI18nKey(element: Element, i18nKey?: string): void {
+  if (i18nKey) {
+    element.setAttribute("data-i18n", i18nKey);
+  } else {
+    element.removeAttribute("data-i18n");
+  }
+}
+
+function renderProviderState(): void {
+  document.getElementById("providerTrenitaliaBtn")?.classList.toggle("active", currentProvider === "trenitalia");
+  document.getElementById("providerRfiBtn")?.classList.toggle("active", currentProvider === "rfi");
+  document.getElementById("trenitaliaControls")?.toggleAttribute("hidden", currentProvider !== "trenitalia");
+  document.getElementById("rfiControls")?.toggleAttribute("hidden", currentProvider !== "rfi");
+
+  document.getElementById("trenitaliaNewsBtn")?.classList.toggle("active", currentTrenitaliaFeed === "news");
+  document
+    .getElementById("trenitaliaRssCirculationBtn")
+    ?.classList.toggle("active", currentTrenitaliaFeed === "rss-circulation");
+  document.getElementById("trenitaliaRssWorksBtn")?.classList.toggle("active", currentTrenitaliaFeed === "rss-works");
+  document.getElementById("trenitaliaFilterDropdown")?.toggleAttribute("hidden", currentTrenitaliaFeed !== "news");
+
+  document.getElementById("modeUpdatesBtn")?.classList.toggle("active", currentRfiMode === "updates");
+  document.getElementById("modeNoticesBtn")?.classList.toggle("active", currentRfiMode === "notices");
 }
 
 function blurActiveElement(): void {
@@ -142,147 +318,370 @@ function toggleLoading(show: boolean): void {
   if (!loader || !content) return;
 
   loader.style.display = show ? "flex" : "none";
-  content.style.opacity = show ? "0.3" : "1";
+  content.style.opacity = show ? "0.32" : "1";
 }
 
 function replaceContent(element: HTMLElement | null, children: Node[] = []): void {
   element?.replaceChildren(...children);
 }
 
-function createInfoMessage(text: string, color = "var(--text-grey)"): HTMLDivElement {
-  const message = document.createElement("div");
-  message.style.cssText = `text-align:center;padding:40px;color:${color}`;
-  message.textContent = text;
+function createInfoMessage(text: string, color = "var(--color-base-content)"): HTMLDivElement {
+  const message = createNode("div", {
+    className: "info-empty-message",
+    style: { color },
+    text,
+  });
   return message;
 }
 
-function createMaterialIcon(name: string, className = "material-symbols-outlined text-[16px]"): HTMLSpanElement {
-  const icon = document.createElement("span");
-  icon.className = className;
-  icon.textContent = name;
-  return icon;
-}
-
-function createRSSCard({ title, safeLink, formattedDate, region }: RssCardData): HTMLDivElement {
-  const rssCard = document.createElement("div");
-  rssCard.className =
-    "card bg-base-100/65 backdrop-blur-3xl shadow-glass border border-base-content/10 hover:bg-base-100/75 hover:shadow-lg transition-all mb-4";
-
-  const body = document.createElement("div");
-  body.className = "card-body p-6";
-
-  const heading = document.createElement("h3");
-  heading.className = "card-title text-lg text-base-content leading-snug";
-  heading.textContent = title;
-
-  const metaRow = document.createElement("div");
-  metaRow.className = "flex items-center justify-between gap-3 mt-4 flex-wrap";
-
-  const meta = document.createElement("div");
-  meta.className = "flex items-center gap-2 text-sm text-base-content/60";
-
-  const time = document.createElement("span");
-  time.className = "flex items-center gap-1";
-  time.append(createMaterialIcon("schedule"), document.createTextNode(` ${formattedDate}`));
-  meta.appendChild(time);
-
-  if (region) {
-    const badge = document.createElement("span");
-    badge.className = "badge badge-sm badge-ghost custom-info-badge";
-    badge.textContent = region;
-    meta.appendChild(badge);
-  }
-
-  const actions = document.createElement("div");
-  actions.className = "card-actions";
-
-  const anchor = document.createElement("a");
-  anchor.target = "_blank";
-  anchor.rel = "noopener noreferrer";
-  anchor.className = "btn btn-sm custom-readmore-btn rounded-full px-4 gap-1";
-  anchor.href = safeLink;
-
-  const readMore = document.createElement("span");
-  readMore.setAttribute("data-i18n", "read_more");
-  readMore.textContent = getI18n("read_more");
-
-  anchor.append(readMore, createMaterialIcon("open_in_new"));
-  actions.appendChild(anchor);
-  metaRow.append(meta, actions);
-  body.append(heading, metaRow);
-  rssCard.appendChild(body);
-
-  return rssCard;
-}
-
-async function fetchRSS(): Promise<void> {
-  currentFetchController?.abort();
-  currentFetchController = new AbortController();
-  const signal = currentFetchController.signal;
-
-  toggleLoading(true);
-  const contentContainer = document.getElementById("rssContent");
-
-  const regionSuffix = REGIONS[currentRegion];
-  const targetUrl = `${RSS_BASE_URLS[currentMode]}${regionSuffix}.xml`;
+function proxiedUrl(targetUrl: string): string {
   const proxyBase = window.PROXY_BASE || "https://ah.bellotreno.workers.dev";
-  const proxyUrl = `${proxyBase}/?url=${encodeURIComponent(targetUrl)}&ts=${Date.now()}`;
+  return `${proxyBase}/?url=${encodeURIComponent(targetUrl)}&ts=${Date.now()}`;
+}
+
+async function loadCurrentView(): Promise<void> {
+  currentFetchController?.abort();
+  const controller = new AbortController();
+  currentFetchController = controller;
+  const signal = controller.signal;
+  toggleLoading(true);
 
   try {
-    const response = await fetch(proxyUrl, { signal });
-    if (!response.ok) throw new Error("Network response was not ok");
-
-    const xmlText = await response.text();
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(xmlText, "text/xml");
-    const items = Array.from(xmlDoc.querySelectorAll("item"));
-
-    if (items.length === 0) {
-      const message = createInfoMessage(getI18n("no_info_found"));
-      message.setAttribute("data-i18n", "no_info_found");
-      replaceContent(contentContainer, [message]);
-      return;
+    if (currentProvider === "trenitalia") {
+      if (currentTrenitaliaFeed === "news") {
+        await fetchTrenitaliaNews(signal);
+      } else {
+        await fetchTrenitaliaRss(signal, currentTrenitaliaFeed === "rss-works");
+      }
+    } else {
+      await fetchRfiRss(signal);
     }
-
-    items.sort((a, b) => getItemDateMs(b) - getItemDateMs(a));
-    renderRSS(items);
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") return;
     const message = error instanceof Error ? error.message : String(error);
-    console.error("Error fetching RSS:", error);
-    replaceContent(contentContainer, [createInfoMessage(`Error: ${message}`, "var(--train-red)")]);
+    console.error("Error fetching infomobilita:", error);
+    replaceContent(document.getElementById("rssContent"), [createInfoMessage(`Error: ${message}`, "var(--train-red)")]);
   } finally {
-    currentFetchController = null;
+    if (currentFetchController === controller) currentFetchController = null;
     toggleLoading(false);
   }
 }
 
-function getItemDateMs(item: Element): number {
+async function fetchTrenitaliaNews(signal: AbortSignal): Promise<void> {
+  const response = await fetch(proxiedUrl(`${VIAGGIATRENO_NEWS_BASE}/infomobility`), { signal });
+  if (!response.ok) throw new Error("Network response was not ok");
+
+  const payload = await response.json() as unknown;
+  const notices = Array.isArray(payload)
+    ? dedupeTrenitaliaNotices(payload.filter(isTrenitaliaJsonNotice))
+    : [];
+  const filtered = notices.filter((notice) => classifyTrenitaliaNotice(notice).filterKeys.includes(currentTrenitaliaFilter));
+
+  if (filtered.length === 0) {
+    const message = createInfoMessage(getI18n("no_info_found"));
+    message.setAttribute("data-i18n", "no_info_found");
+    replaceContent(document.getElementById("rssContent"), [message]);
+    return;
+  }
+
+  filtered.sort((a, b) => Number(b.pubDate || 0) - Number(a.pubDate || 0));
+  replaceContent(document.getElementById("rssContent"), filtered.map(createTrenitaliaJsonCard));
+}
+
+async function fetchTrenitaliaRss(signal: AbortSignal, isInfoLavori: boolean): Promise<void> {
+  const endpoint = `${VIAGGIATRENO_SERVICE_BASE}/infomobilitaRSS/${isInfoLavori ? "true" : "false"}`;
+  const response = await fetch(proxiedUrl(endpoint), { signal });
+  if (!response.ok) throw new Error("Network response was not ok");
+
+  const htmlText = await response.text();
+  const notices = parseTrenitaliaRss(htmlText);
+  if (notices.length === 0) {
+    const message = createInfoMessage(getI18n("no_info_found"));
+    message.setAttribute("data-i18n", "no_info_found");
+    replaceContent(document.getElementById("rssContent"), [message]);
+    return;
+  }
+
+  replaceContent(document.getElementById("rssContent"), notices.map((notice) => createTrenitaliaRssCard(notice, isInfoLavori)));
+}
+
+async function fetchRfiRss(signal: AbortSignal): Promise<void> {
+  const regionSuffix = REGIONS[currentRfiRegion];
+  const targetUrl = `${RFI_RSS_BASE_URLS[currentRfiMode]}${regionSuffix}.xml`;
+  const response = await fetch(proxiedUrl(targetUrl), { signal });
+  if (!response.ok) throw new Error("Network response was not ok");
+
+  const xmlText = await response.text();
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+  const items = Array.from(xmlDoc.querySelectorAll("item"));
+
+  if (items.length === 0) {
+    const message = createInfoMessage(getI18n("no_info_found"));
+    message.setAttribute("data-i18n", "no_info_found");
+    replaceContent(document.getElementById("rssContent"), [message]);
+    return;
+  }
+
+  items.sort((a, b) => getRfiItemDateMs(b) - getRfiItemDateMs(a));
+  replaceContent(document.getElementById("rssContent"), items.map(createRfiRssCardFromItem));
+}
+
+function isTrenitaliaJsonNotice(value: unknown): value is TrenitaliaJsonNotice {
+  return Boolean(value && typeof value === "object" && "title" in value);
+}
+
+function parseTrenitaliaRss(htmlText: string): TrenitaliaRssNotice[] {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(htmlText, "text/html");
+  return Array.from(doc.querySelectorAll("li.editModeCollapsibleElement"))
+    .map((item): TrenitaliaRssNotice | null => {
+      const heading = item.querySelector(".headingNewsAccordion");
+      const title = heading?.textContent?.trim() || "";
+      if (!heading || !title) return null;
+
+      return {
+        contentElement: item.querySelector(".info-text"),
+        dateText: item.querySelector("h4")?.textContent?.trim() || "",
+        evidence: heading.classList.contains("inEvidenza"),
+        title,
+      };
+    })
+    .filter((notice): notice is TrenitaliaRssNotice => Boolean(notice));
+}
+
+function createTrenitaliaJsonCard(notice: TrenitaliaJsonNotice): HTMLDivElement {
+  const classification = classifyTrenitaliaNotice(notice);
+  const detailFragment = sanitizeHtmlString(notice.description || "");
+  const sourceLabel = getI18n("trenitalia_source_news");
+  const dateText = formatTimestampDate(notice.pubDate);
+  const chips = [
+    ...classification.regionTags.map((tag) => createInfoChip(tag, "map")),
+    ...classification.trainTags.map((tag) => createTrainChip(tag)),
+  ];
+
+  const card = createInfoCardShell({
+    dateText,
+    detail: detailFragment,
+    evidence: classification.isHighlighted,
+    icon: classification.kind === "regular" ? "check_circle" : "campaign",
+    link: classification.safeLink,
+    sourceLabel,
+    title: classification.title,
+    chips,
+  });
+  card.classList.add(`trenitalia-kind-${classification.kind}`);
+  return card;
+}
+
+function createTrenitaliaRssCard(notice: TrenitaliaRssNotice, isInfoLavori: boolean): HTMLDivElement {
+  const detailFragment = sanitizeNodeList(notice.contentElement?.childNodes || []);
+  return createInfoCardShell({
+    dateText: notice.dateText,
+    detail: detailFragment,
+    evidence: notice.evidence,
+    icon: isInfoLavori ? "engineering" : notice.evidence ? "priority_high" : "campaign",
+    sourceLabel: getI18n("trenitalia_source_rss"),
+    title: notice.title,
+    chips: [createInfoChip(isInfoLavori ? getI18n("trenitalia_rss_works") : getI18n("trenitalia_rss_circulation"), "rss_feed")],
+  });
+}
+
+function createRfiRssCardFromItem(item: Element): HTMLDivElement {
+  const title = item.querySelector("title")?.textContent || "";
+  const link = item.querySelector("link")?.textContent || "#";
+  const pubDateStr = item.querySelector("pubDate")?.textContent || "";
+  const region =
+    item.querySelector("region")?.textContent || item.getElementsByTagName("rfi:region")[0]?.textContent || "";
+
+  return createRfiRssCard({
+    title,
+    safeLink: safeHttpUrl(link) || "#",
+    formattedDate: formatRssDate(pubDateStr),
+    region,
+  });
+}
+
+function createRfiRssCard({ title, safeLink, formattedDate, region }: RfiCardData): HTMLDivElement {
+  const chipNodes = region ? [createInfoChip(region, "map")] : [];
+  return createInfoCardShell({
+    dateText: formattedDate,
+    icon: currentRfiMode === "updates" ? "dynamic_feed" : "campaign",
+    link: safeLink,
+    sourceLabel: "RFI",
+    title,
+    chips: chipNodes,
+  });
+}
+
+function createInfoCardShell(options: {
+  chips?: HTMLElement[];
+  dateText?: string;
+  detail?: DocumentFragment;
+  evidence?: boolean;
+  icon: string;
+  link?: string;
+  sourceLabel: string;
+  title: string;
+}): HTMLDivElement {
+  const card = createNode("div", {
+    className: `info-notice-card${options.evidence ? " info-notice-card-evidence" : ""}`,
+  });
+
+  const body = createNode("div", { className: "info-notice-body" });
+  const headingRow = createNode("div", { className: "info-notice-heading-row" }, [
+    createNode("span", { className: "info-notice-icon" }, [createMaterialIcon(options.icon)]),
+    createNode("h3", { className: "info-notice-title", text: options.title }),
+  ]);
+
+  const meta = createNode("div", { className: "info-notice-meta" }, [
+    createNode("span", { className: "info-source-badge", text: options.sourceLabel }),
+    options.dateText ? createNode("span", { className: "info-notice-date" }, [
+      createMaterialIcon("schedule"),
+      options.dateText,
+    ]) : null,
+    ...(options.chips || []),
+  ]);
+
+  const actions: HTMLElement[] = [];
+  const hasDetail = Boolean(options.detail && options.detail.childNodes.length > 0);
+  let detailWrap: HTMLDivElement | null = null;
+
+  if (hasDetail && options.detail) {
+    const detailButton = createNode("button", {
+      className: "btn btn-sm info-detail-toggle rounded-full px-4 gap-1",
+      type: "button",
+      attrs: { "aria-expanded": "false" },
+    }, [
+      createMaterialIcon("expand_more"),
+      createNode("span", { text: getI18n("info_details") }),
+    ]);
+    detailWrap = createNode("div", { className: "info-notice-detail", attrs: { hidden: "" } }, [options.detail]);
+    detailButton.addEventListener("click", () => {
+      const expanded = detailButton.getAttribute("aria-expanded") === "true";
+      detailButton.setAttribute("aria-expanded", String(!expanded));
+      detailButton.classList.toggle("is-open", !expanded);
+      const label = detailButton.querySelector("span:last-child");
+      if (label) label.textContent = expanded ? getI18n("info_details") : getI18n("info_hide_details");
+      detailWrap?.toggleAttribute("hidden", expanded);
+    });
+    actions.push(detailButton);
+  }
+
+  if (options.link) {
+    actions.push(createNode("a", {
+      className: "btn btn-sm custom-readmore-btn rounded-full px-4 gap-1",
+      href: options.link,
+      target: "_blank",
+      rel: "noopener noreferrer",
+    }, [
+      createNode("span", { text: hasDetail ? getI18n("info_open_source") : getI18n("read_more") }),
+      createMaterialIcon("open_in_new"),
+    ]));
+  }
+
+  body.append(headingRow, meta);
+  if (actions.length) body.append(createNode("div", { className: "info-notice-actions" }, actions));
+  if (detailWrap) body.append(detailWrap);
+  card.appendChild(body);
+  return card;
+}
+
+function createInfoChip(label: string, iconName: string): HTMLSpanElement {
+  return createNode("span", { className: "info-chip" }, [
+    createMaterialIcon(iconName),
+    createNode("span", { text: label }),
+  ]);
+}
+
+function createTrainChip(trainNumber: string): HTMLAnchorElement {
+  const cleanTrainNumber = normalizeTrainNumber(trainNumber);
+  return createNode("a", {
+    className: "info-chip info-train-chip",
+    href: cleanTrainNumber ? `/?train=${encodeURIComponent(cleanTrainNumber)}` : undefined,
+  }, [
+    createMaterialIcon("train"),
+    createNode("span", { text: trainNumber }),
+  ]);
+}
+
+function sanitizeHtmlString(value: string): DocumentFragment {
+  if (!value.trim()) return document.createDocumentFragment();
+  const parser = new DOMParser();
+  const decoded = parser.parseFromString(value, "text/html").documentElement.textContent || value;
+  const html = decoded.includes("<") ? decoded : value;
+  const doc = parser.parseFromString(html, "text/html");
+  return sanitizeNodeList(doc.body.childNodes);
+}
+
+function sanitizeNodeList(nodes: NodeListOf<ChildNode> | ChildNode[]): DocumentFragment {
+  const fragment = document.createDocumentFragment();
+  Array.from(nodes).forEach((node) => {
+    const sanitized = sanitizeDescriptionNode(node);
+    if (sanitized) fragment.appendChild(sanitized);
+  });
+  return fragment;
+}
+
+function sanitizeDescriptionNode(node: Node): Node | null {
+  if (node.nodeType === Node.TEXT_NODE) {
+    return document.createTextNode(node.textContent || "");
+  }
+  if (!(node instanceof Element)) return null;
+
+  if (!ALLOWED_DESCRIPTION_TAGS.has(node.tagName)) {
+    return sanitizeNodeList(node.childNodes);
+  }
+
+  if (node.tagName === "BR") return document.createElement("br");
+
+  const tagName = node.tagName === "B" ? "strong" : node.tagName === "I" ? "em" : node.tagName.toLowerCase();
+  const element = document.createElement(tagName);
+
+  if (node.tagName === "A") {
+    const safeLink = safeHttpUrl(node.getAttribute("href"));
+    const trainNumber = extractTrainNumberFromText(node.textContent || "");
+    const internalTrainLink = trainNumber ? `/?train=${encodeURIComponent(trainNumber)}` : "";
+    if (!safeLink && !internalTrainLink) return sanitizeNodeList(node.childNodes);
+    element.setAttribute("href", internalTrainLink || safeLink);
+    element.setAttribute("target", "_blank");
+    element.setAttribute("rel", "noopener noreferrer");
+    if (internalTrainLink) {
+      element.removeAttribute("target");
+      element.setAttribute("rel", "noopener");
+    }
+  }
+
+  element.appendChild(sanitizeNodeList(node.childNodes));
+  return element;
+}
+
+function normalizeTrainNumber(value: unknown): string {
+  return String(value || "").replace(/\D+/g, "");
+}
+
+function extractTrainNumberFromText(value: string): string {
+  const match = value.match(/\b(?:AV|FR|FA|FB|ICN|IC|EC|EN|RV|REG|RE)?\s*(\d{1,5})\b/i);
+  return match ? normalizeTrainNumber(match[1]) : "";
+}
+
+function getRfiItemDateMs(item: Element): number {
   return new Date(item.querySelector("pubDate")?.textContent || 0).getTime();
 }
 
-function renderRSS(items: Element[]): void {
-  const contentContainer = document.getElementById("rssContent");
-  replaceContent(contentContainer);
-
-  for (const item of items) {
-    const title = item.querySelector("title")?.textContent || "";
-    const link = item.querySelector("link")?.textContent || "#";
-    const pubDateStr = item.querySelector("pubDate")?.textContent || "";
-    const region =
-      item.querySelector("region")?.textContent || item.getElementsByTagName("rfi:region")[0]?.textContent || "";
-
-    const formattedDate = formatRssDate(pubDateStr);
-    const safeLink = /^https?:\/\//.test(link) ? link : "#";
-
-    contentContainer?.appendChild(createRSSCard({ title, safeLink, formattedDate, region }));
-  }
+function formatTimestampDate(value: unknown): string {
+  const timestamp = typeof value === "number" ? value : Number(value || 0);
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return "";
+  return formatDate(new Date(timestamp));
 }
 
 function formatRssDate(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
+  return formatDate(date);
+}
 
+function formatDate(date: Date): string {
   const locale = window.currentLang === "zh" ? "zh-CN" : window.currentLang === "it" ? "it-IT" : "en-GB";
   return new Intl.DateTimeFormat(locale, {
     timeZone: "Europe/Rome",
@@ -291,23 +690,6 @@ function formatRssDate(value: string): string {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-    second: "2-digit",
     hour12: false,
   }).format(date);
-}
-
-function getI18n(key: string): string {
-  const localizedValue = translations[window.currentLang || "en"]?.[key];
-  if (localizedValue) return localizedValue;
-
-  if (key === "read_more") {
-    const fallbacks: Record<NonNullable<Window["currentLang"]>, string> = {
-      zh: "阅读全文",
-      en: "Read more",
-      it: "Leggi tutto",
-    };
-    return fallbacks[window.currentLang || "en"];
-  }
-
-  return key;
 }
