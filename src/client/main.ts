@@ -369,9 +369,10 @@ function renderInfomobilitaTicker(items: string[]): void {
         return;
     }
 
-    const labelText = createNode("span", { attrs: { "data-i18n": "info_ticker_label" }, text: tickerLabel() });
+    const label = tickerLabel();
+    const labelText = createNode("span", { attrs: { "data-i18n": "info_ticker_label" }, text: label });
     const shell = createNode("div", { className: "home-ticker-shell" }, [
-        createNode("span", { className: "home-ticker-label" }, [
+        createNode("span", { className: "home-ticker-label", attrs: { "aria-label": label } }, [
             createIcon("campaign"),
             labelText,
         ]),

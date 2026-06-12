@@ -1368,7 +1368,8 @@ footer span {
 /* ===== Home infomobilita ticker ===== */
 
 .home-ticker {
-    width: min(100%, 760px);
+    width: 100%;
+    max-width: 42rem;
     margin: 0.35rem auto 1.35rem;
     color: var(--color-base-content);
 }
@@ -1500,6 +1501,19 @@ footer span {
 .info-provider-switch,
 .info-feed-tabs {
     min-width: 0;
+}
+
+.info-provider-switch .board-tab,
+.info-feed-tabs .board-tab {
+    min-width: 0;
+    overflow: hidden;
+}
+
+.info-provider-switch .board-tab span:last-child,
+.info-feed-tabs .board-tab span:last-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .rss-container {
@@ -1686,6 +1700,19 @@ footer span {
     border: 1px solid color-mix(in oklch, var(--color-base-content) 7%, transparent);
 }
 
+a.info-chip {
+    text-decoration: none;
+    transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+a.info-chip:hover,
+a.info-chip:focus-visible {
+    color: var(--color-primary);
+    background: color-mix(in oklch, var(--color-primary) 12%, transparent);
+    border-color: color-mix(in oklch, var(--color-primary) 22%, transparent);
+    transform: translateY(-1px);
+}
+
 .info-chip .material-symbols-outlined,
 .info-notice-date .material-symbols-outlined {
     font-size: 0.95rem;
@@ -1777,15 +1804,36 @@ footer span {
 @media (max-width: 640px) {
     .info-provider-switch,
     .info-feed-tabs {
+        display: grid !important;
+        width: 100%;
         border-radius: 18px;
-        flex-direction: column;
         padding: 5px;
+    }
+
+    .info-provider-switch {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .info-feed-tabs {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
     .info-provider-switch .board-tab,
     .info-feed-tabs .board-tab {
         width: 100%;
         border-radius: 14px;
+        min-height: 3.25rem;
+        padding: 0.45rem 0.35rem;
+        gap: 0.25rem;
+        font-size: 0.78rem;
+        line-height: 1.12;
+        flex-direction: column;
+        white-space: normal;
+    }
+
+    .info-provider-switch .board-tab .material-symbols-outlined,
+    .info-feed-tabs .board-tab .material-symbols-outlined {
+        font-size: 1.05rem !important;
     }
 
     .info-notice-body {
@@ -1800,13 +1848,26 @@ footer span {
     }
 
     .home-ticker-shell {
-        grid-template-columns: 1fr;
-        border-radius: 18px;
-        gap: 6px;
+        grid-template-columns: auto minmax(0, 1fr);
+        border-radius: 999px;
+        gap: 8px;
+        min-height: 38px;
+        padding: 6px 9px;
     }
 
     .home-ticker-label {
         width: fit-content;
+        padding: 4px 7px;
+        font-size: 0.68rem;
+    }
+
+    .home-ticker-label span:not(.material-symbols-outlined) {
+        display: none;
+    }
+
+    .home-ticker-track {
+        font-size: 0.82rem;
+        font-weight: 700;
     }
 }
 

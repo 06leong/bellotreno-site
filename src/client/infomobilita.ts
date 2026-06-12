@@ -457,7 +457,7 @@ function createTrenitaliaJsonCard(notice: TrenitaliaJsonNotice): HTMLDivElement 
   const dateText = formatTimestampDate(notice.pubDate);
   const chips = [
     ...classification.regionTags.map((tag) => createInfoChip(tag, "map")),
-    ...classification.trainTags.map((tag) => createInfoChip(tag, "train")),
+    ...classification.trainTags.map((tag) => createTrainChip(tag)),
   ];
 
   const card = createInfoCardShell({
@@ -594,6 +594,17 @@ function createInfoChip(label: string, iconName: string): HTMLSpanElement {
   ]);
 }
 
+function createTrainChip(trainNumber: string): HTMLAnchorElement {
+  const cleanTrainNumber = normalizeTrainNumber(trainNumber);
+  return createNode("a", {
+    className: "info-chip info-train-chip",
+    href: cleanTrainNumber ? `/?train=${encodeURIComponent(cleanTrainNumber)}` : undefined,
+  }, [
+    createMaterialIcon("train"),
+    createNode("span", { text: trainNumber }),
+  ]);
+}
+
 function sanitizeHtmlString(value: string): DocumentFragment {
   if (!value.trim()) return document.createDocumentFragment();
   const parser = new DOMParser();
@@ -629,14 +640,29 @@ function sanitizeDescriptionNode(node: Node): Node | null {
 
   if (node.tagName === "A") {
     const safeLink = safeHttpUrl(node.getAttribute("href"));
-    if (!safeLink) return sanitizeNodeList(node.childNodes);
-    element.setAttribute("href", safeLink);
+    const trainNumber = extractTrainNumberFromText(node.textContent || "");
+    const internalTrainLink = trainNumber ? `/?train=${encodeURIComponent(trainNumber)}` : "";
+    if (!safeLink && !internalTrainLink) return sanitizeNodeList(node.childNodes);
+    element.setAttribute("href", internalTrainLink || safeLink);
     element.setAttribute("target", "_blank");
     element.setAttribute("rel", "noopener noreferrer");
+    if (internalTrainLink) {
+      element.removeAttribute("target");
+      element.setAttribute("rel", "noopener");
+    }
   }
 
   element.appendChild(sanitizeNodeList(node.childNodes));
   return element;
+}
+
+function normalizeTrainNumber(value: unknown): string {
+  return String(value || "").replace(/\D+/g, "");
+}
+
+function extractTrainNumberFromText(value: string): string {
+  const match = value.match(/\b(?:AV|FR|FA|FB|ICN|IC|EC|EN|RV|REG|RE)?\s*(\d{1,5})\b/i);
+  return match ? normalizeTrainNumber(match[1]) : "";
 }
 
 function getRfiItemDateMs(item: Element): number {
