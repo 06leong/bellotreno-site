@@ -189,6 +189,7 @@ let currentSwissFormationData: SwissFormationPayload | null = null;
 let swissRequestSeq = 0;
 let currentTrenordLineInfo: TrenordLineInfo | null = null;
 let currentItaloTrainNumber: string | null = null;
+let currentTickerItems: string[] = [];
 let lastLoadedTrainSearch = '';
 
 
@@ -196,6 +197,7 @@ const API_BASE = window.API_BASE;
 const NOTIFY_BASE = window.NOTIFY_BASE;
 const TRENORD_TRAFFIC_BASE = window.TRENORD_TRAFFIC_BASE || "/api/trenord/traffic";
 const ITALO_TRAIN_BASE = window.ITALO_TRAIN_BASE || "/api/italo/train";
+const INFOMOBILITA_TICKER_URL = "https://www.viaggiatreno.it/infomobilita/resteasy/viaggiatreno/infomobilitaTicker";
 const translations = window.translations || {};
 const CLIENT_MAP = window.CLIENT_MAP || {};
 const CLIENT_LINK_MAP = window.CLIENT_LINK_MAP || {};
@@ -309,6 +311,96 @@ async function fetchStatistiche() {
     }
 }
 
+function proxiedInfomobilitaUrl(targetUrl: string): string {
+    const proxyBase = window.PROXY_BASE || "https://ah.bellotreno.workers.dev";
+    return `${proxyBase}/?url=${encodeURIComponent(targetUrl)}&ts=${Date.now()}`;
+}
+
+function parseInfomobilitaTickerItems(htmlText: string): string[] {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmlText, "text/html");
+    const items = Array.from(doc.querySelectorAll("li"))
+        .map((item) => item.textContent?.replace(/\s+/g, " ").trim() || "")
+        .filter(Boolean);
+
+    const fallback = doc.body.textContent?.replace(/\s+/g, " ").trim() || "";
+    const rawItems = items.length ? items : fallback ? [fallback] : [];
+    return Array.from(new Set(rawItems));
+}
+
+function tickerLabel(): string {
+    return translations[window.currentLang]?.info_ticker_label || "Live notices";
+}
+
+function createTickerGroup(items: string[]): HTMLSpanElement {
+    return createNode("span", { className: "home-ticker-group" }, items.map((item) => (
+        createNode("span", { className: "home-ticker-item", text: item })
+    )));
+}
+
+function updateTickerOverflow(container: HTMLElement, items: string[]): void {
+    const viewport = container.querySelector<HTMLElement>(".home-ticker-viewport");
+    const track = container.querySelector<HTMLElement>(".home-ticker-track");
+    if (!viewport || !track) return;
+
+    track.replaceChildren(createTickerGroup(items));
+    container.classList.remove("is-overflowing");
+    track.style.removeProperty("--ticker-duration");
+
+    requestAnimationFrame(() => {
+        const firstWidth = track.scrollWidth;
+        const overflowing = firstWidth > viewport.clientWidth;
+        container.classList.toggle("is-overflowing", overflowing);
+        if (!overflowing) return;
+
+        track.appendChild(createTickerGroup(items));
+        const duration = Math.max(28, Math.min(78, Math.round(firstWidth / 22)));
+        track.style.setProperty("--ticker-duration", `${duration}s`);
+    });
+}
+
+function renderInfomobilitaTicker(items: string[]): void {
+    const container = document.getElementById("infomobilitaTicker");
+    if (!container) return;
+
+    if (!items.length) {
+        container.hidden = true;
+        container.replaceChildren();
+        return;
+    }
+
+    const labelText = createNode("span", { attrs: { "data-i18n": "info_ticker_label" }, text: tickerLabel() });
+    const shell = createNode("div", { className: "home-ticker-shell" }, [
+        createNode("span", { className: "home-ticker-label" }, [
+            createIcon("campaign"),
+            labelText,
+        ]),
+        createNode("div", { className: "home-ticker-viewport" }, [
+            createNode("div", { className: "home-ticker-track" }),
+        ]),
+    ]);
+
+    container.replaceChildren(shell);
+    container.hidden = false;
+    updateTickerOverflow(container, items);
+}
+
+async function fetchInfomobilitaTicker(): Promise<void> {
+    const container = document.getElementById("infomobilitaTicker");
+    if (!container) return;
+
+    try {
+        const res = await fetch(proxiedInfomobilitaUrl(INFOMOBILITA_TICKER_URL));
+        if (!res.ok) throw new Error("ticker_fetch_failed");
+        currentTickerItems = parseInfomobilitaTickerItems(await res.text());
+        renderInfomobilitaTicker(currentTickerItems);
+    } catch (e) {
+        console.error("Infomobilita ticker fetch failed:", e);
+        currentTickerItems = [];
+        renderInfomobilitaTicker(currentTickerItems);
+    }
+}
+
 
 
 
@@ -356,6 +448,7 @@ function switchSearchMode(mode: SearchMode) {
 window.onLanguageChanged = function () {
 
     updateSearchLabel();
+    renderInfomobilitaTicker(currentTickerItems);
 
 
     if (disambiguationData) {
@@ -2187,6 +2280,7 @@ document.addEventListener('astro:page-load', () => {
     initApp();
     bindHomeControls();
     fetchStatistiche();
+    fetchInfomobilitaTicker();
 
     const trainInput = document.getElementById('trainSearch');
     if (trainInput) {

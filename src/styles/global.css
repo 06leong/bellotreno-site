@@ -1365,12 +1365,141 @@ footer span {
 
 /* ===== Infomobilit鑴?===== */
 
+/* ===== Home infomobilita ticker ===== */
+
+.home-ticker {
+    width: min(100%, 760px);
+    margin: 0.35rem auto 1.35rem;
+    color: var(--color-base-content);
+}
+
+.home-ticker[hidden] {
+    display: none;
+}
+
+.home-ticker-shell {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+    min-height: 36px;
+    padding: 7px 12px;
+    border-radius: 999px;
+    background: color-mix(in oklch, var(--color-base-100) 70%, transparent);
+    border: 1px solid color-mix(in oklch, var(--color-primary) 22%, transparent);
+    box-shadow:
+        0 1px 2px color-mix(in oklch, var(--color-base-content) 5%, transparent),
+        0 8px 20px -12px color-mix(in oklch, var(--color-primary) 40%, transparent);
+    backdrop-filter: blur(28px);
+    -webkit-backdrop-filter: blur(28px);
+}
+
+.home-ticker-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 9px;
+    border-radius: 999px;
+    color: var(--color-primary);
+    background: color-mix(in oklch, var(--color-primary) 11%, transparent);
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.home-ticker-label .material-symbols-outlined {
+    font-size: 1rem;
+}
+
+.home-ticker-viewport {
+    position: relative;
+    min-width: 0;
+    overflow: hidden;
+    mask-image: linear-gradient(90deg, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%);
+}
+
+.home-ticker-track {
+    display: inline-flex;
+    align-items: center;
+    gap: 2rem;
+    max-width: 100%;
+    white-space: nowrap;
+    font-size: 0.88rem;
+    font-weight: 650;
+    color: color-mix(in oklch, var(--color-base-content) 72%, transparent);
+}
+
+.home-ticker.is-overflowing .home-ticker-track {
+    max-width: none;
+    animation: ticker-marquee var(--ticker-duration, 36s) linear infinite;
+}
+
+.home-ticker-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.home-ticker-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+}
+
+.home-ticker-item::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--color-primary);
+    opacity: 0.72;
+}
+
+@keyframes ticker-marquee {
+    from { transform: translateX(0); }
+    to { transform: translateX(calc(-50% - 1rem)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .home-ticker.is-overflowing .home-ticker-track {
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        animation: none;
+    }
+
+    .home-ticker.is-overflowing .home-ticker-group + .home-ticker-group {
+        display: none;
+    }
+}
+
+/* ===== Infomobilita ===== */
+
 .infomobilita-controls {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 15px;
     margin-bottom: 30px;
+}
+
+.info-source-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+    width: 100%;
+}
+
+.info-source-panel[hidden],
+#trenitaliaFilterDropdown[hidden] {
+    display: none;
+}
+
+.info-provider-switch,
+.info-feed-tabs {
+    min-width: 0;
 }
 
 .rss-container {
@@ -1442,6 +1571,243 @@ footer span {
     justify-content: center;
     align-items: center;
     min-height: 200px;
+}
+
+.info-empty-message {
+    text-align: center;
+    padding: 42px 16px;
+    color: color-mix(in oklch, var(--color-base-content) 62%, transparent);
+}
+
+.info-notice-card {
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 16px;
+    border-radius: 18px;
+    background: color-mix(in oklch, var(--color-base-100) 68%, transparent);
+    border: 1px solid color-mix(in oklch, var(--color-base-content) 10%, transparent);
+    box-shadow:
+        0 1px 2px color-mix(in oklch, var(--color-base-content) 6%, transparent),
+        0 12px 26px -18px color-mix(in oklch, var(--color-base-content) 28%, transparent);
+    backdrop-filter: blur(48px);
+    -webkit-backdrop-filter: blur(48px);
+    transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.info-notice-card:hover {
+    transform: translateY(-1px);
+    background: color-mix(in oklch, var(--color-base-100) 76%, transparent);
+    border-color: color-mix(in oklch, var(--color-primary) 22%, transparent);
+    box-shadow:
+        0 1px 2px color-mix(in oklch, var(--color-base-content) 7%, transparent),
+        0 18px 34px -20px color-mix(in oklch, var(--color-primary) 38%, transparent);
+}
+
+.info-notice-card-evidence {
+    border-color: color-mix(in oklch, var(--color-warning) 34%, var(--color-primary) 14%);
+}
+
+.info-notice-card-evidence::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 4px;
+    background: linear-gradient(180deg, var(--color-warning), var(--color-primary));
+}
+
+.info-notice-body {
+    padding: 20px 22px;
+}
+
+.info-notice-heading-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    gap: 12px;
+}
+
+.info-notice-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 999px;
+    color: var(--color-primary);
+    background: color-mix(in oklch, var(--color-primary) 12%, transparent);
+    flex-shrink: 0;
+}
+
+.info-notice-icon .material-symbols-outlined {
+    font-size: 1.2rem;
+}
+
+.info-notice-title {
+    min-width: 0;
+    margin: 3px 0 0;
+    color: var(--color-base-content);
+    font-family: var(--app-font-heading);
+    font-size: clamp(1.02rem, 1.8vw, 1.22rem);
+    font-weight: 800;
+    line-height: 1.32;
+    overflow-wrap: anywhere;
+}
+
+.info-notice-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 14px;
+    padding-left: 46px;
+}
+
+.info-source-badge,
+.info-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 24px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 0.76rem;
+    font-weight: 750;
+    line-height: 1.1;
+}
+
+.info-source-badge {
+    color: var(--color-primary);
+    background: color-mix(in oklch, var(--color-primary) 12%, transparent);
+}
+
+.info-chip {
+    color: color-mix(in oklch, var(--color-base-content) 75%, transparent);
+    background: color-mix(in oklch, var(--color-base-content) 7%, transparent);
+    border: 1px solid color-mix(in oklch, var(--color-base-content) 7%, transparent);
+}
+
+.info-chip .material-symbols-outlined,
+.info-notice-date .material-symbols-outlined {
+    font-size: 0.95rem;
+}
+
+.info-notice-date {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: color-mix(in oklch, var(--color-base-content) 56%, transparent);
+    font-size: 0.8rem;
+    font-weight: 650;
+}
+
+.info-notice-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 16px;
+    padding-left: 46px;
+}
+
+.info-detail-toggle {
+    color: var(--color-primary);
+    border-color: color-mix(in oklch, var(--color-primary) 20%, transparent);
+    background: color-mix(in oklch, var(--color-primary) 8%, transparent);
+}
+
+.info-detail-toggle:hover {
+    background: color-mix(in oklch, var(--color-primary) 14%, transparent);
+}
+
+.info-detail-toggle .material-symbols-outlined {
+    transition: transform 0.18s ease;
+}
+
+.info-detail-toggle.is-open .material-symbols-outlined {
+    transform: rotate(180deg);
+}
+
+.info-notice-detail {
+    margin: 18px 0 0 46px;
+    padding: 16px 18px;
+    border-radius: 14px;
+    color: color-mix(in oklch, var(--color-base-content) 82%, transparent);
+    background: color-mix(in oklch, var(--color-base-content) 5%, transparent);
+    border: 1px solid color-mix(in oklch, var(--color-base-content) 8%, transparent);
+    font-size: 0.95rem;
+    line-height: 1.62;
+    overflow-wrap: anywhere;
+}
+
+.info-notice-detail[hidden] {
+    display: none;
+}
+
+.info-notice-detail p {
+    margin: 0 0 0.78rem;
+}
+
+.info-notice-detail p:last-child {
+    margin-bottom: 0;
+}
+
+.info-notice-detail ul,
+.info-notice-detail ol {
+    padding-left: 1.15rem;
+    margin: 0.4rem 0 0.8rem;
+}
+
+.info-notice-detail a {
+    color: var(--color-primary);
+    font-weight: 750;
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+}
+
+.trenitalia-kind-regular .info-notice-icon {
+    color: var(--train-green);
+    background: color-mix(in oklch, var(--train-green) 13%, transparent);
+}
+
+.trenitalia-kind-line .info-notice-icon {
+    color: var(--color-warning);
+    background: color-mix(in oklch, var(--color-warning) 14%, transparent);
+}
+
+@media (max-width: 640px) {
+    .info-provider-switch,
+    .info-feed-tabs {
+        border-radius: 18px;
+        flex-direction: column;
+        padding: 5px;
+    }
+
+    .info-provider-switch .board-tab,
+    .info-feed-tabs .board-tab {
+        width: 100%;
+        border-radius: 14px;
+    }
+
+    .info-notice-body {
+        padding: 18px;
+    }
+
+    .info-notice-meta,
+    .info-notice-actions,
+    .info-notice-detail {
+        padding-left: 0;
+        margin-left: 0;
+    }
+
+    .home-ticker-shell {
+        grid-template-columns: 1fr;
+        border-radius: 18px;
+        gap: 6px;
+    }
+
+    .home-ticker-label {
+        width: fit-content;
+    }
 }
 
 /* ===== SmartCaring Card ===== */

@@ -33,6 +33,14 @@ import {
 } from "../../src/lib/normalizers/trenord.ts";
 import type { TrenordNotice } from "../../src/lib/normalizers/trenord.ts";
 import {
+  buildTrenitaliaNoticeKey,
+  classifyTrenitaliaNotice,
+  dedupeTrenitaliaNotices,
+  safeHttpUrl,
+  trenitaliaNoticeMatchesFilter,
+  trenitaliaRegionKeyFromText,
+} from "../../src/lib/normalizers/infomobilita.ts";
+import {
   findItaloStation,
   normalizeRfiLocationCode,
   normalizeItaloStationBoard,
@@ -648,4 +656,57 @@ test("Trenord traffic information reports why no direttrice matched", () => {
   assert.equal(missingDirettrice.available, false);
   assert.equal(missingDirettrice.matchSource, "none");
   assert.equal(missingDirettrice.reason, "direttrice_not_found");
+});
+
+test("Trenitalia infomobility notices classify highlighted line disruptions", () => {
+  const notice = {
+    title: "Linea Catanzaro Lido - Taranto: circolazione sospesa tra Montegiordano e Roseto",
+    link: "https://www.trenitalia.com/content/trenitalia/it/informazioni/Infomobilita/notizie-infomobilita.html",
+    pubDate: 1781215260000,
+    trainTags: ["558", "564"],
+    regionTags: ["Basilicata", "Calabria", "Puglia"],
+    evidenzia: true,
+  };
+
+  const classification = classifyTrenitaliaNotice(notice);
+  assert.equal(classification.kind, "line");
+  assert.equal(classification.isHighlighted, true);
+  assert.deepEqual(classification.regionKeys, ["basilicata", "calabria", "puglia"]);
+  assert.equal(trenitaliaNoticeMatchesFilter(notice, "line_train"), true);
+  assert.equal(trenitaliaNoticeMatchesFilter(notice, "highlighted"), true);
+  assert.equal(trenitaliaNoticeMatchesFilter(notice, "calabria"), true);
+});
+
+test("Trenitalia infomobility region title mapping keeps Alto Adige and Trentino separate", () => {
+  assert.equal(trenitaliaRegionKeyFromText("Alto Adige"), "alto_adige");
+  assert.equal(trenitaliaRegionKeyFromText("TRENTINO"), "trentino");
+  assert.equal(classifyTrenitaliaNotice({ title: "INFOLAVORI ALTO ADIGE" }).regionKeys[0], "alto_adige");
+  assert.equal(classifyTrenitaliaNotice({ title: "INFOLAVORI TRENTINO" }).regionKeys[0], "trentino");
+  assert.equal(classifyTrenitaliaNotice({ title: "INFOLAVORI EMILIA-ROMAGNA" }).regionKeys[0], "emilia_romagna");
+});
+
+test("Trenitalia infomobility safe URL handling rejects unsafe schemes", () => {
+  assert.equal(safeHttpUrl("https://www.trenitalia.com/it/informazioni"), "https://www.trenitalia.com/it/informazioni");
+  assert.equal(safeHttpUrl("http://www.viaggiatreno.it/infomobilita/index.jsp"), "http://www.viaggiatreno.it/infomobilita/index.jsp");
+  assert.equal(safeHttpUrl("javascript:alert(1)"), "");
+  assert.equal(safeHttpUrl("/relative/path"), "");
+});
+
+test("Trenitalia infomobility duplicate-prone keys are accent and spacing stable", () => {
+  const left = {
+    title: "CIRCOLAZIONE REGOLARE SULLA RETE ALTA VELOCITÀ",
+    pubDate: 1781215200000,
+  };
+  const right = {
+    title: "  CIRCOLAZIONE  REGOLARE SULLA RETE ALTA VELOCITA  ",
+    pubDate: 1781215200000,
+  };
+  const otherDate = {
+    title: "CIRCOLAZIONE REGOLARE SULLA RETE ALTA VELOCITÀ",
+    pubDate: 1781215260000,
+  };
+
+  assert.equal(buildTrenitaliaNoticeKey(left), buildTrenitaliaNoticeKey(right));
+  assert.notEqual(buildTrenitaliaNoticeKey(left), buildTrenitaliaNoticeKey(otherDate));
+  assert.deepEqual(dedupeTrenitaliaNotices([left, right, otherDate]), [left, otherDate]);
 });
