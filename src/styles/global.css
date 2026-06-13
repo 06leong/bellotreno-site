@@ -405,8 +405,8 @@ html[data-lang-loading] .hero-typewriter span {
 
 .info-provider-logo {
     display: block;
-    width: 2.4rem;
-    height: 1.25rem;
+    width: 3.8rem;
+    height: 1.45rem;
     object-fit: contain;
     flex-shrink: 0;
 }
@@ -1849,8 +1849,8 @@ a.info-chip:focus-visible {
     }
 
     .info-provider-logo {
-        width: 2.55rem;
-        height: 1.15rem;
+        width: 3.4rem;
+        height: 1.35rem;
     }
 
     .info-notice-body {

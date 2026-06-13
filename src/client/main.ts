@@ -1,4 +1,5 @@
 import { navigateToStationBoard, registerStationNavigationGlobal } from './station-navigation.js';
+import { onBelloLanguageChanged } from './language-events.js';
 import {
     resolveStopTimeStatus,
     type StopTimeStatus
@@ -446,7 +447,8 @@ function switchSearchMode(mode: SearchMode) {
 
 
 
-window.onLanguageChanged = function () {
+onBelloLanguageChanged(() => {
+    if (!isHomePage()) return;
 
     updateSearchLabel();
     renderInfomobilitaTicker(currentTickerItems);
@@ -465,7 +467,7 @@ window.onLanguageChanged = function () {
     } else if (currentSmartCaringData) {
         renderSmartCaring(currentSmartCaringData);
     }
-};
+});
 
 
 function goHome() {
@@ -2252,9 +2254,14 @@ window.addEventListener('resize', hideScTooltip);
 
 function initApp() {
 
+    if (!isHomePage()) return;
 
     updateSearchLabel();
     loadRecentSearches();
+}
+
+function isHomePage(): boolean {
+    return Boolean(document.getElementById('trainSearch'));
 }
 
 function bindHomeControls() {
@@ -2278,6 +2285,7 @@ function bindHomeControls() {
 
 
 document.addEventListener('astro:page-load', () => {
+    if (!isHomePage()) return;
     initApp();
     bindHomeControls();
     fetchStatistiche();

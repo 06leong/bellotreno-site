@@ -7,6 +7,7 @@ import {
   type TrenitaliaNoticeKind,
   type TrenitaliaFilterKey,
 } from "../lib/normalizers/infomobilita.js";
+import { onBelloLanguageChanged } from "./language-events.js";
 
 export {};
 
@@ -106,14 +107,20 @@ let currentTrenitaliaFilter: TrenitaliaFilterKey = "all";
 let currentFetchController: AbortController | null = null;
 
 document.addEventListener("astro:page-load", () => {
+  if (!isInfomobilitaPage()) return;
   bindInfomobilitaControls();
   renderProviderState();
   void loadCurrentView();
 });
 
-window.onLanguageChanged = () => {
+onBelloLanguageChanged(() => {
+  if (!isInfomobilitaPage()) return;
   void loadCurrentView();
-};
+});
+
+function isInfomobilitaPage(): boolean {
+  return Boolean(document.getElementById("rssContent"));
+}
 
 function createNode<K extends keyof HTMLElementTagNameMap>(
   tagName: K,

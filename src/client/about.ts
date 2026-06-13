@@ -1,4 +1,4 @@
-export {};
+import { onBelloLanguageChanged } from "./language-events.js";
 
 type Language = NonNullable<Window["currentLang"]>;
 type AboutSection = "intro" | "roadmap" | "technical" | "official" | "disclaimer";
@@ -53,4 +53,6 @@ function renderAboutContent(): void {
 }
 
 document.addEventListener("astro:page-load", renderAboutContent);
-window.onLanguageChanged = renderAboutContent;
+onBelloLanguageChanged(() => {
+    renderAboutContent();
+});
