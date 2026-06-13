@@ -317,6 +317,8 @@ fetch("https://ah.bellotreno.workers.dev/?url=https://www.viaggiatreno.it/.../an
 - Light, dark, and system theme preferences.
 - Train category badges and operator logos, including the Trenitalia operator
   link rendered as the Trenitalia SVG logo in train detail headers.
+- Train detail category logos prefer SVG assets for FR, FA, FB, IC, ICN, RV,
+  Trenitalia TPER, and FS Treni Turistici Italiani.
 - Platform-change highlighting.
 - Recent searches in localStorage.
 - Homepage Trenitalia ticker below the daily running-train statistics.

@@ -1440,7 +1440,7 @@ function render(data: TrainData): void {
 
 
     if (data.codiceCliente === 77) {
-        categoryImage = "pic/TTI.png";
+        categoryImage = "pic/TTI.svg";
     }
 
     if (operator === "Trenord" && currentSwissFormationData?.available && ['REG', 'RE', 'RV', 'S'].includes(catCode)) {
