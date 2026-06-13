@@ -29,8 +29,8 @@ BelloTreno helps users inspect the current state of Italian railway services:
 - Open station boards for departures and arrivals, including platform changes and
   destination information. Supported Italo departures and arrivals are merged
   into matching ViaggiaTreno station pages.
-- Read RFI and Trenitalia infomobility notices, including operator news, RSS
-  circulation/lavori feeds, highlighted disruptions, and regional filters.
+- Read RFI and Trenitalia infomobility notices, including Trenitalia
+  NewsService categories, highlighted disruptions, and regional filters.
 - View supported Swiss cross-border train formations, including coach order,
   platform sectors, accessibility, bicycle, seat, and vehicle details.
 - Enrich selected EC, TILO, SBB/Trenord regional, and other Swiss-linked services
@@ -78,7 +78,8 @@ BelloTreno combines public and externally proxied railway data:
 - Italo in Viaggio public realtime train and station-board data for supported
   high-speed services.
 - RFI public travel notice feeds.
-- Trenitalia / ViaggiaTreno infomobility ticker, RSS, and NewsService feeds.
+- Trenitalia / ViaggiaTreno infomobility ticker and NewsService feed.
+- RFI public travel notice RSS feeds.
 - ViaggiaTreno SmartCaring notices for supported services.
 - OpenTransportData.swiss Train Formation Service for selected Swiss cross-border
   formations.

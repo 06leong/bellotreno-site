@@ -21,7 +21,22 @@ export type TrenitaliaRegionKey =
   | "valle_d_aosta"
   | "veneto";
 
-export type TrenitaliaNoticeKind = "regular" | "line" | "infotreni" | "infolavori" | "other";
+export type TrenitaliaNoticeKind =
+  | "regular"
+  | "av_disruption"
+  | "line"
+  | "infotreni"
+  | "regional"
+  | "infolavori"
+  | "other";
+
+export type TrenitaliaNoticeBadgeKey =
+  | "alta_velocita"
+  | "linea"
+  | "infotreni"
+  | "regionale"
+  | "infolavori"
+  | "avviso";
 
 export type TrenitaliaFilterKey =
   | "all"
@@ -47,6 +62,7 @@ export interface TrenitaliaInfomobilityNoticeInput {
 }
 
 export interface TrenitaliaNoticeClassification {
+  badgeKey: TrenitaliaNoticeBadgeKey;
   filterKeys: TrenitaliaFilterKey[];
   isHighlighted: boolean;
   kind: TrenitaliaNoticeKind;
@@ -131,6 +147,10 @@ function classifyKind(title: string, trainTags: string[], regionTags: string[]):
   const normalizedTitle = normalizeForMatch(title);
   if (normalizedTitle.startsWith("INFOLAVORI ")) return "infolavori";
   if (normalizedTitle.startsWith("INFOTRENI ")) return "infotreni";
+  if (normalizedTitle.startsWith("INFORMAZIONI SUL TRASPORTO REGIONALE")) return "regional";
+  if (normalizedTitle.includes("ALTA VELOCITA") && !normalizedTitle.includes("CIRCOLAZIONE REGOLARE")) {
+    return "av_disruption";
+  }
   if (
     trainTags.length > 0
     || regionTags.length > 0
@@ -142,6 +162,15 @@ function classifyKind(title: string, trainTags: string[], regionTags: string[]):
   }
   if (normalizedTitle.includes("CIRCOLAZIONE REGOLARE")) return "regular";
   return "other";
+}
+
+function badgeKeyForKind(kind: TrenitaliaNoticeKind): TrenitaliaNoticeBadgeKey {
+  if (kind === "regular" || kind === "av_disruption") return "alta_velocita";
+  if (kind === "line") return "linea";
+  if (kind === "infotreni") return "infotreni";
+  if (kind === "regional") return "regionale";
+  if (kind === "infolavori") return "infolavori";
+  return "avviso";
 }
 
 export function classifyTrenitaliaNotice(
@@ -168,12 +197,13 @@ export function classifyTrenitaliaNotice(
   const isHighlighted = notice.evidenzia === true;
   const filterKeys = new Set<TrenitaliaFilterKey>(["all"]);
   if (isHighlighted) filterKeys.add("highlighted");
-  if (kind === "line") filterKeys.add("line_train");
-  if (kind === "infotreni") filterKeys.add("infotreni");
+  if (kind === "line" || kind === "av_disruption") filterKeys.add("line_train");
+  if (kind === "infotreni" || kind === "regional") filterKeys.add("infotreni");
   if (kind === "infolavori") filterKeys.add("infolavori");
   for (const key of regionKeys) filterKeys.add(key);
 
   return {
+    badgeKey: badgeKeyForKind(kind),
     filterKeys: Array.from(filterKeys),
     isHighlighted,
     kind,

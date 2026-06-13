@@ -100,9 +100,9 @@ html[data-lang-loading] [data-i18n-section] {
 :root {
     --color-info-badge-text: #253a4c;
     --color-info-badge-bg: rgba(74, 104, 125, 0.15); /* #4a687d 15% */
-    --color-readmore-bg: #4a687d;
-    --color-readmore-hover: #354e60;
-    --color-readmore-text: #ffffff;
+    --color-readmore-bg: rgba(106, 138, 159, 0.20);
+    --color-readmore-hover: rgba(106, 138, 159, 0.30);
+    --color-readmore-text: #1e3446;
     --color-region-dropdown-text: #4a687d;
     --color-region-dropdown-border: rgba(74, 104, 125, 0.2);
 }
@@ -251,19 +251,13 @@ a:focus-visible {
 }
 
 .aurora-bg::before {
-    opacity: 0.6;
-    background:
-        repeating-linear-gradient(90deg, transparent 0 70px, var(--page-bg-line) 70px 72px, transparent 72px 144px),
-        repeating-linear-gradient(0deg, transparent 0 70px, var(--page-bg-rail) 70px 72px, transparent 72px 144px);
-    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 12%, #000 74%, transparent 100%);
-    mask-image: linear-gradient(to bottom, transparent 0%, #000 12%, #000 74%, transparent 100%);
+    display: none;
 }
 
 .aurora-bg::after {
     background:
         linear-gradient(to bottom, transparent 0%, var(--page-bg-vignette) 100%),
-        linear-gradient(90deg, color-mix(in oklch, var(--page-bg-base) 34%, transparent) 0%, transparent 18%, transparent 82%, color-mix(in oklch, var(--page-bg-base) 32%, transparent) 100%),
-        repeating-linear-gradient(0deg, transparent 0 218px, color-mix(in oklch, var(--color-base-content) 4%, transparent) 218px 219px, transparent 219px 436px);
+        linear-gradient(90deg, color-mix(in oklch, var(--page-bg-base) 34%, transparent) 0%, transparent 18%, transparent 82%, color-mix(in oklch, var(--page-bg-base) 32%, transparent) 100%);
 }
 
 .hero-typewriter {
@@ -1498,19 +1492,16 @@ footer span {
     display: none;
 }
 
-.info-provider-switch,
-.info-feed-tabs {
+.info-provider-switch {
     min-width: 0;
 }
 
-.info-provider-switch .board-tab,
-.info-feed-tabs .board-tab {
+.info-provider-switch .board-tab {
     min-width: 0;
     overflow: hidden;
 }
 
-.info-provider-switch .board-tab span:last-child,
-.info-feed-tabs .board-tab span:last-child {
+.info-provider-switch .board-tab span:last-child {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1801,9 +1792,28 @@ a.info-chip:focus-visible {
     background: color-mix(in oklch, var(--color-warning) 14%, transparent);
 }
 
+.trenitalia-kind-av_disruption .info-notice-icon {
+    color: var(--color-warning);
+    background: color-mix(in oklch, var(--color-warning) 14%, transparent);
+}
+
+.trenitalia-kind-infotreni .info-notice-icon {
+    color: var(--color-primary);
+    background: color-mix(in oklch, var(--color-primary) 12%, transparent);
+}
+
+.trenitalia-kind-regional .info-notice-icon {
+    color: var(--color-info);
+    background: color-mix(in oklch, var(--color-info) 12%, transparent);
+}
+
+.trenitalia-kind-infolavori .info-notice-icon {
+    color: var(--color-warning);
+    background: color-mix(in oklch, var(--color-warning) 14%, transparent);
+}
+
 @media (max-width: 640px) {
-    .info-provider-switch,
-    .info-feed-tabs {
+    .info-provider-switch {
         display: grid !important;
         width: 100%;
         border-radius: 18px;
@@ -1814,12 +1824,7 @@ a.info-chip:focus-visible {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .info-feed-tabs {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-
-    .info-provider-switch .board-tab,
-    .info-feed-tabs .board-tab {
+    .info-provider-switch .board-tab {
         width: 100%;
         border-radius: 14px;
         min-height: 3.25rem;
@@ -1831,8 +1836,7 @@ a.info-chip:focus-visible {
         white-space: normal;
     }
 
-    .info-provider-switch .board-tab .material-symbols-outlined,
-    .info-feed-tabs .board-tab .material-symbols-outlined {
+    .info-provider-switch .board-tab .material-symbols-outlined {
         font-size: 1.05rem !important;
     }
 
@@ -1841,10 +1845,15 @@ a.info-chip:focus-visible {
     }
 
     .info-notice-meta,
-    .info-notice-actions,
-    .info-notice-detail {
+    .info-notice-actions {
         padding-left: 0;
         margin-left: 0;
+    }
+
+    .info-notice-detail {
+        width: min(100%, calc(100vw - 48px));
+        margin: 18px auto 0;
+        padding: 20px 24px;
     }
 
     .home-ticker-shell {

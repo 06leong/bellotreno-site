@@ -22,7 +22,7 @@ BelloTreno currently has five main pages:
   changes, weather, delays, cancellations, reroutes, and conservative Swiss
   cross-border endpoint completion. Confirmed Italo station boards are merged
   into matching ViaggiaTreno station pages.
-- `/infomobilita`: Trenitalia infomobility news/RSS notices by default, with a
+- `/infomobilita`: Trenitalia NewsService infomobility notices by default, with a
   switch back to RFI public travel notices and regional filters.
 - `/statistics`: daily observable railway operations, including running trains,
   status distribution, punctuality, categories, train search, station search,
@@ -35,7 +35,7 @@ The main data paths are:
    `ah.bellotreno.workers.dev`, which forwards through the VPS `rfi-proxy`.
    The VPS uses `curl_cffi` to mimic a browser TLS fingerprint before calling
    the official APIs. This includes train/station data plus the homepage
-   `infomobilitaTicker` and Trenitalia `/infomobilita` news/RSS feeds.
+   `infomobilitaTicker` and Trenitalia `/infomobilita` NewsService feed.
 2. **Italo in Viaggio real-time data**: `/api/italo/*` Pages Functions resolve
    confirmed Italo station mappings and call Italo train/station endpoints
    through the VPS proxy when configured.
@@ -257,7 +257,7 @@ exposing upstream tokens to browser code.
 | --- | --- |
 | `/` | Train search, station search, train detail timeline |
 | `/station?id=&name=&type=` | Departure/arrival station boards |
-| `/infomobilita` | Trenitalia infomobility news/RSS notices and RFI RSS travel notices |
+| `/infomobilita` | Trenitalia NewsService infomobility notices and RFI RSS travel notices |
 | `/statistics` | Daily railway operating statistics |
 | `/about` | Project description |
 
@@ -275,7 +275,7 @@ Astro/Vite-managed TypeScript modules. `src/client/**/*.ts` is checked with
 | `src/client/main.ts` | homepage search, homepage infomobilita ticker, train details, SmartCaring and Trenord cards |
 | `src/client/station.ts` | station departure/arrival boards |
 | `src/client/station-navigation.ts` | canonical station-board URL building |
-| `src/client/infomobilita.ts` | Trenitalia NewsService/RSS and RFI RSS notice page |
+| `src/client/infomobilita.ts` | Trenitalia NewsService and RFI RSS notice page |
 | `src/client/statistics.ts` | statistics dashboard, charts, table, pagination, CSV links |
 | `src/client/swiss.ts` | Swiss formation fetch/cache, timeline merge, coach strip |
 | `src/client/about.ts` | localized About-page static content |
@@ -319,8 +319,8 @@ fetch("https://ah.bellotreno.workers.dev/?url=https://www.viaggiatreno.it/.../an
 - Platform-change highlighting.
 - Recent searches in localStorage.
 - Homepage Trenitalia ticker below the daily running-train statistics.
-- Trenitalia infomobility notices with NewsService/RSS tabs, highlighted/line
-  filters, and separate Alto Adige/Trentino regional filters.
+- Trenitalia infomobility notices from NewsService, with category badges,
+  highlighted/line filters, and separate Alto Adige/Trentino regional filters.
 - RFI notice filtering by Italian region.
 - SmartCaring 14-day operating history for supported categories.
 - Trenord line-level Traffic info for Trenord trains.
@@ -461,7 +461,7 @@ Data sources
   ViaggiaTreno REST API
   Italo in Viaggio public realtime endpoints
   RFI RSS feeds
-  Trenitalia / ViaggiaTreno infomobility ticker, RSS, and NewsService feeds
+  Trenitalia / ViaggiaTreno infomobility ticker and NewsService feed
   OpenTransportData.swiss Train Formation API
   Trenord upstream feeds
   VPS statistics SQLite / JSON cache
