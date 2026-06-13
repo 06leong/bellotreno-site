@@ -321,6 +321,9 @@ fetch("https://ah.bellotreno.workers.dev/?url=https://www.viaggiatreno.it/.../an
 - Homepage Trenitalia ticker below the daily running-train statistics.
 - Trenitalia infomobility notices from NewsService, with category badges,
   highlighted/line filters, and separate Alto Adige/Trentino regional filters.
+- Trenitalia notice cards intentionally omit the external source button because
+  NewsService links resolve to the generic Trenitalia infomobility page; RFI
+  notice cards keep per-item source links.
 - RFI notice filtering by Italian region.
 - SmartCaring 14-day operating history for supported categories.
 - Trenord line-level Traffic info for Trenord trains.

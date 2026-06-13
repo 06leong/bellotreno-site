@@ -1753,7 +1753,7 @@ a.info-chip:focus-visible {
 }
 
 .info-notice-detail {
-    margin: 18px 0 0 46px;
+    margin: 18px 46px 0;
     padding: 16px 18px;
     border-radius: 14px;
     color: color-mix(in oklch, var(--color-base-content) 82%, transparent);

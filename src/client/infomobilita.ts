@@ -402,7 +402,6 @@ function createTrenitaliaJsonCard(notice: TrenitaliaJsonNotice): HTMLDivElement 
     detail: detailFragment,
     evidence: classification.isHighlighted,
     icon: getTrenitaliaIcon(classification.kind),
-    link: classification.safeLink,
     sourceLabel,
     title: classification.title,
     chips,
