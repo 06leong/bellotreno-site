@@ -617,11 +617,26 @@ html[data-lang-loading] .hero-typewriter span {
     opacity: 0.7;
 }
 
+.operator-logo-link {
+    display: inline-flex;
+    align-items: center;
+    color: inherit;
+    line-height: 1;
+    text-decoration: none;
+}
+
 .op-cat-row img {
     display: inline-block;
     vertical-align: middle;
     height: 1.3rem;
     margin-left: 4px;
+}
+
+.op-cat-row .operator-logo-img {
+    width: 4.6rem;
+    height: 1.5rem;
+    margin-left: 0;
+    object-fit: contain;
 }
 
 .category-logo {

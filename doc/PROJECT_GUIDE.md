@@ -315,7 +315,8 @@ fetch("https://ah.bellotreno.workers.dev/?url=https://www.viaggiatreno.it/.../an
 
 - Three languages: Chinese, English, Italian.
 - Light, dark, and system theme preferences.
-- Train category badges and operator logos.
+- Train category badges and operator logos, including the Trenitalia operator
+  link rendered as the Trenitalia SVG logo in train detail headers.
 - Platform-change highlighting.
 - Recent searches in localStorage.
 - Homepage Trenitalia ticker below the daily running-train statistics.

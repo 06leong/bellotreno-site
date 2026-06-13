@@ -296,6 +296,38 @@ function getCategoryLogoClass(src: unknown): string {
         : 'category-logo';
 }
 
+function createOperatorNode(operator: string, operatorLink: string): Node {
+    if (operator === 'Trenitalia' && operatorLink !== '#') {
+        return createNode('a', {
+            className: 'operator-logo-link',
+            href: operatorLink,
+            target: '_blank',
+            rel: 'noopener noreferrer',
+            title: operator,
+            attrs: { 'aria-label': operator }
+        }, [
+            createNode('img', {
+                className: 'operator-logo-img',
+                attrs: {
+                    src: '/pic/trenitalia%20logo.svg',
+                    alt: operator,
+                    decoding: 'async'
+                }
+            })
+        ]);
+    }
+
+    return operatorLink !== "#"
+        ? createNode('a', {
+            text: operator,
+            href: operatorLink,
+            target: '_blank',
+            rel: 'noopener noreferrer',
+            style: { color: 'inherit', textDecoration: 'none' }
+        })
+        : document.createTextNode(operator);
+}
+
 async function fetchStatistiche() {
     try {
         const res = await fetch(API_BASE + '/statistiche/0');
@@ -1439,15 +1471,7 @@ function render(data: TrainData): void {
     }, [createIcon('refresh')]);
     refreshBtn.addEventListener('click', refreshTrainData);
 
-    const operatorNode = operatorLink !== "#"
-        ? createNode('a', {
-            text: operator,
-            href: operatorLink,
-            target: '_blank',
-            rel: 'noopener noreferrer',
-            style: { color: 'inherit', textDecoration: 'none' }
-        })
-        : document.createTextNode(operator);
+    const operatorNode = createOperatorNode(operator, operatorLink);
     const categoryNode = categoryImage
         ? createNode('img', {
             className: getCategoryLogoClass(categoryImage),
