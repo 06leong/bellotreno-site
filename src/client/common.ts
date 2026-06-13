@@ -1,4 +1,4 @@
-export {};
+import { dispatchBelloLanguageChanged } from './language-events.js';
 
 /**
  * BelloTreno - Common UI Logic
@@ -69,8 +69,6 @@ function updateLanguage() {
         visitorCountEl.textContent = template.replace('{count}', String(window.visitorCountData));
     }
 
-    if (window.onLanguageChanged) window.onLanguageChanged();
-
     document.documentElement.removeAttribute('data-lang-loading');
 }
 
@@ -79,6 +77,7 @@ function changeLang(lang: Language) {
     document.documentElement.setAttribute('data-lang', lang);
     localStorage.setItem('language', lang);
     updateLanguage();
+    dispatchBelloLanguageChanged(window.currentLang);
 }
 
 // ========== Theme Management ==========

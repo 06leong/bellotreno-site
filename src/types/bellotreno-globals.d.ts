@@ -61,7 +61,6 @@ declare global {
     initLanguage?: () => void;
     initTheme?: () => void;
     initVisitorCounter?: () => Promise<void>;
-    onLanguageChanged?: () => void;
     searchMode?: "train" | "station";
     switchSearchMode?: (mode: "train" | "station") => void;
     translations?: TranslationDictionary;

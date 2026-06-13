@@ -24,43 +24,19 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                         id="providerTrenitaliaBtn"
                         type="button"
                         class="board-tab active flex-1 flex items-center justify-center gap-1.5 py-2 px-4 text-sm font-medium rounded-full cursor-pointer transition-all">
-                        <span class="material-symbols-outlined text-[1.25rem]">train</span>
+                        <img src="/pic/trenitalia%20logo.svg" alt="" aria-hidden="true" class="info-provider-logo" decoding="async" />
                         <span data-i18n="info_provider_trenitalia">Trenitalia</span>
                     </button>
                     <button
                         id="providerRfiBtn"
                         type="button"
                         class="board-tab flex-1 flex items-center justify-center gap-1.5 py-2 px-4 text-sm font-medium rounded-full cursor-pointer transition-all">
-                        <span class="material-symbols-outlined text-[1.25rem]">account_balance</span>
+                        <img src="/pic/infomobilita-logo.svg" alt="" aria-hidden="true" class="info-provider-logo" decoding="async" />
                         <span data-i18n="info_provider_rfi">RFI</span>
                     </button>
                 </div>
 
                 <div id="trenitaliaControls" class="info-source-panel">
-                    <div class="info-feed-tabs flex justify-center mx-auto w-[640px] max-w-full bg-base-200/50 p-1 rounded-full border border-base-200 shadow-sm backdrop-blur">
-                        <button
-                            id="trenitaliaNewsBtn"
-                            type="button"
-                            class="board-tab active flex-1 flex items-center justify-center gap-1.5 py-2 px-3 text-sm font-medium rounded-full cursor-pointer transition-all">
-                            <span class="material-symbols-outlined text-[1.18rem]">newspaper</span>
-                            <span data-i18n="trenitalia_news_service">NewsService</span>
-                        </button>
-                        <button
-                            id="trenitaliaRssCirculationBtn"
-                            type="button"
-                            class="board-tab flex-1 flex items-center justify-center gap-1.5 py-2 px-3 text-sm font-medium rounded-full cursor-pointer transition-all">
-                            <span class="material-symbols-outlined text-[1.18rem]">rss_feed</span>
-                            <span data-i18n="trenitalia_rss_circulation">RSS circulation</span>
-                        </button>
-                        <button
-                            id="trenitaliaRssWorksBtn"
-                            type="button"
-                            class="board-tab flex-1 flex items-center justify-center gap-1.5 py-2 px-3 text-sm font-medium rounded-full cursor-pointer transition-all">
-                            <span class="material-symbols-outlined text-[1.18rem]">engineering</span>
-                            <span data-i18n="trenitalia_rss_works">RSS works</span>
-                        </button>
-                    </div>
-
                     <div class="dropdown w-[480px] max-w-full mx-auto" id="trenitaliaFilterDropdown">
                         <div tabindex="0" role="button" class="btn btn-lg w-full bg-base-100/65 backdrop-blur-3xl shadow-glass custom-region-dropdown focus:outline-none focus:border-primary transition-all font-medium rounded-full flex justify-center hover:bg-base-100/75 h-14 min-h-[3.5rem]">
                             <span id="trenitaliaFilterBtnText" data-i18n="trenitalia_filter_all" class="text-[1.05rem]">All Trenitalia notices</span>

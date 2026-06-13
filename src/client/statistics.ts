@@ -1,4 +1,4 @@
-export {};
+import { onBelloLanguageChanged } from "./language-events.js";
 
 (function () {
     type StatisticsView = "trains" | "stations" | "relations" | "ranking";
@@ -524,7 +524,7 @@ export {};
         }
         const cadenceEl = $("statisticsCadence");
         if (cadenceEl) {
-            cadenceEl.textContent = cadence ? `${cadence} ${tr("minutes", "min")} - ${tr("statistics_fixed_schedule", "fixed slots")}` : "--";
+            cadenceEl.textContent = cadence ? `${cadence} ${tr("minutes", "min")}` : "--";
             cadenceEl.title = nextScheduledAt
                 ? `${tr("statistics_next_run", "Next scheduled run")}: ${formatDateTime(nextScheduledAt)}`
                 : "";
@@ -1213,10 +1213,10 @@ export {};
         loadCore();
     }
 
-    window.onLanguageChanged = () => {
+    onBelloLanguageChanged(() => {
         if (!$("statisticsMetrics")) return;
         renderAll();
-    };
+    });
 
     document.addEventListener("astro:page-load", initStatisticsPage);
 })();

@@ -3,14 +3,16 @@ import {
   classifyTrenitaliaNotice,
   dedupeTrenitaliaNotices,
   safeHttpUrl,
+  type TrenitaliaNoticeBadgeKey,
+  type TrenitaliaNoticeKind,
   type TrenitaliaFilterKey,
 } from "../lib/normalizers/infomobilita.js";
+import { onBelloLanguageChanged } from "./language-events.js";
 
 export {};
 
 type ProviderMode = "trenitalia" | "rfi";
 type RfiMode = "updates" | "notices";
-type TrenitaliaFeedMode = "news" | "rss-circulation" | "rss-works";
 type RegionKey =
   | "all"
   | "abruzzo"
@@ -51,13 +53,6 @@ interface TrenitaliaJsonNotice {
   trainTags?: string[];
 }
 
-interface TrenitaliaRssNotice {
-  contentElement: Element | null;
-  dateText: string;
-  evidence: boolean;
-  title: string;
-}
-
 interface NodeOptions {
   attrs?: Record<string, unknown>;
   className?: string;
@@ -73,7 +68,6 @@ interface NodeOptions {
 type NodeChild = Node | string | number | boolean | null | undefined;
 
 const translations = window.translations || {};
-const VIAGGIATRENO_SERVICE_BASE = "https://www.viaggiatreno.it/infomobilita/resteasy/viaggiatreno";
 const VIAGGIATRENO_NEWS_BASE = "https://www.viaggiatreno.it/infomobilita/resteasy/news";
 const ALLOWED_DESCRIPTION_TAGS = new Set(["P", "BR", "B", "STRONG", "I", "EM", "U", "UL", "OL", "LI", "A"]);
 
@@ -109,19 +103,24 @@ const REGIONS: Record<RegionKey, string> = {
 let currentProvider: ProviderMode = "trenitalia";
 let currentRfiMode: RfiMode = "updates";
 let currentRfiRegion: RegionKey = "all";
-let currentTrenitaliaFeed: TrenitaliaFeedMode = "news";
 let currentTrenitaliaFilter: TrenitaliaFilterKey = "all";
 let currentFetchController: AbortController | null = null;
 
 document.addEventListener("astro:page-load", () => {
+  if (!isInfomobilitaPage()) return;
   bindInfomobilitaControls();
   renderProviderState();
   void loadCurrentView();
 });
 
-window.onLanguageChanged = () => {
+onBelloLanguageChanged(() => {
+  if (!isInfomobilitaPage()) return;
   void loadCurrentView();
-};
+});
+
+function isInfomobilitaPage(): boolean {
+  return Boolean(document.getElementById("rssContent"));
+}
 
 function createNode<K extends keyof HTMLElementTagNameMap>(
   tagName: K,
@@ -192,9 +191,6 @@ function isTrenitaliaFilterKey(value: string | undefined): value is TrenitaliaFi
 function bindInfomobilitaControls(): void {
   bindProviderButton("providerTrenitaliaBtn", "trenitalia");
   bindProviderButton("providerRfiBtn", "rfi");
-  bindTrenitaliaFeedButton("trenitaliaNewsBtn", "news");
-  bindTrenitaliaFeedButton("trenitaliaRssCirculationBtn", "rss-circulation");
-  bindTrenitaliaFeedButton("trenitaliaRssWorksBtn", "rss-works");
   bindRfiModeButton("modeUpdatesBtn", "updates");
   bindRfiModeButton("modeNoticesBtn", "notices");
 
@@ -228,18 +224,6 @@ function bindProviderButton(id: string, provider: ProviderMode): void {
   button.addEventListener("click", () => {
     if (currentProvider === provider) return;
     currentProvider = provider;
-    renderProviderState();
-    void loadCurrentView();
-  });
-}
-
-function bindTrenitaliaFeedButton(id: string, feed: TrenitaliaFeedMode): void {
-  const button = document.getElementById(id);
-  if (!button || button.dataset.btBound) return;
-  button.dataset.btBound = "true";
-  button.addEventListener("click", () => {
-    if (currentTrenitaliaFeed === feed) return;
-    currentTrenitaliaFeed = feed;
     renderProviderState();
     void loadCurrentView();
   });
@@ -295,13 +279,6 @@ function renderProviderState(): void {
   document.getElementById("trenitaliaControls")?.toggleAttribute("hidden", currentProvider !== "trenitalia");
   document.getElementById("rfiControls")?.toggleAttribute("hidden", currentProvider !== "rfi");
 
-  document.getElementById("trenitaliaNewsBtn")?.classList.toggle("active", currentTrenitaliaFeed === "news");
-  document
-    .getElementById("trenitaliaRssCirculationBtn")
-    ?.classList.toggle("active", currentTrenitaliaFeed === "rss-circulation");
-  document.getElementById("trenitaliaRssWorksBtn")?.classList.toggle("active", currentTrenitaliaFeed === "rss-works");
-  document.getElementById("trenitaliaFilterDropdown")?.toggleAttribute("hidden", currentTrenitaliaFeed !== "news");
-
   document.getElementById("modeUpdatesBtn")?.classList.toggle("active", currentRfiMode === "updates");
   document.getElementById("modeNoticesBtn")?.classList.toggle("active", currentRfiMode === "notices");
 }
@@ -348,11 +325,7 @@ async function loadCurrentView(): Promise<void> {
 
   try {
     if (currentProvider === "trenitalia") {
-      if (currentTrenitaliaFeed === "news") {
-        await fetchTrenitaliaNews(signal);
-      } else {
-        await fetchTrenitaliaRss(signal, currentTrenitaliaFeed === "rss-works");
-      }
+      await fetchTrenitaliaNews(signal);
     } else {
       await fetchRfiRss(signal);
     }
@@ -388,23 +361,6 @@ async function fetchTrenitaliaNews(signal: AbortSignal): Promise<void> {
   replaceContent(document.getElementById("rssContent"), filtered.map(createTrenitaliaJsonCard));
 }
 
-async function fetchTrenitaliaRss(signal: AbortSignal, isInfoLavori: boolean): Promise<void> {
-  const endpoint = `${VIAGGIATRENO_SERVICE_BASE}/infomobilitaRSS/${isInfoLavori ? "true" : "false"}`;
-  const response = await fetch(proxiedUrl(endpoint), { signal });
-  if (!response.ok) throw new Error("Network response was not ok");
-
-  const htmlText = await response.text();
-  const notices = parseTrenitaliaRss(htmlText);
-  if (notices.length === 0) {
-    const message = createInfoMessage(getI18n("no_info_found"));
-    message.setAttribute("data-i18n", "no_info_found");
-    replaceContent(document.getElementById("rssContent"), [message]);
-    return;
-  }
-
-  replaceContent(document.getElementById("rssContent"), notices.map((notice) => createTrenitaliaRssCard(notice, isInfoLavori)));
-}
-
 async function fetchRfiRss(signal: AbortSignal): Promise<void> {
   const regionSuffix = REGIONS[currentRfiRegion];
   const targetUrl = `${RFI_RSS_BASE_URLS[currentRfiMode]}${regionSuffix}.xml`;
@@ -431,29 +387,10 @@ function isTrenitaliaJsonNotice(value: unknown): value is TrenitaliaJsonNotice {
   return Boolean(value && typeof value === "object" && "title" in value);
 }
 
-function parseTrenitaliaRss(htmlText: string): TrenitaliaRssNotice[] {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(htmlText, "text/html");
-  return Array.from(doc.querySelectorAll("li.editModeCollapsibleElement"))
-    .map((item): TrenitaliaRssNotice | null => {
-      const heading = item.querySelector(".headingNewsAccordion");
-      const title = heading?.textContent?.trim() || "";
-      if (!heading || !title) return null;
-
-      return {
-        contentElement: item.querySelector(".info-text"),
-        dateText: item.querySelector("h4")?.textContent?.trim() || "",
-        evidence: heading.classList.contains("inEvidenza"),
-        title,
-      };
-    })
-    .filter((notice): notice is TrenitaliaRssNotice => Boolean(notice));
-}
-
 function createTrenitaliaJsonCard(notice: TrenitaliaJsonNotice): HTMLDivElement {
   const classification = classifyTrenitaliaNotice(notice);
   const detailFragment = sanitizeHtmlString(notice.description || "");
-  const sourceLabel = getI18n("trenitalia_source_news");
+  const sourceLabel = getTrenitaliaBadgeLabel(classification.badgeKey);
   const dateText = formatTimestampDate(notice.pubDate);
   const chips = [
     ...classification.regionTags.map((tag) => createInfoChip(tag, "map")),
@@ -464,7 +401,7 @@ function createTrenitaliaJsonCard(notice: TrenitaliaJsonNotice): HTMLDivElement 
     dateText,
     detail: detailFragment,
     evidence: classification.isHighlighted,
-    icon: classification.kind === "regular" ? "check_circle" : "campaign",
+    icon: getTrenitaliaIcon(classification.kind),
     link: classification.safeLink,
     sourceLabel,
     title: classification.title,
@@ -472,19 +409,6 @@ function createTrenitaliaJsonCard(notice: TrenitaliaJsonNotice): HTMLDivElement 
   });
   card.classList.add(`trenitalia-kind-${classification.kind}`);
   return card;
-}
-
-function createTrenitaliaRssCard(notice: TrenitaliaRssNotice, isInfoLavori: boolean): HTMLDivElement {
-  const detailFragment = sanitizeNodeList(notice.contentElement?.childNodes || []);
-  return createInfoCardShell({
-    dateText: notice.dateText,
-    detail: detailFragment,
-    evidence: notice.evidence,
-    icon: isInfoLavori ? "engineering" : notice.evidence ? "priority_high" : "campaign",
-    sourceLabel: getI18n("trenitalia_source_rss"),
-    title: notice.title,
-    chips: [createInfoChip(isInfoLavori ? getI18n("trenitalia_rss_works") : getI18n("trenitalia_rss_circulation"), "rss_feed")],
-  });
 }
 
 function createRfiRssCardFromItem(item: Element): HTMLDivElement {
@@ -506,12 +430,25 @@ function createRfiRssCard({ title, safeLink, formattedDate, region }: RfiCardDat
   const chipNodes = region ? [createInfoChip(region, "map")] : [];
   return createInfoCardShell({
     dateText: formattedDate,
-    icon: currentRfiMode === "updates" ? "dynamic_feed" : "campaign",
+    icon: "apartment",
     link: safeLink,
     sourceLabel: "RFI",
     title,
     chips: chipNodes,
   });
+}
+
+function getTrenitaliaBadgeLabel(badgeKey: TrenitaliaNoticeBadgeKey): string {
+  return getI18n(`trenitalia_badge_${badgeKey}`);
+}
+
+function getTrenitaliaIcon(kind: TrenitaliaNoticeKind): string {
+  if (kind === "regular") return "check_circle";
+  if (kind === "infolavori") return "construction";
+  if (kind === "infotreni") return "train";
+  if (kind === "regional") return "departure_board";
+  if (kind === "line" || kind === "av_disruption") return "warning";
+  return "campaign";
 }
 
 function createInfoCardShell(options: {

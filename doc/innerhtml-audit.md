@@ -9,9 +9,10 @@ This note tracks the current migration path away from unsafe HTML string output.
 - `src/client/swiss.ts`: Swiss formation full-card template still uses a controlled HTML string. Loading/hidden states now use DOM builders.
 - `src/client/statistics.ts`: summary cards, table rows, category bars, chart tooltip, and donut selected state use DOM builders. The remaining string templates are chart/SVG containers.
 - `src/client/infomobilita.ts`: RFI cards and Trenitalia infomobility cards use
-  DOM builders. Trenitalia RSS/NewsService descriptions are parsed through a
-  small allowlist sanitizer before rendering, so upstream HTML is not inserted
-  raw into the document.
+  DOM builders. Trenitalia NewsService descriptions are parsed through a small
+  allowlist sanitizer before rendering, so upstream HTML is not inserted raw
+  into the document. The live Trenitalia UI no longer renders separate
+  `infomobilitaRSS/{true|false}` subviews.
 - `src/client/about.ts`: localized About-page content uses trusted in-repo HTML strings and is loaded through Astro/Vite as TypeScript. Keep this static unless the content becomes CMS/API driven.
 - `src/client/not-found.ts`: 404 terminal output uses DOM builders and no longer writes dynamic strings through `innerHTML`.
 
