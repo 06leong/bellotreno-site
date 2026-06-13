@@ -403,6 +403,14 @@ html[data-lang-loading] .hero-typewriter span {
     color: var(--color-primary-content);
 }
 
+.info-provider-logo {
+    display: block;
+    width: 2.4rem;
+    height: 1.25rem;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
 /* ===== Recent Searches ===== */
 
 .recent-searches-container {
@@ -1838,6 +1846,11 @@ a.info-chip:focus-visible {
 
     .info-provider-switch .board-tab .material-symbols-outlined {
         font-size: 1.05rem !important;
+    }
+
+    .info-provider-logo {
+        width: 2.55rem;
+        height: 1.15rem;
     }
 
     .info-notice-body {
