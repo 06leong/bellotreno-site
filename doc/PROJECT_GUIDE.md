@@ -322,12 +322,17 @@ fetch("https://ah.bellotreno.workers.dev/?url=https://www.viaggiatreno.it/.../an
 - Platform-change highlighting.
 - Recent searches in localStorage.
 - Recent searches support per-item removal and a one-click clear-all action.
+- Recent searches use a full-width header above wrapping chips so the label and
+  clear action stay aligned on desktop and mobile.
 - Homepage train and station searches expose a shared loading state across
   autocomplete, provider fallback, disambiguation, and detail loading.
 - Homepage Trenitalia ticker below the daily running-train statistics.
+- The homepage ticker and search control share the same glass-surface style.
 - Trenitalia infomobility notices from NewsService, with category badges,
   highlighted/line/generic-notice filters, title-derived region matching, and
   separate Alto Adige/Trentino regional filters.
+- Title-derived Trenitalia regions are rendered as region chips even when
+  NewsService returns empty `regionTags`.
 - Trenitalia notice cards intentionally omit the external source button because
   NewsService links resolve to the generic Trenitalia infomobility page; RFI
   notice cards keep per-item source links.

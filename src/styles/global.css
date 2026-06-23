@@ -414,12 +414,22 @@ html[data-lang-loading] .hero-typewriter span {
 /* ===== Recent Searches ===== */
 
 .recent-searches-container {
-    margin-top: 16px;
+    width: 100%;
+    max-width: 42rem;
+    margin: 16px auto 0;
     padding: 12px 0;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+    gap: 8px;
+    text-align: left;
+}
+
+.recent-searches-header {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 12px;
-    flex-wrap: wrap;
+    min-width: 0;
 }
 
 .recent-searches-label {
@@ -466,7 +476,8 @@ html[data-lang-loading] .hero-typewriter span {
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
-    flex: 1;
+    width: 100%;
+    min-width: 0;
 }
 
 .assist-chip {
@@ -1434,6 +1445,19 @@ footer span {
 
 /* ===== Home infomobilita ticker ===== */
 
+.home-glass-surface,
+.home-ticker-shell {
+    background: color-mix(in oklab, var(--color-base-100) 65%, transparent);
+    border: 1px solid color-mix(in oklch, var(--color-base-content) 10%, transparent);
+    box-shadow:
+        inset 0 1px 0 color-mix(in oklch, #ffffff 12%, transparent),
+        0 1px 2px color-mix(in oklch, var(--color-base-content) 6%, transparent),
+        0 4px 8px color-mix(in oklch, var(--color-base-content) 6%, transparent),
+        0 16px 32px -4px color-mix(in oklch, var(--color-base-content) 10%, transparent);
+    backdrop-filter: blur(64px);
+    -webkit-backdrop-filter: blur(64px);
+}
+
 .home-ticker {
     width: 100%;
     max-width: 42rem;
@@ -1453,15 +1477,6 @@ footer span {
     min-height: 36px;
     padding: 7px 12px;
     border-radius: 999px;
-    background: color-mix(in oklch, var(--color-base-100) 65%, transparent);
-    border: 1px solid color-mix(in oklch, var(--color-base-content) 10%, transparent);
-    box-shadow:
-        inset 0 1px 0 color-mix(in oklch, #ffffff 12%, transparent),
-        0 1px 2px color-mix(in oklch, var(--color-base-content) 6%, transparent),
-        0 4px 8px color-mix(in oklch, var(--color-base-content) 6%, transparent),
-        0 16px 32px -4px color-mix(in oklch, var(--color-base-content) 10%, transparent);
-    backdrop-filter: blur(64px);
-    -webkit-backdrop-filter: blur(64px);
 }
 
 .home-ticker-label {
@@ -3202,14 +3217,9 @@ button.swiss-section-title {
 
     .recent-searches-chips {
         gap: 6px;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-        scrollbar-width: none;
+        overflow: visible;
+        flex-wrap: wrap;
         padding-bottom: 4px;
-    }
-
-    .recent-searches-chips::-webkit-scrollbar {
-        display: none;
     }
 
     .assist-chip {

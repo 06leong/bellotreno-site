@@ -983,7 +983,7 @@ function renderRecentSearches(): void {
             return;
         }
 
-        container.style.display = 'flex';
+        container.style.display = 'grid';
         clearNode(chipsContainer);
 
         recentSearches.forEach(item => {

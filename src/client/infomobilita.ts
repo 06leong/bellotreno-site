@@ -393,8 +393,16 @@ function createTrenitaliaJsonCard(notice: TrenitaliaJsonNotice): HTMLDivElement 
   const detailFragment = sanitizeHtmlString(notice.description || "");
   const sourceLabel = getTrenitaliaBadgeLabel(classification.badgeKey);
   const dateText = formatTimestampDate(notice.pubDate);
+  const regionLabels = [...classification.regionTags];
+  const normalizedRegionLabels = new Set(regionLabels.map((tag) => tag.trim().toLocaleLowerCase()));
+  for (const key of classification.regionKeys) {
+    const label = TRENITALIA_REGION_FILTERS.find((region) => region.key === key)?.label;
+    if (!label || normalizedRegionLabels.has(label.toLocaleLowerCase())) continue;
+    regionLabels.push(label);
+    normalizedRegionLabels.add(label.toLocaleLowerCase());
+  }
   const chips = [
-    ...classification.regionTags.map((tag) => createInfoChip(tag, "map")),
+    ...regionLabels.map((tag) => createInfoChip(tag, "map")),
     ...classification.trainTags.map((tag) => createTrainChip(tag)),
   ];
 
