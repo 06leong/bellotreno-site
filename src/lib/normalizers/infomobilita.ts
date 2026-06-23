@@ -41,6 +41,7 @@ export type TrenitaliaNoticeBadgeKey =
 export type TrenitaliaFilterKey =
   | "all"
   | "highlighted"
+  | "avviso"
   | "line_train"
   | "infotreni"
   | "infolavori"
@@ -143,6 +144,24 @@ export function trenitaliaRegionKeyFromText(value: unknown): TrenitaliaRegionKey
   return REGION_BY_NORMALIZED_LABEL.get(normalizeForMatch(value)) || null;
 }
 
+function addTitleRegionKeys(normalizedTitle: string, regionKeys: Set<TrenitaliaRegionKey>): void {
+  const prefix = "REGIONE ";
+  if (!normalizedTitle.startsWith(prefix)) return;
+
+  const titleRegion = normalizedTitle.slice(prefix.length);
+  for (const region of TRENITALIA_REGION_FILTERS) {
+    const token = normalizeForMatch(region.titleToken);
+    if (
+      titleRegion === token
+      || titleRegion.startsWith(`${token}:`)
+      || titleRegion.startsWith(`${token} -`)
+    ) {
+      regionKeys.add(region.key);
+      return;
+    }
+  }
+}
+
 function classifyKind(title: string, trainTags: string[], regionTags: string[]): TrenitaliaNoticeKind {
   const normalizedTitle = normalizeForMatch(title);
   if (normalizedTitle.startsWith("INFOLAVORI ")) return "infolavori";
@@ -192,11 +211,13 @@ export function classifyTrenitaliaNotice(
     const key = trenitaliaRegionKeyFromText(titleRegion);
     if (key) regionKeys.add(key);
   }
+  addTitleRegionKeys(normalizedTitle, regionKeys);
 
   const kind = classifyKind(title, trainTags, regionTags);
   const isHighlighted = notice.evidenzia === true;
   const filterKeys = new Set<TrenitaliaFilterKey>(["all"]);
   if (isHighlighted) filterKeys.add("highlighted");
+  if (kind === "other") filterKeys.add("avviso");
   if (kind === "line" || kind === "av_disruption") filterKeys.add("line_train");
   if (kind === "infotreni" || kind === "regional") filterKeys.add("infotreni");
   if (kind === "infolavori") filterKeys.add("infolavori");

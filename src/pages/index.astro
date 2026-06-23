@@ -4,7 +4,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
 <BaseLayout
     title="BelloTreno — Treni in Tempo Reale"
-    description="Cerca treni italiani in tempo reale. Stato, ritardi e percorso completo di Frecciarossa, Intercity, Regionali e altri treni Trenitalia su ViaggiaTreno.">
+    description="Cerca un treno Trenitalia o Italo in tempo reale. Verifica stato, ritardi, fermate e percorso di Frecciarossa, Intercity, EuroCity, Regionale e Alta Velocità.">
     <Fragment slot="head"></Fragment>
     <Fragment slot="scripts">
         <script>
@@ -43,7 +43,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
             <div id="infomobilitaTicker" class="home-ticker" hidden aria-live="polite"></div>
 
-            <div class="relative w-full max-w-2xl mx-auto group mt-6 z-10">
+            <div id="homeSearchControl" class="relative w-full max-w-2xl mx-auto group mt-6 z-10" aria-busy="false">
                 <!-- Glowing effect behind the search bar when focused -->
                 <div class="absolute -inset-0.5 bg-gradient-to-r from-primary/30 to-info/30 rounded-full blur opacity-0 group-focus-within:opacity-100 transition duration-500"></div>
                 
@@ -65,11 +65,25 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                 </div>
             </div>
 
+            <div id="searchLoadingIndicator" class="home-search-loading" hidden role="status" aria-live="polite">
+                <span class="loading loading-spinner loading-sm text-primary" aria-hidden="true"></span>
+                <span data-i18n="search_loading">Searching...</span>
+            </div>
+
             <div id="recentSearchesContainer" class="recent-searches-container" style="display: none;">
                 <div class="recent-searches-label">
                     <span class="material-symbols-outlined">history</span>
                     <span data-i18n="recent_searches">最近搜索</span>
                 </div>
+                <button
+                    id="clearRecentSearches"
+                    class="recent-searches-clear"
+                    type="button"
+                    data-i18n-title="clear_recent_searches"
+                    title="Clear recent searches"
+                    aria-label="Clear recent searches">
+                    <span class="material-symbols-outlined" aria-hidden="true">delete_sweep</span>
+                </button>
                 <div id="recentSearchesChips" class="recent-searches-chips"></div>
             </div>
         </div>

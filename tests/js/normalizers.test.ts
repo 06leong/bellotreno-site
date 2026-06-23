@@ -687,6 +687,23 @@ test("Trenitalia regional transport notice is grouped with INFOTRENI", () => {
   assert.equal(trenitaliaNoticeMatchesFilter(notice, "infotreni"), true);
 });
 
+test("Trenitalia Regione notice matches Avvisi and its title-derived region", () => {
+  const notice = {
+    title: "Regione Sardegna: dalle ore 9:01 alle ore 17:00 sciopero del personale di Trenitalia",
+    trainTags: [],
+    regionTags: [],
+    evidenzia: false,
+  };
+  const classification = classifyTrenitaliaNotice(notice);
+
+  assert.equal(classification.kind, "other");
+  assert.equal(classification.badgeKey, "avviso");
+  assert.deepEqual(classification.regionKeys, ["sardegna"]);
+  assert.equal(trenitaliaNoticeMatchesFilter(notice, "avviso"), true);
+  assert.equal(trenitaliaNoticeMatchesFilter(notice, "sardegna"), true);
+  assert.equal(trenitaliaNoticeMatchesFilter(notice, "line_train"), false);
+});
+
 test("Trenitalia infomobility region title mapping keeps Alto Adige and Trentino separate", () => {
   assert.equal(trenitaliaRegionKeyFromText("Alto Adige"), "alto_adige");
   assert.equal(trenitaliaRegionKeyFromText("TRENTINO"), "trentino");

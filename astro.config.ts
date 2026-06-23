@@ -23,6 +23,7 @@ const MATERIAL_SYMBOL_NAMES = [
   'contrast',
   'construction',
   'dark_mode',
+  'delete_sweep',
   'departure_board',
   'device_thermostat',
   'directions_bike',

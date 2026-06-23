@@ -181,6 +181,7 @@ function isTrenitaliaFilterKey(value: string | undefined): value is TrenitaliaFi
   return [
     "all",
     "highlighted",
+    "avviso",
     "line_train",
     "infotreni",
     "infolavori",

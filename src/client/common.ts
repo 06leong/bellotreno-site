@@ -5,6 +5,8 @@ import { dispatchBelloLanguageChanged } from './language-events.js';
  */
 
 const translations = window.translations || {};
+const VISITOR_COUNTED_KEY = '_btCounted';
+const VISITOR_COUNT_KEY = '_btVisitorCount';
 
 type Language = NonNullable<Window["currentLang"]>;
 type ThemePreference = NonNullable<Window["currentTheme"]>;
@@ -61,6 +63,16 @@ function updateLanguage() {
             }
             el.textContent = translation;
         }
+    });
+
+    document.querySelectorAll<HTMLElement>('[data-i18n-title]').forEach(el => {
+        const key = el.getAttribute('data-i18n-title');
+        const translation = key && translations[window.currentLang]
+            ? translations[window.currentLang][key]
+            : null;
+        if (!translation) return;
+        el.title = translation;
+        el.setAttribute('aria-label', translation);
     });
 
     const visitorCountEl = document.getElementById('visitorCount');
@@ -174,17 +186,28 @@ function bindGlobalControls() {
 
 async function initVisitorCounter() {
     // 每个会话只计数一次，防止 Astro ClientRouter 页面跳转重复触发
-    if (sessionStorage.getItem('_btCounted')) {
+    const storedCountRaw = sessionStorage.getItem(VISITOR_COUNT_KEY);
+    const storedCount = storedCountRaw === null ? NaN : Number(storedCountRaw);
+    if (Number.isSafeInteger(storedCount) && storedCount >= 0) {
         // 已计过数：只更新显示，不再发网络请求
-        if (window.visitorCountData !== undefined) updateLanguage();
+        window.visitorCountData = storedCount;
+        updateLanguage();
         return;
+    }
+    if (sessionStorage.getItem(VISITOR_COUNTED_KEY)) {
+        sessionStorage.removeItem(VISITOR_COUNTED_KEY);
     }
     const workerUrl = window.COUNTER_URL || 'https://site-counter.bellotreno.workers.dev/';
     try {
         const response = await fetch(workerUrl);
         const data = await response.json();
-        window.visitorCountData = data.count;
-        sessionStorage.setItem('_btCounted', '1');
+        const count = Number(data.count);
+        if (!Number.isSafeInteger(count) || count < 0) {
+            throw new Error('Invalid visitor count response');
+        }
+        window.visitorCountData = count;
+        sessionStorage.setItem(VISITOR_COUNT_KEY, String(count));
+        sessionStorage.setItem(VISITOR_COUNTED_KEY, '1');
         updateLanguage();
     } catch (error) {
         console.error('Failed to fetch visitor count:', error);

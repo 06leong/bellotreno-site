@@ -7,6 +7,9 @@ export {};
 
 const translations = {
     zh: {
+        clear_recent_searches: "清空最近搜索",
+        search_loading: "正在搜索...",
+        trenitalia_filter_avviso: "公告",
         nav_home: "首页",
         nav_infomobilita: "出行信息",
         nav_statistics: "统计",
@@ -271,6 +274,9 @@ const translations = {
         footer: " 本站数据仅供参考，如有问题请关注车站大屏获取最新信息。 | © 2026 BelloTreno"
     },
     en: {
+        clear_recent_searches: "Clear recent searches",
+        search_loading: "Searching...",
+        trenitalia_filter_avviso: "Notices",
         nav_home: "Home",
         nav_infomobilita: "Infomobility",
         nav_statistics: "Statistics",
@@ -535,6 +541,9 @@ const translations = {
         footer: "This information is for reference only. Please check station displays for official information. | © 2026 BelloTreno"
     },
     it: {
+        clear_recent_searches: "Cancella le ricerche recenti",
+        search_loading: "Ricerca in corso...",
+        trenitalia_filter_avviso: "Avvisi",
         nav_home: "Home",
         nav_infomobilita: "Infomobilità",
         nav_statistics: "Statistiche",

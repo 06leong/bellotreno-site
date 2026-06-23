@@ -25,12 +25,14 @@ OpenTransportData.swiss.
 BelloTreno helps users inspect the current state of Italian railway services:
 
 - Search a train number and view its route, status, delay, platforms, stop list,
-  and last known position, including supported Italo high-speed services.
+  and last known position, including supported Italo high-speed services. The
+  homepage shows a loading state while slower train or station searches run.
 - Open station boards for departures and arrivals, including platform changes and
   destination information. Supported Italo departures and arrivals are merged
   into matching ViaggiaTreno station pages.
 - Read RFI and Trenitalia infomobility notices, including Trenitalia
-  NewsService categories, highlighted disruptions, and regional filters.
+  NewsService categories, generic notices, highlighted disruptions, and
+  regional filters.
 - View supported Swiss cross-border train formations, including coach order,
   platform sectors, accessibility, bicycle, seat, and vehicle details.
 - Enrich selected EC, TILO, SBB/Trenord regional, and other Swiss-linked services
@@ -40,6 +42,7 @@ BelloTreno helps users inspect the current state of Italian railway services:
   relations.
 - Use the site in Chinese, English, or Italian, with light, dark, and system
   themes.
+- Reopen or clear recent train and station searches stored in the browser.
 
 ## Main Features
 

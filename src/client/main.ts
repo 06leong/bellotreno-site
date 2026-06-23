@@ -192,6 +192,7 @@ let currentTrenordLineInfo: TrenordLineInfo | null = null;
 let currentItaloTrainNumber: string | null = null;
 let currentTickerItems: string[] = [];
 let lastLoadedTrainSearch = '';
+let searchLoadingDepth = 0;
 
 
 const API_BASE = window.API_BASE;
@@ -214,6 +215,31 @@ const DARK_MODE_CONTRAST_LOGOS = new Set([
 const LIGHT_MODE_CONTRAST_LOGOS = new Set([
     'italo.svg'
 ]);
+
+function setSearchLoading(active: boolean): void {
+    const searchControl = document.getElementById('homeSearchControl');
+    const loadingIndicator = document.getElementById('searchLoadingIndicator');
+    const trainInput = document.getElementById('trainSearch') as HTMLInputElement | null;
+    const modeToggle = document.getElementById('searchModeToggle') as HTMLButtonElement | null;
+
+    searchControl?.setAttribute('aria-busy', String(active));
+    searchControl?.classList.toggle('is-loading', active);
+    if (loadingIndicator) loadingIndicator.hidden = !active;
+    if (trainInput) trainInput.disabled = active;
+    if (modeToggle) modeToggle.disabled = active;
+}
+
+async function withSearchLoading<T>(task: () => Promise<T>): Promise<T> {
+    searchLoadingDepth += 1;
+    setSearchLoading(true);
+    try {
+        return await task();
+    } finally {
+        searchLoadingDepth = Math.max(0, searchLoadingDepth - 1);
+        if (searchLoadingDepth === 0) setSearchLoading(false);
+    }
+}
+
 const TRENORD_LINE_COLORS: Readonly<Record<string, string>> = Object.freeze({
     RE: "#c02e25",
     RE80: "#205099",
@@ -957,7 +983,7 @@ function renderRecentSearches(): void {
             return;
         }
 
-        container.style.display = 'block';
+        container.style.display = 'flex';
         clearNode(chipsContainer);
 
         recentSearches.forEach(item => {
@@ -1014,9 +1040,21 @@ function removeRecentSearch(id: string, type: SearchMode, event?: Event): void {
     }
 }
 
-
+function clearRecentSearches(): void {
+    try {
+        localStorage.removeItem('recentSearches');
+        localStorage.removeItem('recentTrains');
+        renderRecentSearches();
+    } catch (err) {
+        console.error('Failed to clear recent searches:', err);
+    }
+}
 
 async function startSearch(input: string, options: SearchOptions = {}): Promise<void> {
+    return withSearchLoading(() => performSearch(input, options));
+}
+
+async function performSearch(input: string, options: SearchOptions = {}): Promise<void> {
     const resultsPanel = document.getElementById('results');
     const disambiguationPanel = document.getElementById('disambiguation');
     if (resultsPanel) resultsPanel.style.display = 'none';
@@ -1044,7 +1082,7 @@ async function startSearch(input: string, options: SearchOptions = {}): Promise<
             if (lines.length > 1) {
                 showDisambiguation(lines, options);
             } else {
-                fetchDetails(lines[0].split('|')[1], options);
+                await fetchDetails(lines[0].split('|')[1], options);
             }
         } catch (err) {
             const loaded = await fetchItaloDetails(trainNumber, options);
@@ -1130,7 +1168,7 @@ function renderDisambiguation(): void {
         div.addEventListener('click', () => {
             panel.style.display = 'none';
             disambiguationData = null;
-            fetchDetails(triple, { urlMode: disambiguationUrlMode });
+            void withSearchLoading(() => fetchDetails(triple, { urlMode: disambiguationUrlMode }));
         });
         list.appendChild(div);
     });
@@ -2305,6 +2343,12 @@ function bindHomeControls() {
             switchSearchMode(searchMode === 'train' ? 'station' : 'train');
         });
     }
+
+    const clearRecentSearchesButton = document.getElementById('clearRecentSearches');
+    if (clearRecentSearchesButton && !clearRecentSearchesButton.dataset.btBound) {
+        clearRecentSearchesButton.dataset.btBound = 'true';
+        clearRecentSearchesButton.addEventListener('click', clearRecentSearches);
+    }
 }
 
 
@@ -2368,10 +2412,13 @@ function loadTrainFromCurrentUrl(): void {
 
     setTimeout(() => {
         if (state.originId && state.timestamp) {
-            fetchDetails(`${state.trainNumber}-${state.originId}-${state.timestamp}`, { urlMode: 'replace' });
+            void withSearchLoading(() => fetchDetails(
+                `${state.trainNumber}-${state.originId}-${state.timestamp}`,
+                { urlMode: 'replace' }
+            ));
             return;
         }
-        startSearch(state.trainNumber, { urlMode: 'replace' });
+        void startSearch(state.trainNumber, { urlMode: 'replace' });
     }, 200);
 }
 

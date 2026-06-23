@@ -437,6 +437,31 @@ html[data-lang-loading] .hero-typewriter span {
     font-size: 18px;
 }
 
+.recent-searches-clear {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    flex: 0 0 28px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    color: color-mix(in oklch, var(--color-base-content) 68%, transparent);
+    background: color-mix(in oklch, var(--color-base-content) 7%, transparent);
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+.recent-searches-clear:hover {
+    color: var(--color-error);
+    background: color-mix(in oklch, var(--color-error) 12%, transparent);
+}
+
+.recent-searches-clear .material-symbols-outlined {
+    font-size: 17px;
+}
+
 .recent-searches-chips {
     display: flex;
     gap: 8px;
@@ -496,6 +521,31 @@ html[data-lang-loading] .hero-typewriter span {
 
 .assist-chip .chip-remove:hover .material-symbols-outlined {
     opacity: 1;
+}
+
+.home-search-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
+    min-height: 2rem;
+    margin: 0.65rem auto -0.25rem;
+    color: color-mix(in oklch, var(--color-base-content) 64%, transparent);
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.home-search-loading[hidden] {
+    display: none;
+}
+
+#homeSearchControl.is-loading {
+    cursor: wait;
+}
+
+#homeSearchControl.is-loading input,
+#homeSearchControl.is-loading button {
+    cursor: wait;
 }
 
 /* ===== Disclaimer ===== */
@@ -1403,13 +1453,15 @@ footer span {
     min-height: 36px;
     padding: 7px 12px;
     border-radius: 999px;
-    background: color-mix(in oklch, var(--color-base-100) 70%, transparent);
-    border: 1px solid color-mix(in oklch, var(--color-primary) 22%, transparent);
+    background: color-mix(in oklch, var(--color-base-100) 65%, transparent);
+    border: 1px solid color-mix(in oklch, var(--color-base-content) 10%, transparent);
     box-shadow:
-        0 1px 2px color-mix(in oklch, var(--color-base-content) 5%, transparent),
-        0 8px 20px -12px color-mix(in oklch, var(--color-primary) 40%, transparent);
-    backdrop-filter: blur(28px);
-    -webkit-backdrop-filter: blur(28px);
+        inset 0 1px 0 color-mix(in oklch, #ffffff 12%, transparent),
+        0 1px 2px color-mix(in oklch, var(--color-base-content) 6%, transparent),
+        0 4px 8px color-mix(in oklch, var(--color-base-content) 6%, transparent),
+        0 16px 32px -4px color-mix(in oklch, var(--color-base-content) 10%, transparent);
+    backdrop-filter: blur(64px);
+    -webkit-backdrop-filter: blur(64px);
 }
 
 .home-ticker-label {
@@ -1418,8 +1470,8 @@ footer span {
     gap: 5px;
     padding: 4px 9px;
     border-radius: 999px;
-    color: var(--color-primary);
-    background: color-mix(in oklch, var(--color-primary) 11%, transparent);
+    color: color-mix(in oklch, var(--color-base-content) 70%, transparent);
+    background: color-mix(in oklch, var(--color-base-content) 7%, transparent);
     font-size: 0.72rem;
     font-weight: 800;
     text-transform: uppercase;
@@ -1833,6 +1885,11 @@ a.info-chip:focus-visible {
 .trenitalia-kind-infolavori .info-notice-icon {
     color: var(--color-warning);
     background: color-mix(in oklch, var(--color-warning) 14%, transparent);
+}
+
+.trenitalia-kind-other .info-notice-icon {
+    color: var(--color-primary);
+    background: color-mix(in oklch, var(--color-primary) 12%, transparent);
 }
 
 @media (max-width: 640px) {

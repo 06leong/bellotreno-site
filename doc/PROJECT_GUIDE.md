@@ -321,13 +321,20 @@ fetch("https://ah.bellotreno.workers.dev/?url=https://www.viaggiatreno.it/.../an
   Trenitalia TPER, and FS Treni Turistici Italiani.
 - Platform-change highlighting.
 - Recent searches in localStorage.
+- Recent searches support per-item removal and a one-click clear-all action.
+- Homepage train and station searches expose a shared loading state across
+  autocomplete, provider fallback, disambiguation, and detail loading.
 - Homepage Trenitalia ticker below the daily running-train statistics.
 - Trenitalia infomobility notices from NewsService, with category badges,
-  highlighted/line filters, and separate Alto Adige/Trentino regional filters.
+  highlighted/line/generic-notice filters, title-derived region matching, and
+  separate Alto Adige/Trentino regional filters.
 - Trenitalia notice cards intentionally omit the external source button because
   NewsService links resolve to the generic Trenitalia infomobility page; RFI
   notice cards keep per-item source links.
 - RFI notice filtering by Italian region.
+- The session-deduplicated visitor counter caches the returned count in
+  sessionStorage so Astro page transitions can recreate the footer text without
+  incrementing the Cloudflare Worker counter again.
 - SmartCaring 14-day operating history for supported categories.
 - Trenord line-level Traffic info for Trenord trains.
 - Partial-cancellation display in train timelines.

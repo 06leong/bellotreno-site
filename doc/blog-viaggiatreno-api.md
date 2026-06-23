@@ -1617,6 +1617,14 @@ type InfomobilityNotice = {
 重叠。因此 BelloTreno 的 `/infomobilita` Trenitalia 视图只使用 NewsService
 JSON；RSS 端点继续作为已观察 API 记录在文档中，不再作为前端独立子视图。
 
+**2026-06-23 通用公告观察：**
+
+NewsService 返回了标题
+`Regione Sardegna: dalle ore 9:01 alle ore 17:00 di martedì 23 giugno sciopero del personale di Trenitalia`。
+该条目的 `trainTags` 和 `regionTags` 均为空，`evidenzia` 为 `false`。因此前端不能只依赖
+标签完成筛选：BelloTreno 将其归入通用 `Avviso`，并从 `Regione Sardegna:` 标题前缀
+提取 `sardegna`，使其同时出现在 `Avvisi` 和 Sardegna 地区筛选中。
+
 ---
 
 ### 系统与元数据

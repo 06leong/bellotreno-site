@@ -21,7 +21,7 @@ const ENABLE_UMAMI = Boolean(UMAMI_SCRIPT_URL && UMAMI_WEBSITE_ID);
 
 const {
     title,
-    description = 'BelloTreno — Orari e stato in tempo reale dei treni italiani. Frecciarossa, Intercity, Regionali e molto altro.',
+    description = 'Cerca un treno Trenitalia o Italo in tempo reale. Verifica stato, ritardi, fermate e percorso di Frecciarossa, Intercity, EuroCity, Regionale e Alta Velocità.',
 } = Astro.props;
 
 // Canonical URL: origine + percorso corrente (senza query string / hash)
@@ -83,7 +83,7 @@ const canonicalURL = new URL(Astro.url.pathname, SITE_URL).href;
       "@type": "WebApplication",
       "name": "BelloTreno",
       "url": "https://bellotreno.org",
-      "description": "Orari e stato in tempo reale dei treni italiani: Frecciarossa, Intercity, Regionali. Dati tramite ViaggiaTreno.",
+      "description": "Cerca un treno Trenitalia o Italo in tempo reale. Verifica stato, ritardi, fermate e percorso di Frecciarossa, Intercity, EuroCity, Regionale e Alta Velocità.",
       "applicationCategory": "TravelApplication",
       "operatingSystem": "Web",
       "inLanguage": ["it", "en", "zh-Hans"],
