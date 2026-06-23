@@ -322,8 +322,28 @@ function getCategoryLogoClass(src: unknown): string {
         : 'category-logo';
 }
 
+const OPERATOR_LOGOS: Readonly<Record<string, { src: string; className: string }>> = Object.freeze({
+    Trenitalia: {
+        src: '/pic/trenitalia%20logo.svg',
+        className: 'operator-logo-trenitalia'
+    },
+    Italo: {
+        src: '/pic/italo.svg',
+        className: 'operator-logo-italo'
+    },
+    'Trenitalia TPER': {
+        src: '/pic/Trenitalia_Tper.svg',
+        className: 'operator-logo-tper'
+    },
+    Trenord: {
+        src: '/pic/Trenord_Logo.svg',
+        className: 'operator-logo-trenord'
+    }
+});
+
 function createOperatorNode(operator: string, operatorLink: string): Node {
-    if (operator === 'Trenitalia' && operatorLink !== '#') {
+    const logo = OPERATOR_LOGOS[operator];
+    if (logo && operatorLink !== '#') {
         return createNode('a', {
             className: 'operator-logo-link',
             href: operatorLink,
@@ -333,9 +353,9 @@ function createOperatorNode(operator: string, operatorLink: string): Node {
             attrs: { 'aria-label': operator }
         }, [
             createNode('img', {
-                className: 'operator-logo-img',
+                className: `${getCategoryLogoClass(logo.src)} operator-logo-img ${logo.className}`,
                 attrs: {
-                    src: '/pic/trenitalia%20logo.svg',
+                    src: logo.src,
                     alt: operator,
                     decoding: 'async'
                 }
@@ -1474,7 +1494,7 @@ function render(data: TrainData): void {
     const category = CAT_MAP[catCode] || data.categoriaDescrizione || catCode || "Treno";
 
     const imageKey = `${data.codiceCliente}-${catCode}`;
-    let categoryImage = CAT_IMAGE_MAP[imageKey];
+    let categoryImage: string | undefined = CAT_IMAGE_MAP[imageKey];
 
 
     if (data.codiceCliente === 77) {
@@ -1510,22 +1530,32 @@ function render(data: TrainData): void {
     refreshBtn.addEventListener('click', refreshTrainData);
 
     const operatorNode = createOperatorNode(operator, operatorLink);
+    if (operator === 'Italo') {
+        categoryImage = undefined;
+    }
+
     const categoryNode = categoryImage
         ? createNode('img', {
             className: getCategoryLogoClass(categoryImage),
             attrs: { src: categoryImage, alt: category },
             style: { height: '1.3rem', verticalAlign: 'middle', marginLeft: '8px' }
         })
-        : document.createTextNode(category);
+        : operator === 'Italo'
+            ? null
+            : document.createTextNode(category);
+
+    const operatorCategoryChildren: Node[] = [operatorNode];
+    if (categoryNode) {
+        operatorCategoryChildren.push(
+            createNode('span', { className: 'opacity-50', text: '·' }),
+            categoryNode
+        );
+    }
 
     const opCatRow = createNode('div', {
         className: 'op-cat-row',
         style: { display: 'flex', alignItems: 'center', gap: '8px' }
-    }, [
-        operatorNode,
-        createNode('span', { className: 'opacity-50', text: '·' }),
-        categoryNode
-    ]);
+    }, operatorCategoryChildren);
 
     const trainNumBadge = badgeClass
         ? createNode('span', { className: `train-badge ${badgeClass}`, text: data.compNumeroTreno })
@@ -1539,7 +1569,7 @@ function render(data: TrainData): void {
     if (trenordLineBadge) trainNumberChildren.push(trenordLineBadge);
 
     const trainMeta = createNode('div', { className: 'train-meta flex items-center gap-3 flex-wrap' }, [
-        createNode('span', { className: 'train-number-meta flex items-center gap-2 text-sm uppercase tracking-wider font-semibold' }, trainNumberChildren),
+        createNode('span', { className: 'train-number-meta flex items-center gap-2 text-sm tracking-wider font-semibold' }, trainNumberChildren),
         createNode('span', { className: 'opacity-30', text: '|' }),
         createNode('span', { className: 'flex items-center gap-1' }, [
             createIcon('schedule', 'material-symbols-outlined text-[16px] opacity-60'),

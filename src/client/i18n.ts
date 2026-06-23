@@ -297,7 +297,7 @@ const translations = {
         origin_station: "Origin Station ID",
         duration: "Total Duration",
         direction: "Direction",
-        train_num: "Train No.",
+        train_num: "Train",
         last_position: "Last Position",
         arrival: "Arrival",
         departure: "Departure",

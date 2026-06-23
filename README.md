@@ -59,6 +59,10 @@ Station pages show departures and arrivals with operator/category badges,
 platforms, route endpoints, and selected Swiss completion for border-truncated
 services.
 
+Train detail headers use linked operator logos for Trenitalia, Italo,
+Trenitalia TPER, and Trenord. Category marks remain separate where they add
+information; duplicate Italo branding is intentionally omitted.
+
 ### Train Formation
 
 For supported cross-border trains, BelloTreno can show a passenger-facing coach

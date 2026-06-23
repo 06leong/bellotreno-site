@@ -315,19 +315,26 @@ fetch("https://ah.bellotreno.workers.dev/?url=https://www.viaggiatreno.it/.../an
 
 - Three languages: Chinese, English, Italian.
 - Light, dark, and system theme preferences.
-- Train category badges and operator logos, including the Trenitalia operator
-  link rendered as the Trenitalia SVG logo in train detail headers.
+- Train category badges and operator logos. Train detail header links use the
+  Trenitalia, Italo, Trenitalia TPER, and Trenord SVG logos where applicable.
+- Italo suppresses the duplicate category logo beside its operator logo.
+- Trenitalia TPER regional categories use `regn.png` for `REG` and the standard
+  regional SVG for `RV`/`RE`.
 - Train detail category logos prefer SVG assets for FR, FA, FB, IC, ICN, RV,
   Trenitalia TPER, and FS Treni Turistici Italiani.
 - Platform-change highlighting.
 - Recent searches in localStorage.
 - Recent searches support per-item removal and a one-click clear-all action.
-- Recent searches use a full-width header above wrapping chips so the label and
-  clear action stay aligned on desktop and mobile.
+- Recent searches use a compact full-width header above smaller wrapping chips;
+  the label and clear action stay aligned on desktop and mobile.
 - Homepage train and station searches expose a shared loading state across
   autocomplete, provider fallback, disambiguation, and detail loading.
-- Homepage Trenitalia ticker below the daily running-train statistics.
-- The homepage ticker and search control share the same glass-surface style.
+- Homepage Trenitalia ticker below the daily running-train statistics. The
+  ticker is an unframed text row; short notices are centered independently of
+  the left-side label, while overflowing notices retain the marquee behavior.
+- The homepage ticker, search control, loading state, and recent-search area
+  use the same `950px` maximum width as train detail cards. Search loading is
+  shown below recent searches.
 - Trenitalia infomobility notices from NewsService, with category badges,
   highlighted/line/generic-notice filters, title-derived region matching, and
   separate Alto Adige/Trentino regional filters.

@@ -43,7 +43,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
             <div id="infomobilitaTicker" class="home-ticker" hidden aria-live="polite"></div>
 
-            <div id="homeSearchControl" class="relative w-full max-w-2xl mx-auto group mt-6 z-10" aria-busy="false">
+            <div id="homeSearchControl" class="home-primary-width relative w-full mx-auto group mt-6 z-10" aria-busy="false">
                 <!-- Glowing effect behind the search bar when focused -->
                 <div class="absolute -inset-0.5 bg-gradient-to-r from-primary/30 to-info/30 rounded-full blur opacity-0 group-focus-within:opacity-100 transition duration-500"></div>
                 
@@ -65,11 +65,6 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                 </div>
             </div>
 
-            <div id="searchLoadingIndicator" class="home-search-loading" hidden role="status" aria-live="polite">
-                <span class="loading loading-spinner loading-sm text-primary" aria-hidden="true"></span>
-                <span data-i18n="search_loading">Searching...</span>
-            </div>
-
             <div id="recentSearchesContainer" class="recent-searches-container" style="display: none;">
                 <div class="recent-searches-header">
                     <div class="recent-searches-label">
@@ -87,6 +82,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                     </button>
                 </div>
                 <div id="recentSearchesChips" class="recent-searches-chips"></div>
+            </div>
+
+            <div id="searchLoadingIndicator" class="home-search-loading" hidden role="status" aria-live="polite">
+                <span class="loading loading-spinner loading-md text-primary" aria-hidden="true"></span>
+                <span data-i18n="search_loading">Searching...</span>
             </div>
         </div>
 
