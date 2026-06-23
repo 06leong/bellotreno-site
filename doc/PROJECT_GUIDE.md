@@ -317,7 +317,8 @@ fetch("https://ah.bellotreno.workers.dev/?url=https://www.viaggiatreno.it/.../an
 - Light, dark, and system theme preferences.
 - Train category badges and operator logos. Train detail header links use the
   Trenitalia, Italo, Trenitalia TPER, and Trenord SVG logos where applicable.
-- Italo suppresses the duplicate category logo beside its operator logo.
+- Italo suppresses the duplicate category logo and shows the `Alta Velocità`
+  category as text beside its operator logo.
 - Trenitalia TPER regional categories use `regn.png` for `REG` and the standard
   regional SVG for `RV`/`RE`.
 - Train detail category logos prefer SVG assets for FR, FA, FB, IC, ICN, RV,
@@ -330,8 +331,9 @@ fetch("https://ah.bellotreno.workers.dev/?url=https://www.viaggiatreno.it/.../an
 - Homepage train and station searches expose a shared loading state across
   autocomplete, provider fallback, disambiguation, and detail loading.
 - Homepage Trenitalia ticker below the daily running-train statistics. The
-  ticker is an unframed text row; short notices are centered independently of
-  the left-side label, while overflowing notices retain the marquee behavior.
+  ticker is an unframed text row; desktop keeps the left-side label in a small
+  badge, while mobile hides the label and icon. Short notices are centered
+  independently of the label, and overflowing notices use a slower marquee.
 - The homepage ticker, search control, loading state, and recent-search area
   use the same `950px` maximum width as train detail cards. Search loading is
   shown below recent searches.

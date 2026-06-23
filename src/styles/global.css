@@ -1505,8 +1505,10 @@ footer span {
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    padding: 0;
+    padding: 4px 9px;
+    border-radius: 999px;
     color: color-mix(in oklch, var(--color-base-content) 70%, transparent);
+    background: color-mix(in oklch, var(--color-base-content) 7%, transparent);
     font-size: 0.72rem;
     font-weight: 800;
     text-transform: uppercase;
@@ -1981,17 +1983,10 @@ a.info-chip:focus-visible {
 
     .home-ticker-shell {
         min-height: 30px;
-        padding: 3px 2.5rem;
+        padding: 3px 0;
     }
 
     .home-ticker-label {
-        left: 0;
-        width: auto;
-        padding: 0;
-        font-size: 0.68rem;
-    }
-
-    .home-ticker-label span:not(.material-symbols-outlined) {
         display: none;
     }
 

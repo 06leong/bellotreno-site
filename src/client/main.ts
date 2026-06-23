@@ -433,7 +433,7 @@ function updateTickerOverflow(container: HTMLElement, items: string[]): void {
         if (!overflowing) return;
 
         track.appendChild(createTickerGroup(items));
-        const duration = Math.max(28, Math.min(78, Math.round(firstWidth / 22)));
+        const duration = Math.max(44, Math.min(120, Math.round(firstWidth / 14)));
         track.style.setProperty("--ticker-duration", `${duration}s`);
     });
 }
@@ -1540,9 +1540,7 @@ function render(data: TrainData): void {
             attrs: { src: categoryImage, alt: category },
             style: { height: '1.3rem', verticalAlign: 'middle', marginLeft: '8px' }
         })
-        : operator === 'Italo'
-            ? null
-            : document.createTextNode(category);
+        : document.createTextNode(category);
 
     const operatorCategoryChildren: Node[] = [operatorNode];
     if (categoryNode) {

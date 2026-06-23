@@ -61,7 +61,8 @@ services.
 
 Train detail headers use linked operator logos for Trenitalia, Italo,
 Trenitalia TPER, and Trenord. Category marks remain separate where they add
-information; duplicate Italo branding is intentionally omitted.
+information; Italo uses the text category `Alta Velocità` instead of repeating
+its operator logo.
 
 ### Train Formation
 
