@@ -1,7 +1,10 @@
 import { navigateToStationBoard, registerStationNavigationGlobal } from './station-navigation.js';
 import { onBelloLanguageChanged } from './language-events.js';
 import {
+    buildPartialCancellationState as normalizePartialCancellationState,
+    resolvePartialCancellationRouteDisplay,
     resolveStopTimeStatus,
+    type PartialCancellationState,
     type StopTimeStatus
 } from '../lib/normalizers/viaggiatreno.js';
 import {
@@ -18,7 +21,6 @@ type JsonRecord = Record<string, unknown>;
 type Language = NonNullable<Window["currentLang"]>;
 type TimeKind = 'arrival' | 'departure';
 type TimeStatus = StopTimeStatus;
-type PartialStopBoundary = '' | 'actualStart' | 'actualEnd' | 'replacementStart';
 type UrlMode = 'none' | 'push' | 'replace';
 
 interface NodeOptions {
@@ -95,11 +97,6 @@ interface TrainData extends JsonRecord {
     provvedimento?: number | string | null;
     stazioneUltimoRilevamento?: string;
     subTitle?: string;
-}
-
-interface PartialCancellationState {
-    boundary: PartialStopBoundary;
-    cancelled: boolean;
 }
 
 interface SwissFormationPayload extends JsonRecord {
@@ -762,51 +759,7 @@ function renderTimeNode(kind: TimeKind, schedMs: unknown, realMs: unknown, delay
     ]);
 }
 
-function normalizeStationMatchName(value: unknown): string {
-    return String(value || '')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[’'`´]/g, '')
-        .replace(/[.\-_/(),]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .toUpperCase();
-}
-
-function findStopIndexByName(stops: TrainStop[], name: unknown): number {
-    const target = normalizeStationMatchName(name);
-    if (!target) return -1;
-
-    let index = stops.findIndex((stop) => normalizeStationMatchName(stop?.stazione) === target);
-    if (index >= 0) return index;
-
-    index = stops.findIndex((stop) => {
-        const current = normalizeStationMatchName(stop?.stazione);
-        return current && (current.includes(target) || target.includes(current));
-    });
-    return index;
-}
-
-function collectSuppressedStopNames(value: unknown, names: string[] = []): string[] {
-    if (!value) return names;
-    if (typeof value === 'string') {
-        names.push(value);
-        return names;
-    }
-    if (Array.isArray(value)) {
-        value.forEach((item) => collectSuppressedStopNames(item, names));
-        return names;
-    }
-    if (typeof value === 'object') {
-        const record = asRecord(value);
-        ['stazione', 'nome', 'name', 'descrizione', 'denominazione'].forEach((key) => {
-            if (typeof record[key] === 'string') names.push(record[key]);
-        });
-    }
-    return names;
-}
-
-function partialStopLabel(kind: PartialStopBoundary | 'cancelled'): string {
+function partialStopLabel(kind: PartialCancellationState['boundary'] | 'cancelled'): string {
     if (!kind) return '';
     const lang = window.currentLang || 'en';
     const labels = {
@@ -831,69 +784,6 @@ function partialStopLabel(kind: PartialStopBoundary | 'cancelled'): string {
     };
     return (labels[lang] || labels.en)[kind] || kind;
 }
-
-function buildPartialCancellationState(data: TrainData, stops: TrainStop[]): PartialCancellationState[] {
-    const states: PartialCancellationState[] = (Array.isArray(stops) ? stops : []).map((stop) => ({
-        cancelled: Number(stop?.actualFermataType) === 3,
-        boundary: ''
-    }));
-    if (!states.length) return states;
-
-    collectSuppressedStopNames(data?.fermateSoppresse).forEach((name) => {
-        const index = findStopIndexByName(stops, name);
-        if (index >= 0) states[index].cancelled = true;
-    });
-
-    const title = String(data?.subTitle || '').trim();
-    const cancelledRange = title.match(/treno\s+cancellato\s+da\s+(.+?)\s+a\s+(.+?)(?:\.|$)/i);
-    if (!cancelledRange) return states;
-
-    const fromName = cancelledRange[1].trim();
-    const toName = cancelledRange[2].trim();
-    const startsFrom = title.match(/parte\s+da\s+(.+?)(?:\.|$)/i);
-    const arrivesAt = title.match(/arriva\s+a\s+(.+?)(?:\.|$)/i);
-    const hasTrainChange = /viaggio\s+con\s+cambio\s+di\s+treno/i.test(title);
-
-    if (startsFrom) {
-        const anchorIndex = findStopIndexByName(stops, startsFrom[1]) >= 0
-            ? findStopIndexByName(stops, startsFrom[1])
-            : findStopIndexByName(stops, toName);
-        if (anchorIndex >= 0) {
-            for (let i = 0; i < anchorIndex; i += 1) states[i].cancelled = true;
-            states[anchorIndex].boundary = 'actualStart';
-        }
-        return states;
-    }
-
-    if (arrivesAt) {
-        const anchorIndex = findStopIndexByName(stops, arrivesAt[1]) >= 0
-            ? findStopIndexByName(stops, arrivesAt[1])
-            : findStopIndexByName(stops, fromName);
-        if (anchorIndex >= 0) {
-            for (let i = anchorIndex + 1; i < states.length; i += 1) states[i].cancelled = true;
-            states[anchorIndex].boundary = 'actualEnd';
-        }
-        return states;
-    }
-
-    if (hasTrainChange) {
-        const fromIndex = findStopIndexByName(stops, fromName);
-        const toIndex = findStopIndexByName(stops, toName);
-        if (fromIndex >= 0 && toIndex >= 0 && fromIndex < toIndex) {
-            for (let i = fromIndex; i < toIndex; i += 1) states[i].cancelled = true;
-            states[toIndex].boundary = 'replacementStart';
-        } else if (toIndex >= 0) {
-            states[toIndex].boundary = 'replacementStart';
-        } else if (states.length && normalizeStationMatchName(stops[0]?.stazione) === normalizeStationMatchName(toName)) {
-            states[0].boundary = 'replacementStart';
-        }
-    }
-
-    return states;
-}
-
-
-
 
 function readRecentSearches(): RecentSearchItem[] {
     const raw = JSON.parse(localStorage.getItem('recentSearches') || '[]');
@@ -1394,7 +1284,9 @@ function resolveRouteDisplay(data: TrainData, timelineStops: TrainStop[]): { ori
     const fallback = getDefaultRouteDisplay(data);
     const stops = Array.isArray(timelineStops) ? timelineStops : [];
     const hasSwissData = currentSwissFormationData?.available && stops.some((stop) => stop.source === 'swiss' || stop.swissStop);
-    if (!hasSwissData || stops.length < 2) return fallback;
+    if (!hasSwissData || stops.length < 2) {
+        return resolvePartialCancellationRouteDisplay(data, stops, fallback);
+    }
 
     const displayableStops = stops.filter((stop) => {
         if (!stop?.stazione) return false;
@@ -1405,10 +1297,12 @@ function resolveRouteDisplay(data: TrainData, timelineStops: TrainStop[]): { ori
     const first = displayableStops[0] || stops[0];
     const last = displayableStops[displayableStops.length - 1] || stops[stops.length - 1];
 
-    return {
+    const swissRoute = {
         origin: first?.stazione || fallback.origin,
         destination: last?.stazione || fallback.destination
     };
+
+    return resolvePartialCancellationRouteDisplay(data, stops, swissRoute);
 }
 
 function resolveDurationDisplay(data: TrainData, timelineStops: TrainStop[]): string {
@@ -1618,7 +1512,7 @@ function render(data: TrainData): void {
     }
 
     const totalStations = timelineStops.length;
-    const partialCancellationStates = buildPartialCancellationState(data, timelineStops);
+    const partialCancellationStates = normalizePartialCancellationState(data, timelineStops);
 
     timelineStops.forEach((f, i) => {
         const isLast = i === totalStations - 1;

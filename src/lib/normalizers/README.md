@@ -16,4 +16,6 @@ Browser runtime source now lives in `src/client/**/*.ts`. New pure logic should 
 
 - `statistics.ts`: category/status helpers for the statistics dashboard.
 - `swiss.ts`: Swiss formation gatekeeping, border station protection, and vehicle identity merging.
-- `viaggiatreno.ts`: station-name matching, stop-time status evidence, and partial-cancellation state detection.
+- `viaggiatreno.ts`: station-name matching, stop-time status evidence,
+  partial-cancellation state detection, and subtitle-derived actual route
+  endpoints for `Parte da ...` / `Arriva a ...` notices.

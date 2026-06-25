@@ -52,6 +52,9 @@ The main search page is built around train-number lookup. It keeps the
 ViaggiaTreno result as the authoritative FS/RFI-linked data source, falls back
 to Italo in Viaggio for supported Italo train numbers, then adds extra
 information when a compatible source is available.
+Partial cancellations are normalized before rendering so `Parte da ...` and
+`Arriva a ...` service notices can correct the displayed origin, destination,
+and stop-level actual-start/actual-end badges.
 
 ### Station Boards
 

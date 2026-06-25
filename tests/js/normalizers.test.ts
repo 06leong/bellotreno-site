@@ -11,6 +11,7 @@ import {
 import {
   buildPartialCancellationState,
   normalizeStationMatchName,
+  resolvePartialCancellationRouteDisplay,
   resolveStopTimeStatus,
 } from "../../src/lib/normalizers/viaggiatreno.ts";
 import {
@@ -330,6 +331,41 @@ test("partial cancellation after actual end is marked as cancelled", () => {
   assert.equal(state[1].cancelled, false);
   assert.equal(state[1].boundary, "actualEnd");
   assert.equal(state[2].cancelled, true);
+});
+
+test("partial cancellation parser keeps dotted station abbreviations intact", () => {
+  const stops = [
+    { stazione: "LA STORTA" },
+    { stazione: "LA GIUSTINIANA" },
+    { stazione: "IPOGEO DEGLI OTTAVI" },
+    { stazione: "OTTAVIA" },
+    { stazione: "ROMA S.FILIPPO NERI" },
+    { stazione: "ROMA MONTE MARIO" },
+    { stazione: "GEMELLI" },
+    { stazione: "ROMA BALDUINA" },
+    { stazione: "APPIANO" },
+    { stazione: "VALLE AURELIA" },
+    { stazione: "ROMA S.PIETRO" },
+    { stazione: "QUATTRO VENTI" },
+    { stazione: "ROMA TRASTEVERE" },
+    { stazione: "ROMA OSTIENSE" },
+  ];
+  const payload = {
+    subTitle: "Treno cancellato da ROMA S.PIETRO a ROMA OSTIENSE. Arriva a ROMA S.PIETRO",
+  };
+  const state = buildPartialCancellationState(payload, stops);
+  const route = resolvePartialCancellationRouteDisplay(payload, stops, {
+    origin: "LA STORTA",
+    destination: "ROMA OSTIENSE",
+  });
+
+  assert.equal(state[4].boundary, "");
+  assert.equal(state[4].cancelled, false);
+  assert.equal(state[10].boundary, "actualEnd");
+  assert.equal(state[10].cancelled, false);
+  assert.equal(state[11].cancelled, true);
+  assert.equal(state[13].cancelled, true);
+  assert.equal(route.destination, "ROMA S.PIETRO");
 });
 
 test("cropped replacement journey marks the first visible stop as replacement start", () => {

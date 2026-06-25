@@ -351,7 +351,10 @@ fetch("https://ah.bellotreno.workers.dev/?url=https://www.viaggiatreno.it/.../an
   incrementing the Cloudflare Worker counter again.
 - SmartCaring 14-day operating history for supported categories.
 - Trenord line-level Traffic info for Trenord trains.
-- Partial-cancellation display in train timelines.
+- Partial-cancellation display in train timelines, including subtitle-derived
+  actual origins/destinations from `Parte da ...` and `Arriva a ...` notices.
+  Sentence parsing must not treat station abbreviation dots such as
+  `ROMA S.PIETRO` as the end of the notice.
 - Swiss formation card with coach order, sectors, vehicle facilities, EVN, route
   segments, and active-stop closed/no-passage status.
 - Interactive statistics charts, tables, ranking, pagination, and CSV links.

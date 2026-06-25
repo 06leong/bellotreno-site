@@ -1934,6 +1934,14 @@ stateDiagram-v2
     部分取消 --> 该站取消: actualFermataType=3
 ```
 
+Observed on REG 23307, partial-cancellation subtitles can include station
+abbreviations with dots, for example:
+`Treno cancellato da ROMA S.PIETRO a ROMA OSTIENSE. Arriva a ROMA S.PIETRO`.
+Parsers must terminate subtitle station captures only on a sentence boundary
+(`.` followed by whitespace/end) and not on abbreviation dots inside station
+names. The `Arriva a ...` station is the actual terminal for route display and
+for the timeline `actualEnd` badge.
+
 
 ## 完整端点速查表
 
