@@ -1,14 +1,13 @@
 ---
+import BrandLogo from './BrandLogo.astro';
 ---
 
 <nav
     class="navbar fixed top-0 w-full z-50 bg-transparent flex items-center justify-between px-4 sm:px-6 min-h-0 h-16"
     transition:persist="main-nav">
     {/* transition:persist keeps this nav DOM node alive across ClientRouter page transitions. */}
-    <a href="/" class="text-base-content hover:opacity-75 transition-opacity outline-none flex items-center" style="text-decoration: none;">
-        <span class="text-[1.4rem] sm:text-[1.6rem] tracking-tight text-base-content" style="font-family: var(--app-font-heading); font-weight: 800; letter-spacing: -1px;">
-            Bello<span class="text-primary font-medium">Treno</span>
-        </span>
+    <a href="/" class="nav-brand-link text-base-content hover:opacity-75 transition-opacity outline-none flex items-center" style="text-decoration: none;" aria-label="BelloTreno">
+        <BrandLogo class="nav-wordmark" />
     </a>
 
     <div class="hidden sm:flex items-center gap-1 sm:gap-2">

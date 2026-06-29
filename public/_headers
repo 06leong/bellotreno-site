@@ -16,6 +16,9 @@
 /og-image.png
   Cache-Control: public, max-age=3600, must-revalidate
 
+/og-image.svg
+  Cache-Control: public, max-age=3600, must-revalidate
+
 /pic/*
   Cache-Control: public, max-age=3600, must-revalidate
 

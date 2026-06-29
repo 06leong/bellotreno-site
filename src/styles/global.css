@@ -160,6 +160,37 @@ h1, h2, h3, h4, h5, h6, .brand-heading {
     font-family: var(--app-font-heading);
 }
 
+.brand-wordmark {
+    display: block;
+    overflow: visible;
+}
+
+.brand-wordmark-bello {
+    fill: var(--color-base-content);
+}
+
+.brand-wordmark-treno {
+    fill: var(--color-primary);
+}
+
+.nav-wordmark {
+    width: 8.75rem;
+    height: auto;
+}
+
+.home-wordmark-heading {
+    display: flex;
+    justify-content: center;
+    margin-top: 0;
+    line-height: 1;
+}
+
+.home-wordmark {
+    width: min(78vw, 27rem);
+    height: auto;
+    filter: drop-shadow(0 2px 5px color-mix(in oklch, var(--color-base-content) 18%, transparent));
+}
+
 * {
     box-sizing: border-box;
 }
