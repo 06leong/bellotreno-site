@@ -1,5 +1,4 @@
 ---
-import BrandLogo from './BrandLogo.astro';
 ---
 
 <nav
@@ -7,7 +6,7 @@ import BrandLogo from './BrandLogo.astro';
     transition:persist="main-nav">
     {/* transition:persist keeps this nav DOM node alive across ClientRouter page transitions. */}
     <a href="/" class="nav-brand-link text-base-content hover:opacity-75 transition-opacity outline-none flex items-center" style="text-decoration: none;" aria-label="BelloTreno">
-        <BrandLogo class="nav-wordmark" />
+        <img src="/favicon.svg" alt="BelloTreno" class="nav-logo-mark" decoding="async" />
     </a>
 
     <div class="hidden sm:flex items-center gap-1 sm:gap-2">
