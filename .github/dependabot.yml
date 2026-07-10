@@ -1,0 +1,29 @@
+version: 2
+
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "09:00"
+      timezone: "Asia/Singapore"
+    groups:
+      npm-patch-minor:
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+          - "minor"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "09:15"
+      timezone: "Asia/Singapore"
+    groups:
+      actions-dependencies:
+        patterns:
+          - "*"

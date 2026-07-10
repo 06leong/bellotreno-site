@@ -1,0 +1,4 @@
+interface:
+  display_name: "BelloTreno Provider Change"
+  short_description: "Trace and verify railway provider changes end to end"
+  default_prompt: "Use $bellotreno-provider-change to implement or diagnose a railway data-provider change end to end."

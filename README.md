@@ -118,7 +118,7 @@ on observable data rather than official full-network reports.
 Detailed implementation notes live in the `doc/` directory:
 
 - [Project guide](doc/PROJECT_GUIDE.md)
-- [Agent/developer notes](doc/AGENTS.md)
+- [Repository-wide agent/developer notes](AGENTS.md)
 - [TypeScript migration audit](doc/typescript-migration-audit.md)
 - [innerHTML audit notes](doc/innerhtml-audit.md)
 - [ViaggiaTreno API notes](doc/blog-viaggiatreno-api.md)
@@ -146,6 +146,11 @@ Runtime JavaScript source should not be added under `public/scripts/`. Browser
 code is authored as TypeScript and bundled by Astro/Vite into hashed assets.
 `npm run check:no-raw-js` fails if raw `.js`, `.mjs`, or `.cjs` source files are
 added outside generated/dependency directories.
+
+Dependabot checks npm and GitHub Actions dependencies weekly. npm patch/minor
+updates and GitHub Actions updates are grouped into reviewable PRs, while npm
+major releases remain separate so migrations are explicit.
+
 Fonts are configured through Astro's Fonts API so generated font files are served
 from the built site instead of loading Google Fonts at page runtime.
 

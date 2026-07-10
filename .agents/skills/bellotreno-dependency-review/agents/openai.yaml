@@ -1,0 +1,4 @@
+interface:
+  display_name: "BelloTreno Dependency Review"
+  short_description: "Review dependency upgrades with risk-aware verification"
+  default_prompt: "Use $bellotreno-dependency-review to assess and verify this Dependabot or dependency update."
