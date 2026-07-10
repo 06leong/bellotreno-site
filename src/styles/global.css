@@ -339,7 +339,7 @@ html[data-lang-loading] .hero-typewriter span {
         0 16px 32px -4px color-mix(in oklch, var(--color-base-content) 10%, transparent);
 }
 
-/* Card glass border 閳?visible separation from background */
+/* Card glass border: visible separation from background */
 .glass-border {
     border: 1px solid color-mix(in oklch, var(--color-base-content) 10%, transparent);
     box-shadow: inset 0 1px 0 color-mix(in oklch, #ffffff 12%, transparent);
@@ -610,7 +610,7 @@ html[data-lang-loading] .hero-typewriter span {
     overflow: hidden;
 }
 
-/* Ripple 閻愮懓鍤☉鐔稿悏閺佸牊鐏?閳?choice-item 閸?back-to-top 閹稿鎸抽崗杈╂暏 */
+/* Reusable ripple effect for choice items and the back-to-top button */
 .ripple {
     position: relative;
     overflow: hidden;
@@ -754,7 +754,7 @@ html[data-lang-loading] .hero-typewriter span {
     top: 16px;
     right: 16px;
     cursor: pointer;
-    /* Perfect circle: fixed 36px 鑴?36px */
+    /* Perfect circle: fixed 36px by 36px */
     width: 36px;
     height: 36px;
     border-radius: 50%;
@@ -847,7 +847,7 @@ html[data-lang-loading] .hero-typewriter span {
 .train-status-section {
     text-align: right;
     flex-shrink: 0;
-    /* No outer box 閳?just flowing text aligned right */
+    /* No outer box; keep flowing text aligned right */
     max-width: 240px;
     min-width: 110px;
     margin-left: auto;
@@ -855,7 +855,7 @@ html[data-lang-loading] .hero-typewriter span {
 }
 
 .train-delay {
-    /* Default = on time/early 閳?green */
+    /* Default status is on time or early: green */
     color: var(--train-green);
     font-size: 1.35rem;
     font-weight: 800;
@@ -865,7 +865,7 @@ html[data-lang-loading] .hero-typewriter span {
 }
 
 .train-delay.late {
-    /* Late 閳?red. !important ensures CSS wins over Tailwind utility classes */
+    /* Late status: red. !important ensures CSS wins over Tailwind utility classes */
     color: var(--train-red) !important;
 }
 
@@ -874,7 +874,7 @@ html[data-lang-loading] .hero-typewriter span {
     color: var(--color-base-content);
     opacity: 0.55;
     margin-top: 3px;
-    /* Allow wrapping 閳?no outer box to constrain */
+    /* Allow wrapping; no outer box constrains the content */
     white-space: normal;
     word-break: break-all;
 }
@@ -1469,7 +1469,7 @@ footer span {
     display: none;
 }
 
-/* ===== Infomobilit鑴?===== */
+/* ===== Infomobilita ===== */
 
 /* ===== Home infomobilita ticker ===== */
 
@@ -3134,7 +3134,7 @@ button.swiss-section-title {
     color: #ffffff !important;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    /* Removed white inset shadow 閳?it was desaturating badge colors */
+    /* Removed white inset shadow because it desaturated badge colors */
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
     vertical-align: middle;
     line-height: 1.2;
@@ -3176,7 +3176,7 @@ button.swiss-section-title {
     line-height: 1.2;
 }
 
-/* Individual badge colors 閳?ORIGINAL HEX 閳?DO NOT CHANGE */
+/* Individual badge colors: original hex values; do not change */
 .badge-regional     { background-color: #70a84a; }
 .badge-italo        { background-color: #982719; }
 .badge-arrow        { background-color: #bc3433; }

@@ -1,0 +1,4 @@
+interface:
+  display_name: "BelloTreno Change Gate"
+  short_description: "Select the right validation gate for each project change"
+  default_prompt: "Use $bellotreno-change-gate to select and run the validation required for my current changes."
