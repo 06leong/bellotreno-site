@@ -6,6 +6,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app.py .
+COPY statistics_storage.py .
+COPY migrate_statistics_v2.py .
 COPY statistics_core ./statistics_core
 
 EXPOSE 8081

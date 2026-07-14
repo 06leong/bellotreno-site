@@ -5,6 +5,7 @@ import os
 import sqlite3
 import threading
 import time
+import zlib
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -17,12 +18,29 @@ from flask import Flask, Response, jsonify, request
 
 from statistics_core.normalizers import (
     as_int as core_as_int,
+    is_collectable_service as core_is_collectable_service,
     midnight_epoch_ms as core_midnight_epoch_ms,
     normalize_category as core_normalize_category,
+    origin_code_from_item as core_origin_code_from_item,
     pick as core_pick,
-    is_service_date_within_lookback as core_is_service_date_within_lookback,
     service_date_from_item as core_service_date_from_item,
     train_key_from_parts as core_train_key_from_parts,
+)
+from statistics_storage import (
+    SCHEMA_VERSION as STATISTICS_STORAGE_SCHEMA_VERSION,
+    cleanup_v2_rows,
+    decode_raw_json,
+    detail_retry_due,
+    encode_raw_json,
+    initialize_v2_schema,
+    load_active_service_keys,
+    observation_quality,
+    record_detail_attempt,
+    replace_train_stop_events,
+    resolve_train_raw_payload,
+    stop_snapshot_quality,
+    store_train_raw_payload,
+    upsert_train_service,
 )
 
 
@@ -54,8 +72,29 @@ COLLECTOR_SCHEDULE_OFFSET_MINUTES = min(59, max(0, env_int("COLLECTOR_SCHEDULE_O
 COLLECTOR_CATCHUP_GRACE_MINUTES = env_int("COLLECTOR_CATCHUP_GRACE_MINUTES", 20, minimum=0)
 COLLECTOR_FINALIZE_TIME = os.getenv("COLLECTOR_FINALIZE_TIME", "23:55")
 COLLECTOR_SERVICE_DATE_LOOKBACK_DAYS = env_int("COLLECTOR_SERVICE_DATE_LOOKBACK_DAYS", 1, minimum=0)
-DETAIL_LIMIT_PER_RUN = env_int("DETAIL_LIMIT_PER_RUN", 0, minimum=0)
+COLLECTOR_ACTIVE_SERVICE_TTL_DAYS = max(
+    COLLECTOR_SERVICE_DATE_LOOKBACK_DAYS,
+    env_int("COLLECTOR_ACTIVE_SERVICE_TTL_DAYS", 7, minimum=1),
+)
+configured_detail_limit = env_int("DETAIL_LIMIT_PER_RUN", 750, minimum=0)
+DETAIL_LIMIT_PER_RUN = (
+    0 if configured_detail_limit == 0 else max(2, configured_detail_limit)
+)
+DETAIL_RETRY_BASE_MINUTES = env_int("DETAIL_RETRY_BASE_MINUTES", 60)
+DETAIL_RETRY_MAX_MINUTES = max(
+    DETAIL_RETRY_BASE_MINUTES,
+    env_int("DETAIL_RETRY_MAX_MINUTES", 720),
+)
+DETAIL_SUCCESS_REFRESH_MINUTES = env_int("DETAIL_SUCCESS_REFRESH_MINUTES", 120)
 RETENTION_DAYS = env_int("RETENTION_DAYS", 30)
+V2_OBSERVATION_RETENTION_DAYS = env_int("V2_OBSERVATION_RETENTION_DAYS", 30)
+RAW_PAYLOAD_RETENTION_DAYS = env_int("RAW_PAYLOAD_RETENTION_DAYS", 7)
+V2_SERVICE_RETENTION_DAYS = max(
+    V2_OBSERVATION_RETENTION_DAYS,
+    RAW_PAYLOAD_RETENTION_DAYS,
+    COLLECTOR_ACTIVE_SERVICE_TTL_DAYS,
+    env_int("V2_SERVICE_RETENTION_DAYS", 90),
+)
 STATION_REGISTRY_REFRESH_DAYS = env_int("STATION_REGISTRY_REFRESH_DAYS", 7)
 REGION_CODES = [
     int(item.strip())
@@ -74,12 +113,21 @@ collector_lock = threading.Lock()
 thread_local = threading.local()
 
 
+class ClosingConnection(sqlite3.Connection):
+    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> bool:
+        try:
+            return bool(super().__exit__(exc_type, exc_value, traceback))
+        finally:
+            self.close()
+
+
 def db() -> sqlite3.Connection:
     os.makedirs(os.path.dirname(SQLITE_PATH), exist_ok=True)
-    conn = sqlite3.connect(SQLITE_PATH, timeout=30)
+    conn = sqlite3.connect(SQLITE_PATH, timeout=30, factory=ClosingConnection)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
 
@@ -90,10 +138,17 @@ def table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
         return set()
 
 
-def drop_if_incompatible(conn: sqlite3.Connection, table: str, required_columns: set[str]) -> None:
+def require_compatible_table(conn: sqlite3.Connection, table: str, required_columns: set[str]) -> None:
     row = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone()
-    if row and not required_columns.issubset(table_columns(conn, table)):
-        conn.execute(f"DROP TABLE {table}")
+    if not row:
+        return
+    missing = required_columns - table_columns(conn, table)
+    if missing:
+        missing_text = ", ".join(sorted(missing))
+        raise RuntimeError(
+            f"database table {table!r} is incompatible; missing columns: {missing_text}. "
+            "Refusing to drop production data automatically."
+        )
 
 
 def ensure_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
@@ -104,9 +159,9 @@ def ensure_column(conn: sqlite3.Connection, table: str, column: str, definition:
 def init_db() -> None:
     os.makedirs(CACHE_DIR, exist_ok=True)
     with db() as conn:
-        drop_if_incompatible(conn, "station_registry", {"station_code", "station_name", "region_code", "updated_at"})
-        drop_if_incompatible(conn, "trains", {"date", "train_key", "departure_epoch_ms", "has_details", "completed"})
-        drop_if_incompatible(conn, "train_stops", {"date", "train_key", "stop_number", "station_code"})
+        require_compatible_table(conn, "station_registry", {"station_code", "station_name", "region_code", "updated_at"})
+        require_compatible_table(conn, "trains", {"date", "train_key", "departure_epoch_ms", "has_details", "completed"})
+        require_compatible_table(conn, "train_stops", {"date", "train_key", "stop_number", "station_code"})
 
         conn.executescript(
             """
@@ -137,6 +192,9 @@ def init_db() -> None:
                 board_rows INTEGER DEFAULT 0,
                 detail_queue INTEGER DEFAULT 0,
                 details INTEGER DEFAULT 0,
+                detail_attempts INTEGER DEFAULT 0,
+                detail_failures INTEGER DEFAULT 0,
+                detail_deferred INTEGER DEFAULT 0,
                 error TEXT,
                 created_at TEXT NOT NULL
             );
@@ -177,7 +235,9 @@ def init_db() -> None:
                 scheduled_departure TEXT,
                 scheduled_arrival TEXT,
                 last_seen TEXT,
+                latest_state_quality INTEGER DEFAULT 0,
                 detail_last_seen TEXT,
+                detail_quality INTEGER DEFAULT 0,
                 has_details INTEGER DEFAULT 0,
                 completed INTEGER DEFAULT 0,
                 raw_json TEXT,
@@ -207,6 +267,8 @@ def init_db() -> None:
                 departure_actual TEXT,
                 departure_delay INTEGER,
                 cancelled INTEGER DEFAULT 0,
+                detail_observed_at TEXT,
+                detail_quality INTEGER DEFAULT 0,
                 raw_json TEXT,
                 PRIMARY KEY (date, train_key, stop_number)
             );
@@ -257,8 +319,16 @@ def init_db() -> None:
         ensure_column(conn, "snapshots", "finished_at", "TEXT")
         ensure_column(conn, "snapshots", "duration_seconds", "REAL DEFAULT 0")
         ensure_column(conn, "snapshots", "status", "TEXT DEFAULT 'success'")
+        ensure_column(conn, "collector_runs", "detail_attempts", "INTEGER DEFAULT 0")
+        ensure_column(conn, "collector_runs", "detail_failures", "INTEGER DEFAULT 0")
+        ensure_column(conn, "collector_runs", "detail_deferred", "INTEGER DEFAULT 0")
         ensure_column(conn, "trains", "service_date", "TEXT")
         ensure_column(conn, "trains", "not_departed", "INTEGER DEFAULT 0")
+        ensure_column(conn, "trains", "latest_state_quality", "INTEGER DEFAULT 0")
+        ensure_column(conn, "trains", "detail_quality", "INTEGER DEFAULT 0")
+        ensure_column(conn, "train_stops", "detail_observed_at", "TEXT")
+        ensure_column(conn, "train_stops", "detail_quality", "INTEGER DEFAULT 0")
+        initialize_v2_schema(conn)
 
 
 def now_rome() -> datetime:
@@ -386,6 +456,9 @@ def record_collector_run(
     board_rows: int = 0,
     detail_queue: int = 0,
     details: int = 0,
+    detail_attempts: int = 0,
+    detail_failures: int = 0,
+    detail_deferred: int = 0,
     error: str | None = None,
 ) -> None:
     slot_iso = to_utc_iso(slot_at)
@@ -395,8 +468,9 @@ def record_collector_run(
             """
             INSERT INTO collector_runs (
                 slot_at, date, status, trigger, started_at, finished_at, duration_seconds,
-                stations, board_rows, detail_queue, details, error, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                stations, board_rows, detail_queue, details, detail_attempts,
+                detail_failures, detail_deferred, error, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(slot_at) DO UPDATE SET
                 date=excluded.date,
                 status=excluded.status,
@@ -408,6 +482,9 @@ def record_collector_run(
                 board_rows=excluded.board_rows,
                 detail_queue=excluded.detail_queue,
                 details=excluded.details,
+                detail_attempts=excluded.detail_attempts,
+                detail_failures=excluded.detail_failures,
+                detail_deferred=excluded.detail_deferred,
                 error=excluded.error
             """,
             (
@@ -422,6 +499,9 @@ def record_collector_run(
                 board_rows,
                 detail_queue,
                 details,
+                detail_attempts,
+                detail_failures,
+                detail_deferred,
                 error,
                 iso_now(),
             ),
@@ -531,7 +611,7 @@ def train_key_from_parts(number: Any, origin_code: Any, departure_epoch_ms: Any,
 def train_key(item: dict[str, Any], fallback_date: str | None = None) -> str:
     return train_key_from_parts(
         pick(item, "numeroTreno", "trainNumber", "compNumeroTreno", default=""),
-        pick(item, "codLocOrig", "idOrigine", "codOrigine", default=""),
+        core_origin_code_from_item(item),
         pick(item, "dataPartenzaTreno", "dataPartenza", default=midnight_epoch_ms(fallback_date)),
         fallback_date=fallback_date,
     )
@@ -550,12 +630,31 @@ def service_date_from_item(item: dict[str, Any], fallback_date: str) -> str:
     return core_service_date_from_item(item, fallback_date)
 
 
-def is_collectable_service_date(item: dict[str, Any], collection_date: str) -> bool:
-    return core_is_service_date_within_lookback(
+def is_collectable_service_date(
+    item: dict[str, Any],
+    collection_date: str,
+    active_train_keys: set[str] | None = None,
+) -> bool:
+    return core_is_collectable_service(
         item,
         collection_date,
-        lookback_days=COLLECTOR_SERVICE_DATE_LOOKBACK_DAYS,
+        normal_lookback_days=COLLECTOR_SERVICE_DATE_LOOKBACK_DAYS,
+        active_ttl_days=COLLECTOR_ACTIVE_SERVICE_TTL_DAYS,
+        known_active_train_keys=active_train_keys,
     )
+
+
+def active_service_keys(collection_date: str) -> set[str]:
+    collection_day = datetime.fromisoformat(collection_date).date()
+    earliest_service_date = (
+        collection_day - timedelta(days=COLLECTOR_ACTIVE_SERVICE_TTL_DAYS)
+    ).isoformat()
+    with db() as conn:
+        return load_active_service_keys(
+            conn,
+            earliest_service_date=earliest_service_date,
+            collection_date=collection_date,
+        )
 
 
 def status_from_item(item: dict[str, Any]) -> str:
@@ -743,16 +842,20 @@ def fetch_board(station_code: str, board_type: str, board_time: datetime) -> lis
 
 
 def board_candidate(item: dict[str, Any], fallback_date: str) -> dict[str, str] | None:
+    service_date = service_date_from_item(item, fallback_date)
     number = str(pick(item, "numeroTreno", "compNumeroTreno", default="")).strip()
-    origin_code = str(pick(item, "codLocOrig", "idOrigine", "codOrigine", default="")).strip()
-    departure_epoch = str(pick(item, "dataPartenzaTreno", "dataPartenza", default=midnight_epoch_ms(fallback_date))).strip()
+    origin_code = core_origin_code_from_item(item)
+    departure_epoch = str(
+        pick(item, "dataPartenzaTreno", "dataPartenza", default=midnight_epoch_ms(service_date))
+    ).strip()
     if not number or not origin_code:
         return None
     return {
         "number": number,
         "origin_code": origin_code,
         "departure_epoch_ms": departure_epoch,
-        "train_key": train_key_from_parts(number, origin_code, departure_epoch, fallback_date=fallback_date),
+        "service_date": service_date,
+        "train_key": train_key_from_parts(number, origin_code, departure_epoch, fallback_date=service_date),
     }
 
 
@@ -765,19 +868,49 @@ def normalize_train(
 ) -> dict[str, Any]:
     service_date = service_date_from_item(item, fallback_date or today_rome())
     record_date = stats_date or service_date
-    stops = item.get("fermate") if isinstance(item.get("fermate"), list) else []
+    stops = [stop for stop in item.get("fermate", []) if isinstance(stop, dict)]
     first_stop = stops[0] if stops else {}
     last_stop = stops[-1] if stops else {}
     category = normalize_category(pick(item, "categoria", "compCategoria", "categoriaDescrizione", default=""))
     number = str(pick(item, "numeroTreno", "trainNumber", "compNumeroTreno", default="")).strip()
     origin = clean_station_name(pick(item, "origine", "stazioneOrigine", default="") or first_stop.get("stazione"))
     destination = clean_station_name(pick(item, "destinazione", "stazioneDestinazione", default="") or last_stop.get("stazione"))
-    origin_code = str(pick(item, "idOrigine", "codLocOrig", "codOrigine", default="") or first_stop.get("id") or "").strip()
+    origin_code = str(core_origin_code_from_item(item) or first_stop.get("id") or "").strip()
     destination_code = str(pick(item, "idDestinazione", "codDestinazione", default="") or last_stop.get("id") or "").strip()
-    departure_epoch = str(pick(item, "dataPartenzaTreno", "dataPartenza", default=midnight_epoch_ms(service_date))).strip()
+    source_departure_epoch = pick(item, "dataPartenzaTreno", "dataPartenza", default=None)
+    departure_epoch = str(source_departure_epoch or midnight_epoch_ms(service_date)).strip()
     delay = as_int(pick(item, "ritardo", "delay", default=0))
     departure_delay = as_int(pick(first_stop, "ritardoPartenza", default=pick(item, "ritardoPartenza", default=delay)))
     arrival_delay = as_int(pick(last_stop, "ritardoArrivo", default=pick(item, "ritardoArrivo", default=delay)))
+    evidence_candidates: list[tuple[int, str, str | None, str | None]] = []
+    for stop in stops:
+        station_code = str(stop.get("id") or "").strip()
+        evidence_candidates.extend(
+            (
+                (
+                    as_int(stop.get("ritardoPartenza"), 0),
+                    station_code,
+                    timestamp_to_iso(pick(stop, "partenza_teorica", "programmata", default=None)),
+                    timestamp_to_iso(pick(stop, "partenzaReale", default=None)),
+                ),
+                (
+                    as_int(stop.get("ritardoArrivo"), 0),
+                    station_code,
+                    timestamp_to_iso(pick(stop, "arrivo_teorico", "programmata", default=None)),
+                    timestamp_to_iso(pick(stop, "arrivoReale", default=None)),
+                ),
+            )
+        )
+    evidence_delay, evidence_station_code, evidence_expected_at, evidence_actual_at = max(
+        evidence_candidates or [(0, "", None, None)],
+        key=lambda candidate: abs(candidate[0]),
+    )
+    if abs(delay) > abs(evidence_delay):
+        # ViaggiaTreno's train-level delay can exceed every available stop event.
+        evidence_delay = delay
+        evidence_station_code = ""
+        evidence_expected_at = None
+        evidence_actual_at = None
     status = status_from_item(item)
     cancelled = 1 if status == "cancelled" else 0
     rescheduled = 1 if status == "rescheduled" else 0
@@ -793,10 +926,12 @@ def normalize_train(
     scheduled_arrival = timestamp_to_iso(pick(last_stop, "arrivo_teorico", "programmata", default=None)) or str(
         pick(item, "compOrarioArrivo", "orarioArrivo", default="")
     ).strip()
-    return {
+    raw_payload = encode_raw_json(item) if has_details else None
+    normalized = {
         "date": record_date,
         "service_date": service_date,
         "train_key": train_key_from_parts(number, origin_code, departure_epoch, fallback_date=service_date),
+        "identity_quality": "canonical" if number and origin_code and source_departure_epoch else "provisional",
         "train_number": number,
         "departure_epoch_ms": departure_epoch,
         "category": category,
@@ -809,7 +944,10 @@ def normalize_train(
         "relation_key": relation_key,
         "departure_delay": departure_delay,
         "arrival_delay": arrival_delay,
-        "delay": max(delay, departure_delay, arrival_delay),
+        "delay": max(
+            [delay, departure_delay, arrival_delay]
+            + [candidate[0] for candidate in evidence_candidates]
+        ),
         "cancelled": cancelled,
         "rescheduled": rescheduled,
         "not_departed": not_departed,
@@ -819,8 +957,36 @@ def normalize_train(
         "detail_last_seen": seen_at if has_details else None,
         "has_details": 1 if has_details else 0,
         "completed": completed,
-        "raw_json": json.dumps(item, ensure_ascii=False, separators=(",", ":")),
+        "evidence_station_code": evidence_station_code if has_details else "",
+        "evidence_expected_at": evidence_expected_at if has_details else "",
+        "evidence_actual_at": evidence_actual_at if has_details else "",
+        "evidence_delay": evidence_delay if has_details else None,
+        "detail_stop_count": len(stops) if has_details else 0,
+        "raw_payload": raw_payload,
+        # Keep a compressed collection-date copy for the legacy v1 detail contract.
+        "raw_json": raw_payload,
     }
+    normalized["observation_quality"] = observation_quality(
+        normalized,
+        "detail" if has_details else "board",
+    )
+    normalized["latest_state_quality"] = normalized["observation_quality"]
+    normalized["detail_quality"] = (
+        normalized["observation_quality"] if has_details else 0
+    )
+    return normalized
+
+
+def retain_best_service_observation(
+    rows: dict[tuple[str, str], dict[str, Any]],
+    row: dict[str, Any],
+) -> None:
+    key = (row["service_date"], row["train_key"])
+    current = rows.get(key)
+    if current is None or as_int(row.get("observation_quality")) > as_int(
+        current.get("observation_quality")
+    ):
+        rows[key] = row
 
 
 def upsert_train(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
@@ -829,39 +995,71 @@ def upsert_train(conn: sqlite3.Connection, row: dict[str, Any]) -> None:
         INSERT INTO trains (
             date, service_date, train_key, train_number, departure_epoch_ms, category, operator, status, origin, destination,
             origin_code, destination_code, relation_key, departure_delay, arrival_delay, delay,
-            cancelled, rescheduled, not_departed, scheduled_departure, scheduled_arrival, last_seen, detail_last_seen,
-            has_details, completed, raw_json
+            cancelled, rescheduled, not_departed, scheduled_departure, scheduled_arrival, last_seen,
+            latest_state_quality, detail_last_seen, detail_quality, has_details, completed, raw_json
         ) VALUES (
             :date, :service_date, :train_key, :train_number, :departure_epoch_ms, :category, :operator, :status, :origin, :destination,
             :origin_code, :destination_code, :relation_key, :departure_delay, :arrival_delay, :delay,
-            :cancelled, :rescheduled, :not_departed, :scheduled_departure, :scheduled_arrival, :last_seen, :detail_last_seen,
-            :has_details, :completed, :raw_json
+            :cancelled, :rescheduled, :not_departed, :scheduled_departure, :scheduled_arrival, :last_seen,
+            :latest_state_quality, :detail_last_seen, :detail_quality, :has_details, :completed, :raw_json
         )
         ON CONFLICT(date, train_key) DO UPDATE SET
             service_date=COALESCE(excluded.service_date, trains.service_date),
             train_number=COALESCE(NULLIF(excluded.train_number, ''), trains.train_number),
             departure_epoch_ms=COALESCE(NULLIF(excluded.departure_epoch_ms, ''), trains.departure_epoch_ms),
-            category=COALESCE(NULLIF(excluded.category, ''), trains.category),
-            operator=COALESCE(NULLIF(excluded.operator, ''), trains.operator),
-            status=excluded.status,
-            origin=COALESCE(NULLIF(excluded.origin, ''), trains.origin),
-            destination=COALESCE(NULLIF(excluded.destination, ''), trains.destination),
-            origin_code=COALESCE(NULLIF(excluded.origin_code, ''), trains.origin_code),
-            destination_code=COALESCE(NULLIF(excluded.destination_code, ''), trains.destination_code),
-            relation_key=COALESCE(NULLIF(excluded.relation_key, ''), trains.relation_key),
-            departure_delay=excluded.departure_delay,
-            arrival_delay=excluded.arrival_delay,
-            delay=excluded.delay,
-            cancelled=excluded.cancelled,
-            rescheduled=excluded.rescheduled,
-            not_departed=excluded.not_departed,
-            scheduled_departure=COALESCE(NULLIF(excluded.scheduled_departure, ''), trains.scheduled_departure),
-            scheduled_arrival=COALESCE(NULLIF(excluded.scheduled_arrival, ''), trains.scheduled_arrival),
-            last_seen=excluded.last_seen,
-            detail_last_seen=COALESCE(excluded.detail_last_seen, trains.detail_last_seen),
+            category=CASE WHEN excluded.category<>'' AND (
+                COALESCE(trains.category, '')='' OR excluded.has_details > trains.has_details OR
+                (excluded.has_details=trains.has_details AND (
+                    (excluded.has_details=1 AND (excluded.detail_last_seen > COALESCE(trains.detail_last_seen, '') OR (excluded.detail_last_seen=COALESCE(trains.detail_last_seen, '') AND excluded.detail_quality >= trains.detail_quality))) OR
+                    (excluded.has_details=0 AND (excluded.last_seen > COALESCE(trains.last_seen, '') OR (excluded.last_seen=COALESCE(trains.last_seen, '') AND excluded.latest_state_quality >= trains.latest_state_quality)))
+                ))
+            ) THEN excluded.category ELSE trains.category END,
+            operator=CASE WHEN excluded.operator<>'' AND (
+                COALESCE(trains.operator, '')='' OR excluded.has_details > trains.has_details OR
+                (excluded.has_details=trains.has_details AND ((excluded.has_details=1 AND (excluded.detail_last_seen > COALESCE(trains.detail_last_seen, '') OR (excluded.detail_last_seen=COALESCE(trains.detail_last_seen, '') AND excluded.detail_quality >= trains.detail_quality))) OR (excluded.has_details=0 AND (excluded.last_seen > COALESCE(trains.last_seen, '') OR (excluded.last_seen=COALESCE(trains.last_seen, '') AND excluded.latest_state_quality >= trains.latest_state_quality)))))
+            ) THEN excluded.operator ELSE trains.operator END,
+            origin=CASE WHEN excluded.origin<>'' AND (
+                COALESCE(trains.origin, '')='' OR excluded.has_details > trains.has_details OR
+                (excluded.has_details=trains.has_details AND ((excluded.has_details=1 AND (excluded.detail_last_seen > COALESCE(trains.detail_last_seen, '') OR (excluded.detail_last_seen=COALESCE(trains.detail_last_seen, '') AND excluded.detail_quality >= trains.detail_quality))) OR (excluded.has_details=0 AND (excluded.last_seen > COALESCE(trains.last_seen, '') OR (excluded.last_seen=COALESCE(trains.last_seen, '') AND excluded.latest_state_quality >= trains.latest_state_quality)))))
+            ) THEN excluded.origin ELSE trains.origin END,
+            destination=CASE WHEN excluded.destination<>'' AND (
+                COALESCE(trains.destination, '')='' OR excluded.has_details > trains.has_details OR
+                (excluded.has_details=trains.has_details AND ((excluded.has_details=1 AND (excluded.detail_last_seen > COALESCE(trains.detail_last_seen, '') OR (excluded.detail_last_seen=COALESCE(trains.detail_last_seen, '') AND excluded.detail_quality >= trains.detail_quality))) OR (excluded.has_details=0 AND (excluded.last_seen > COALESCE(trains.last_seen, '') OR (excluded.last_seen=COALESCE(trains.last_seen, '') AND excluded.latest_state_quality >= trains.latest_state_quality)))))
+            ) THEN excluded.destination ELSE trains.destination END,
+            origin_code=CASE WHEN excluded.origin_code<>'' AND (
+                COALESCE(trains.origin_code, '')='' OR excluded.has_details > trains.has_details OR
+                (excluded.has_details=trains.has_details AND ((excluded.has_details=1 AND (excluded.detail_last_seen > COALESCE(trains.detail_last_seen, '') OR (excluded.detail_last_seen=COALESCE(trains.detail_last_seen, '') AND excluded.detail_quality >= trains.detail_quality))) OR (excluded.has_details=0 AND (excluded.last_seen > COALESCE(trains.last_seen, '') OR (excluded.last_seen=COALESCE(trains.last_seen, '') AND excluded.latest_state_quality >= trains.latest_state_quality)))))
+            ) THEN excluded.origin_code ELSE trains.origin_code END,
+            destination_code=CASE WHEN excluded.destination_code<>'' AND (
+                COALESCE(trains.destination_code, '')='' OR excluded.has_details > trains.has_details OR
+                (excluded.has_details=trains.has_details AND ((excluded.has_details=1 AND (excluded.detail_last_seen > COALESCE(trains.detail_last_seen, '') OR (excluded.detail_last_seen=COALESCE(trains.detail_last_seen, '') AND excluded.detail_quality >= trains.detail_quality))) OR (excluded.has_details=0 AND (excluded.last_seen > COALESCE(trains.last_seen, '') OR (excluded.last_seen=COALESCE(trains.last_seen, '') AND excluded.latest_state_quality >= trains.latest_state_quality)))))
+            ) THEN excluded.destination_code ELSE trains.destination_code END,
+            relation_key=CASE WHEN excluded.relation_key<>'' AND (
+                COALESCE(trains.relation_key, '')='' OR excluded.has_details > trains.has_details OR
+                (excluded.has_details=trains.has_details AND ((excluded.has_details=1 AND (excluded.detail_last_seen > COALESCE(trains.detail_last_seen, '') OR (excluded.detail_last_seen=COALESCE(trains.detail_last_seen, '') AND excluded.detail_quality >= trains.detail_quality))) OR (excluded.has_details=0 AND (excluded.last_seen > COALESCE(trains.last_seen, '') OR (excluded.last_seen=COALESCE(trains.last_seen, '') AND excluded.latest_state_quality >= trains.latest_state_quality)))))
+            ) THEN excluded.relation_key ELSE trains.relation_key END,
+            scheduled_departure=CASE WHEN excluded.scheduled_departure<>'' AND (
+                COALESCE(trains.scheduled_departure, '')='' OR excluded.has_details > trains.has_details OR
+                (excluded.has_details=trains.has_details AND ((excluded.has_details=1 AND (excluded.detail_last_seen > COALESCE(trains.detail_last_seen, '') OR (excluded.detail_last_seen=COALESCE(trains.detail_last_seen, '') AND excluded.detail_quality >= trains.detail_quality))) OR (excluded.has_details=0 AND (excluded.last_seen > COALESCE(trains.last_seen, '') OR (excluded.last_seen=COALESCE(trains.last_seen, '') AND excluded.latest_state_quality >= trains.latest_state_quality)))))
+            ) THEN excluded.scheduled_departure ELSE trains.scheduled_departure END,
+            scheduled_arrival=CASE WHEN excluded.scheduled_arrival<>'' AND (
+                COALESCE(trains.scheduled_arrival, '')='' OR excluded.has_details > trains.has_details OR
+                (excluded.has_details=trains.has_details AND ((excluded.has_details=1 AND (excluded.detail_last_seen > COALESCE(trains.detail_last_seen, '') OR (excluded.detail_last_seen=COALESCE(trains.detail_last_seen, '') AND excluded.detail_quality >= trains.detail_quality))) OR (excluded.has_details=0 AND (excluded.last_seen > COALESCE(trains.last_seen, '') OR (excluded.last_seen=COALESCE(trains.last_seen, '') AND excluded.latest_state_quality >= trains.latest_state_quality)))))
+            ) THEN excluded.scheduled_arrival ELSE trains.scheduled_arrival END,
+            status=CASE WHEN excluded.last_seen > COALESCE(trains.last_seen, '') OR (excluded.last_seen=COALESCE(trains.last_seen, '') AND excluded.latest_state_quality >= trains.latest_state_quality) THEN excluded.status ELSE trains.status END,
+            departure_delay=CASE WHEN excluded.last_seen > COALESCE(trains.last_seen, '') OR (excluded.last_seen=COALESCE(trains.last_seen, '') AND excluded.latest_state_quality >= trains.latest_state_quality) THEN excluded.departure_delay ELSE trains.departure_delay END,
+            arrival_delay=CASE WHEN excluded.last_seen > COALESCE(trains.last_seen, '') OR (excluded.last_seen=COALESCE(trains.last_seen, '') AND excluded.latest_state_quality >= trains.latest_state_quality) THEN excluded.arrival_delay ELSE trains.arrival_delay END,
+            delay=CASE WHEN excluded.last_seen > COALESCE(trains.last_seen, '') OR (excluded.last_seen=COALESCE(trains.last_seen, '') AND excluded.latest_state_quality >= trains.latest_state_quality) THEN excluded.delay ELSE trains.delay END,
+            cancelled=CASE WHEN excluded.last_seen > COALESCE(trains.last_seen, '') OR (excluded.last_seen=COALESCE(trains.last_seen, '') AND excluded.latest_state_quality >= trains.latest_state_quality) THEN excluded.cancelled ELSE trains.cancelled END,
+            rescheduled=CASE WHEN excluded.last_seen > COALESCE(trains.last_seen, '') OR (excluded.last_seen=COALESCE(trains.last_seen, '') AND excluded.latest_state_quality >= trains.latest_state_quality) THEN excluded.rescheduled ELSE trains.rescheduled END,
+            not_departed=CASE WHEN excluded.last_seen > COALESCE(trains.last_seen, '') OR (excluded.last_seen=COALESCE(trains.last_seen, '') AND excluded.latest_state_quality >= trains.latest_state_quality) THEN excluded.not_departed ELSE trains.not_departed END,
+            last_seen=CASE WHEN excluded.last_seen >= COALESCE(trains.last_seen, '') THEN excluded.last_seen ELSE trains.last_seen END,
+            latest_state_quality=CASE WHEN excluded.last_seen > COALESCE(trains.last_seen, '') OR (excluded.last_seen=COALESCE(trains.last_seen, '') AND excluded.latest_state_quality >= trains.latest_state_quality) THEN excluded.latest_state_quality ELSE trains.latest_state_quality END,
+            detail_last_seen=CASE WHEN excluded.detail_last_seen > COALESCE(trains.detail_last_seen, '') OR (excluded.detail_last_seen=COALESCE(trains.detail_last_seen, '') AND excluded.detail_quality >= trains.detail_quality) THEN excluded.detail_last_seen ELSE trains.detail_last_seen END,
+            detail_quality=CASE WHEN excluded.detail_last_seen > COALESCE(trains.detail_last_seen, '') OR (excluded.detail_last_seen=COALESCE(trains.detail_last_seen, '') AND excluded.detail_quality >= trains.detail_quality) THEN excluded.detail_quality ELSE trains.detail_quality END,
             has_details=MAX(excluded.has_details, trains.has_details),
             completed=MAX(excluded.completed, trains.completed),
-            raw_json=CASE WHEN excluded.has_details = 1 THEN excluded.raw_json ELSE trains.raw_json END
+            raw_json=CASE WHEN excluded.has_details=1 AND (excluded.detail_last_seen > COALESCE(trains.detail_last_seen, '') OR (excluded.detail_last_seen=COALESCE(trains.detail_last_seen, '') AND excluded.detail_quality >= trains.detail_quality)) THEN excluded.raw_json ELSE trains.raw_json END
         """,
         row,
     )
@@ -898,30 +1096,56 @@ def normalize_stop(detail: dict[str, Any], stop: dict[str, Any], index: int, row
         "departure_actual": timestamp_to_iso(pick(stop, "partenzaReale", default=None)),
         "departure_delay": as_int(stop.get("ritardoPartenza"), 0),
         "cancelled": cancelled,
-        "raw_json": json.dumps(stop, ensure_ascii=False, separators=(",", ":")),
+        "detail_observed_at": row.get("detail_last_seen") or row.get("last_seen"),
+        "detail_quality": 0,
+        "raw_json": None,
     }
 
 
-def replace_train_stops(conn: sqlite3.Connection, detail: dict[str, Any], row: dict[str, Any]) -> None:
+def replace_train_stops(
+    conn: sqlite3.Connection,
+    detail: dict[str, Any],
+    row: dict[str, Any],
+) -> list[dict[str, Any]]:
     stops = detail.get("fermate")
-    if not isinstance(stops, list):
-        return
-    conn.execute("DELETE FROM train_stops WHERE date=? AND train_key=?", (row["date"], row["train_key"]))
+    if not isinstance(stops, list) or not stops:
+        return []
     normalized = [normalize_stop(detail, stop, index, row) for index, stop in enumerate(stops) if isinstance(stop, dict)]
+    if not normalized:
+        return []
+    detail_quality = stop_snapshot_quality(normalized)
+    detail_observed_at = row.get("detail_last_seen") or row.get("last_seen")
+    current = conn.execute(
+        """
+        SELECT MAX(detail_observed_at), MAX(detail_quality)
+        FROM train_stops
+        WHERE date=? AND train_key=?
+        """,
+        (row["date"], row["train_key"]),
+    ).fetchone()
+    if current and current[0] and (
+        detail_observed_at < current[0]
+        or (detail_observed_at == current[0] and detail_quality < as_int(current[1]))
+    ):
+        return []
+    for stop in normalized:
+        stop["detail_quality"] = detail_quality
+    conn.execute("DELETE FROM train_stops WHERE date=? AND train_key=?", (row["date"], row["train_key"]))
     conn.executemany(
         """
         INSERT INTO train_stops (
             date, train_key, stop_number, train_number, category, station_code, station_name, stop_type,
             platform, arrival_expected, arrival_actual, arrival_delay, departure_expected, departure_actual,
-            departure_delay, cancelled, raw_json
+            departure_delay, cancelled, detail_observed_at, detail_quality, raw_json
         ) VALUES (
             :date, :train_key, :stop_number, :train_number, :category, :station_code, :station_name, :stop_type,
             :platform, :arrival_expected, :arrival_actual, :arrival_delay, :departure_expected, :departure_actual,
-            :departure_delay, :cancelled, :raw_json
+            :departure_delay, :cancelled, :detail_observed_at, :detail_quality, :raw_json
         )
         """,
         normalized,
     )
+    return normalized
 
 
 def update_station_board_stats(conn: sqlite3.Connection, date: str, station_code: str, station_name: str, board_type: str, trains: list[dict[str, Any]], seen_at: str) -> None:
@@ -935,12 +1159,12 @@ def update_station_board_stats(conn: sqlite3.Connection, date: str, station_code
             date, station_code, board_type, station_name, monitored, cancelled, delayed, total_delay, last_seen
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(date, station_code, board_type) DO UPDATE SET
-            station_name=excluded.station_name,
-            monitored=excluded.monitored,
-            cancelled=excluded.cancelled,
-            delayed=excluded.delayed,
-            total_delay=excluded.total_delay,
-            last_seen=excluded.last_seen
+            station_name=CASE WHEN excluded.last_seen >= COALESCE(station_board_stats.last_seen, '') THEN excluded.station_name ELSE station_board_stats.station_name END,
+            monitored=CASE WHEN excluded.last_seen >= COALESCE(station_board_stats.last_seen, '') THEN excluded.monitored ELSE station_board_stats.monitored END,
+            cancelled=CASE WHEN excluded.last_seen >= COALESCE(station_board_stats.last_seen, '') THEN excluded.cancelled ELSE station_board_stats.cancelled END,
+            delayed=CASE WHEN excluded.last_seen >= COALESCE(station_board_stats.last_seen, '') THEN excluded.delayed ELSE station_board_stats.delayed END,
+            total_delay=CASE WHEN excluded.last_seen >= COALESCE(station_board_stats.last_seen, '') THEN excluded.total_delay ELSE station_board_stats.total_delay END,
+            last_seen=CASE WHEN excluded.last_seen >= COALESCE(station_board_stats.last_seen, '') THEN excluded.last_seen ELSE station_board_stats.last_seen END
         """,
         (date, station_code, board_type, station_name, monitored, cancelled, delayed, total_delay, seen_at),
     )
@@ -956,16 +1180,33 @@ def fetch_board_task(task: tuple[dict[str, Any], str, datetime]) -> dict[str, An
     return {"station": station, "board_type": board_type, "rows": rows}
 
 
-def fetch_detail(candidate: dict[str, str]) -> dict[str, Any] | None:
+def fetch_detail(candidate: dict[str, Any]) -> dict[str, Any]:
     try:
         data = vt_get(
             f"andamentoTreno/{candidate['origin_code']}/{candidate['number']}/{candidate['departure_epoch_ms']}",
             timeout=30,
         )
-        return data if isinstance(data, dict) else None
+        if not isinstance(data, dict) or not data:
+            return {
+                "candidate": candidate,
+                "detail": None,
+                "error": "empty_or_non_object_payload",
+                "attempted_at": iso_now(),
+            }
+        return {
+            "candidate": candidate,
+            "detail": data,
+            "error": None,
+            "attempted_at": iso_now(),
+        }
     except Exception as exc:
         app.logger.info("andamentoTreno failed for %s: %s", candidate, exc)
-        return None
+        return {
+            "candidate": candidate,
+            "detail": None,
+            "error": f"{type(exc).__name__}: {exc}"[:500],
+            "attempted_at": iso_now(),
+        }
 
 
 def bounded_futures(items: list[Any], worker: Any, max_workers: int):
@@ -991,46 +1232,79 @@ def bounded_futures(items: list[Any], worker: Any, max_workers: int):
             submit_more()
 
 
-def detail_queue(date: str, board_candidates: dict[str, dict[str, str]]) -> list[dict[str, str]]:
-    queue: list[dict[str, str]] = []
+def detail_queue(
+    date: str,
+    board_candidates: dict[tuple[str, str], dict[str, str]],
+    *,
+    as_of: str | None = None,
+) -> tuple[list[dict[str, Any]], int]:
+    now_iso = as_of or iso_now()
+    collection_day = datetime.fromisoformat(date).date()
+    earliest_service_date = (
+        collection_day - timedelta(days=COLLECTOR_ACTIVE_SERVICE_TTL_DAYS)
+    ).isoformat()
+    current_board_pairs = {
+        (candidate["service_date"], candidate["train_key"])
+        for candidate in board_candidates.values()
+    }
     with db() as conn:
-        existing = {
-            row["train_key"]: row
-            for row in conn.execute(
-                "SELECT train_key, has_details, completed FROM trains WHERE date=?",
-                (date,),
-            ).fetchall()
-        }
-        for key, candidate in board_candidates.items():
-            row = existing.get(key)
-            if row and row["has_details"] and row["completed"]:
-                continue
-            queue.append(candidate)
-        unfinished = conn.execute(
+        due_rows = conn.execute(
             """
-            SELECT train_key, train_number, origin_code, departure_epoch_ms
-            FROM trains
-            WHERE date=? AND (has_details=0 OR completed=0)
-            ORDER BY last_seen DESC
+            SELECT service_date, train_key, train_number, origin_code,
+                   departure_epoch_ms, detail_next_retry_at
+            FROM train_services
+            WHERE service_date BETWEEN ? AND ?
+              AND completed=0
+              AND (
+                  detail_next_retry_at IS NULL OR detail_next_retry_at='' OR
+                  detail_next_retry_at<=?
+              )
+            ORDER BY COALESCE(
+                NULLIF(detail_next_retry_at, ''),
+                NULLIF(detail_attempted_at, ''),
+                NULLIF(first_seen, ''),
+                last_seen,
+                ''
+            ) ASC, last_seen ASC
             """,
-            (date,),
+            (earliest_service_date, date, now_iso),
         ).fetchall()
-        for row in unfinished:
-            if row["train_key"] in board_candidates:
-                continue
-            if not row["train_number"] or not row["origin_code"] or not row["departure_epoch_ms"]:
-                continue
-            queue.append(
-                {
-                    "train_key": row["train_key"],
-                    "number": row["train_number"],
-                    "origin_code": row["origin_code"],
-                    "departure_epoch_ms": row["departure_epoch_ms"],
-                }
-            )
-    if DETAIL_LIMIT_PER_RUN:
-        return queue[:DETAIL_LIMIT_PER_RUN]
-    return queue
+    current_board: list[dict[str, Any]] = []
+    backlog: list[dict[str, Any]] = []
+    for row in due_rows:
+        if not detail_retry_due(row["detail_next_retry_at"], now_iso):
+            continue
+        if not row["train_number"] or not row["origin_code"] or not row["departure_epoch_ms"]:
+            continue
+        candidate = {
+            "service_date": row["service_date"],
+            "train_key": row["train_key"],
+            "number": row["train_number"],
+            "origin_code": row["origin_code"],
+            "departure_epoch_ms": row["departure_epoch_ms"],
+        }
+        pair = (candidate["service_date"], candidate["train_key"])
+        if pair in current_board_pairs:
+            current_board.append(candidate)
+        else:
+            backlog.append(candidate)
+
+    due_count = len(current_board) + len(backlog)
+    if not DETAIL_LIMIT_PER_RUN or due_count <= DETAIL_LIMIT_PER_RUN:
+        return [*current_board, *backlog], due_count
+
+    limit = DETAIL_LIMIT_PER_RUN
+    board_budget = max(1, int(limit * 0.75)) if current_board else 0
+    if backlog and limit >= 2:
+        board_budget = min(board_budget, limit - 1)
+    board_take = min(len(current_board), board_budget)
+    backlog_take = min(len(backlog), limit - board_take)
+    queue = [*current_board[:board_take], *backlog[:backlog_take]]
+    if len(queue) < limit:
+        queue.extend(current_board[board_take : board_take + (limit - len(queue))])
+    if len(queue) < limit:
+        queue.extend(backlog[backlog_take : backlog_take + (limit - len(queue))])
+    return queue, due_count
 
 
 def rebuild_daily_aggregates(conn: sqlite3.Connection, date: str) -> None:
@@ -1110,6 +1384,12 @@ def cleanup_old_rows(conn: sqlite3.Connection) -> None:
     cutoff = (now_rome().date() - timedelta(days=RETENTION_DAYS)).isoformat()
     for table in ("snapshots", "collector_runs", "trains", "train_stops", "station_stats", "station_board_stats", "relation_stats"):
         conn.execute(f"DELETE FROM {table} WHERE date < ?", (cutoff,))
+    cleanup_v2_rows(
+        conn,
+        service_cutoff=(now_rome().date() - timedelta(days=V2_SERVICE_RETENTION_DAYS)).isoformat(),
+        observation_cutoff=(now_rome().date() - timedelta(days=V2_OBSERVATION_RETENTION_DAYS)).isoformat(),
+        raw_cutoff=(now_rome().date() - timedelta(days=RAW_PAYLOAD_RETENTION_DAYS)).isoformat(),
+    )
 
 
 def collect_once(slot_at: datetime | None = None, trigger: str = "manual") -> dict[str, Any]:
@@ -1129,8 +1409,10 @@ def collect_once(slot_at: datetime | None = None, trigger: str = "manual") -> di
             summary = {}
 
         stations, station_registry_refreshed = stations_for_collection()
+        known_active_train_keys = active_service_keys(date)
         board_rows_count = 0
-        detail_candidates_by_key: dict[str, dict[str, str]] = {}
+        detail_candidates_by_key: dict[tuple[str, str], dict[str, str]] = {}
+        v2_board_rows_by_key: dict[tuple[str, str], dict[str, Any]] = {}
         board_tasks = [(station, board_type, slot) for station in stations for board_type in BOARD_TYPES]
 
         with db() as conn:
@@ -1145,7 +1427,8 @@ def collect_once(slot_at: datetime | None = None, trigger: str = "manual") -> di
                 collectable_rows = [
                     item
                     for item in rows
-                    if isinstance(item, dict) and is_collectable_service_date(item, date)
+                    if isinstance(item, dict)
+                    and is_collectable_service_date(item, date, known_active_train_keys)
                 ]
                 board_rows_count += len(collectable_rows)
                 update_station_board_stats(
@@ -1160,28 +1443,108 @@ def collect_once(slot_at: datetime | None = None, trigger: str = "manual") -> di
                 for item in collectable_rows:
                     row = normalize_train(item, seen_at, has_details=False, fallback_date=date, stats_date=date)
                     upsert_train(conn, row)
+                    retain_best_service_observation(v2_board_rows_by_key, row)
                     candidate = board_candidate(item, date)
                     if candidate:
-                        detail_candidates_by_key[candidate["train_key"]] = candidate
+                        detail_candidates_by_key[
+                            (candidate["service_date"], candidate["train_key"])
+                        ] = candidate
                 processed_boards += 1
                 if processed_boards % 500 == 0:
                     conn.commit()
+            for row in v2_board_rows_by_key.values():
+                upsert_train_service(
+                    conn,
+                    row,
+                    collection_date=date,
+                    observed_at=seen_at,
+                    source="board",
+                )
 
-        queue = detail_queue(date, detail_candidates_by_key)
-        detail_rows = []
+        queue, due_detail_count = detail_queue(
+            date,
+            detail_candidates_by_key,
+            as_of=iso_now(),
+        )
+        detail_outcomes: list[dict[str, Any]] = []
         if queue:
             for future in bounded_futures(queue, fetch_detail, COLLECTOR_DETAIL_CONCURRENCY):
                 if time.monotonic() - started > COLLECTOR_MAX_RUNTIME_SECONDS:
                     break
-                detail = future.result()
-                if detail and is_collectable_service_date(detail, date):
-                    detail_rows.append(detail)
+                outcome = future.result()
+                detail = outcome.get("detail")
+                candidate = outcome["candidate"]
+                if detail:
+                    try:
+                        row = normalize_train(
+                            detail,
+                            seen_at,
+                            has_details=True,
+                            fallback_date=date,
+                            stats_date=date,
+                        )
+                        expected_identity = (
+                            candidate["service_date"],
+                            candidate["train_key"],
+                        )
+                        actual_identity = (row["service_date"], row["train_key"])
+                        if actual_identity == expected_identity:
+                            outcome["row"] = row
+                        else:
+                            outcome["detail"] = None
+                            outcome["error"] = (
+                                "detail_identity_mismatch: "
+                                f"expected={expected_identity!r}, actual={actual_identity!r}"
+                            )[:500]
+                    except Exception as exc:
+                        outcome["detail"] = None
+                        outcome["error"] = f"detail_normalization_failed: {exc}"[:500]
+                detail_outcomes.append(outcome)
 
+        detail_successes = 0
+        detail_failures = 0
         with db() as conn:
-            for detail in detail_rows:
-                row = normalize_train(detail, seen_at, has_details=True, fallback_date=date, stats_date=date)
-                upsert_train(conn, row)
-                replace_train_stops(conn, detail, row)
+            for outcome in detail_outcomes:
+                candidate = outcome["candidate"]
+                row = outcome.get("row")
+                if row:
+                    detail = outcome["detail"]
+                    upsert_train(conn, row)
+                    upsert_train_service(
+                        conn,
+                        row,
+                        collection_date=date,
+                        observed_at=seen_at,
+                        source="detail",
+                    )
+                    normalized_stops = replace_train_stops(conn, detail, row)
+                    replace_train_stop_events(conn, row, normalized_stops)
+                    store_train_raw_payload(conn, row, row.get("raw_payload"))
+                    detail_successes += 1
+                    succeeded = True
+                    completed = bool(row["completed"])
+                else:
+                    detail_failures += 1
+                    succeeded = False
+                    completed = False
+                retry_state = record_detail_attempt(
+                    conn,
+                    service_date=candidate["service_date"],
+                    train_key=candidate["train_key"],
+                    attempted_at=outcome["attempted_at"],
+                    succeeded=succeeded,
+                    completed=completed,
+                    error=outcome.get("error"),
+                    retry_base_minutes=DETAIL_RETRY_BASE_MINUTES,
+                    retry_max_minutes=DETAIL_RETRY_MAX_MINUTES,
+                    success_refresh_minutes=DETAIL_SUCCESS_REFRESH_MINUTES,
+                )
+                if not retry_state["updated"]:
+                    app.logger.warning(
+                        "detail retry state missing for %s/%s",
+                        candidate["service_date"],
+                        candidate["train_key"],
+                    )
             rebuild_daily_aggregates(conn, date)
             cleanup_old_rows(conn)
             finished_at = iso_now()
@@ -1216,7 +1579,10 @@ def collect_once(slot_at: datetime | None = None, trigger: str = "manual") -> di
             stations=len(stations),
             board_rows=board_rows_count,
             detail_queue=len(queue),
-            details=len(detail_rows),
+            details=detail_successes,
+            detail_attempts=len(detail_outcomes),
+            detail_failures=detail_failures,
+            detail_deferred=max(0, due_detail_count - len(detail_outcomes)),
         )
 
         return {
@@ -1234,7 +1600,11 @@ def collect_once(slot_at: datetime | None = None, trigger: str = "manual") -> di
             "boardTypes": BOARD_TYPES,
             "boardRows": board_rows_count,
             "detailQueue": len(queue),
-            "details": len(detail_rows),
+            "detailDue": due_detail_count,
+            "detailAttempts": len(detail_outcomes),
+            "details": detail_successes,
+            "detailFailures": detail_failures,
+            "detailDeferred": max(0, due_detail_count - len(detail_outcomes)),
             "summary": summary or {},
         }
     except Exception as exc:
@@ -1404,8 +1774,22 @@ def health() -> Response:
         "finalizeTime": COLLECTOR_FINALIZE_TIME,
         "boardConcurrency": COLLECTOR_BOARD_CONCURRENCY,
         "detailConcurrency": COLLECTOR_DETAIL_CONCURRENCY,
+        "detailLimitPerRun": DETAIL_LIMIT_PER_RUN,
+        "detailRetry": {
+            "baseMinutes": DETAIL_RETRY_BASE_MINUTES,
+            "maxMinutes": DETAIL_RETRY_MAX_MINUTES,
+            "successRefreshMinutes": DETAIL_SUCCESS_REFRESH_MINUTES,
+        },
         "regionConcurrency": COLLECTOR_REGION_CONCURRENCY,
         "serviceDateLookbackDays": COLLECTOR_SERVICE_DATE_LOOKBACK_DAYS,
+        "activeServiceTtlDays": COLLECTOR_ACTIVE_SERVICE_TTL_DAYS,
+        "storageSchemaVersion": STATISTICS_STORAGE_SCHEMA_VERSION,
+        "retention": {
+            "legacyDays": RETENTION_DAYS,
+            "serviceDays": V2_SERVICE_RETENTION_DAYS,
+            "observationDays": V2_OBSERVATION_RETENTION_DAYS,
+            "rawPayloadDays": RAW_PAYLOAD_RETENTION_DAYS,
+        },
         "nextScheduledAt": to_utc_iso(next_scheduled_slot()),
         "lastCollectorRun": collector_run_row(),
     })
@@ -1513,18 +1897,54 @@ def trains_endpoint() -> Response:
 def train_detail_endpoint(date: str, key: str) -> Response:
     with db() as conn:
         row = conn.execute("SELECT * FROM trains WHERE date=? AND train_key=?", (date, key)).fetchone()
+        raw_payload = (
+            resolve_train_raw_payload(
+                conn,
+                collection_date=date,
+                service_date=row["service_date"] or date,
+                train_key=key,
+                legacy_payload=row["raw_json"],
+            )
+            if row
+            else None
+        )
         stops = conn.execute(
-            "SELECT * FROM train_stops WHERE date=? AND train_key=? ORDER BY stop_number",
+            """
+            SELECT date, train_key, stop_number, train_number, category, station_code,
+                   station_name, stop_type, platform, arrival_expected, arrival_actual,
+                   arrival_delay, departure_expected, departure_actual, departure_delay,
+                   cancelled, raw_json
+            FROM train_stops
+            WHERE date=? AND train_key=?
+            ORDER BY stop_number
+            """,
             (date, key),
         ).fetchall()
     if not row:
         return jsonify({"available": False, "reason": "not_found"}), 404
     item = dict(row)
     try:
-        item["raw"] = json.loads(item.pop("raw_json") or "{}")
-    except json.JSONDecodeError:
+        item.pop("raw_json", None)
+        item["raw"] = decode_raw_json(raw_payload)
+    except (json.JSONDecodeError, TypeError, UnicodeDecodeError, zlib.error):
         item["raw"] = {}
-    item["stops"] = [dict(stop) for stop in stops]
+    item.pop("latest_state_quality", None)
+    item.pop("detail_quality", None)
+    raw_stops = item["raw"].get("fermate") if isinstance(item["raw"], dict) else None
+    raw_stops = raw_stops if isinstance(raw_stops, list) else []
+    normalized_stops = []
+    for stop in stops:
+        normalized = dict(stop)
+        if not normalized.get("raw_json"):
+            stop_number = as_int(normalized.get("stop_number"), -1)
+            raw_stop = raw_stops[stop_number] if 0 <= stop_number < len(raw_stops) else None
+            normalized["raw_json"] = (
+                json.dumps(raw_stop, ensure_ascii=False, separators=(",", ":"))
+                if isinstance(raw_stop, dict)
+                else "{}"
+            )
+        normalized_stops.append(normalized)
+    item["stops"] = normalized_stops
     return jsonify({"available": True, "train": item})
 
 
@@ -1632,7 +2052,13 @@ def export_csv_endpoint() -> Response:
     output = io.StringIO()
     writer = csv.writer(output)
     if rows:
-        keys = [key for key in rows[0].keys() if key != "raw_json"]
+        internal_columns = {
+            "raw_json",
+            "latest_state_quality",
+            "detail_quality",
+            "detail_observed_at",
+        }
+        keys = [key for key in rows[0].keys() if key not in internal_columns]
         writer.writerow(keys)
         for row in rows:
             writer.writerow([row[key] for key in keys])
