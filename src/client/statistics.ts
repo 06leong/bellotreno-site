@@ -1282,7 +1282,10 @@ import {
         if (column === "code") return item.code || item.stationCode || item.id || "--";
         if (column === "relation") return item.relation || [item.from, item.to].filter(Boolean).join(" -> ") || "--";
         if (column === "category") return item.category || item.trainCategory || "--";
-        if (column === "operator") return operatorName(item.operator || item.client);
+        if (column === "operator") {
+            const operator = String(item.operator ?? "").trim() ? item.operator : item.client;
+            return operatorName(operator);
+        }
         if (column === "delay") return formatMinutes(item.delay ?? item.totalDelay ?? item.arrivalDelay ?? item.departureDelay);
         if (column === "avgDelay") return formatMinutes(item.avgDelay ?? item.averageDelay ?? item.delayAverage);
         if (column === "monitored") return formatNumber(item.monitored ?? item.count ?? item.total);

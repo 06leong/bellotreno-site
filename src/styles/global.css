@@ -3509,6 +3509,14 @@ button.swiss-section-title {
     --statistics-surface-muted: var(--color-base-200);
     --statistics-border: color-mix(in oklch, var(--color-base-content) 16%, transparent);
     --statistics-border-strong: color-mix(in oklch, var(--color-base-content) 27%, transparent);
+    --statistics-card-surface: color-mix(in oklch, var(--color-base-100) 68%, transparent);
+    --statistics-card-border: color-mix(in oklch, var(--color-base-content) 10%, transparent);
+    --statistics-card-radius: 22px;
+    --statistics-card-shadow:
+        inset 0 1px 0 color-mix(in oklch, #ffffff 11%, transparent),
+        0 1px 2px color-mix(in oklch, var(--color-base-content) 6%, transparent),
+        0 4px 8px color-mix(in oklch, var(--color-base-content) 6%, transparent),
+        0 16px 32px -4px color-mix(in oklch, var(--color-base-content) 10%, transparent);
     width: min(100% - 32px, 1440px);
     max-width: none;
     padding-top: 92px;
@@ -3602,11 +3610,11 @@ button.swiss-section-title {
     width: 100%;
     min-height: 46px;
     border: 1px solid var(--statistics-border-strong);
-    border-radius: 6px;
+    border-radius: 14px;
     background-color: var(--statistics-surface);
     background-image: none;
     color: var(--color-base-content);
-    box-shadow: none;
+    box-shadow: inset 0 1px 0 color-mix(in oklch, #ffffff 8%, transparent);
 }
 
 .statistics-date-field select {
@@ -3658,10 +3666,15 @@ button.swiss-section-title {
     display: grid;
     grid-template-columns: minmax(340px, 1fr) auto;
     align-items: stretch;
-    margin-bottom: 10px;
-    border: 1px solid color-mix(in oklch, var(--statistics-blue) 34%, var(--statistics-border));
-    border-radius: 5px;
-    background-color: color-mix(in oklch, var(--statistics-blue) 5%, var(--statistics-surface));
+    margin-bottom: 16px;
+    border: 1px solid color-mix(in oklch, var(--statistics-blue) 24%, var(--statistics-card-border));
+    border-radius: 18px;
+    background: color-mix(in oklch, var(--statistics-blue) 4%, var(--statistics-card-surface));
+    box-shadow:
+        inset 0 1px 0 color-mix(in oklch, #ffffff 10%, transparent),
+        0 10px 28px -20px color-mix(in oklch, var(--statistics-blue) 28%, transparent);
+    backdrop-filter: blur(48px);
+    -webkit-backdrop-filter: blur(48px);
     overflow: hidden;
 }
 
@@ -3689,7 +3702,7 @@ button.swiss-section-title {
     justify-content: flex-end;
     gap: 0;
     margin: 0;
-    background-color: var(--statistics-surface);
+    background-color: color-mix(in oklch, var(--color-base-100) 40%, transparent);
 }
 
 .statistics-meta-item {
@@ -3722,11 +3735,13 @@ button.swiss-section-title {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(300px, 0.34fr);
     align-items: stretch;
-    margin-bottom: 12px;
-    border: 1px solid var(--statistics-border);
-    border-bottom: 3px solid var(--statistics-accent);
-    border-radius: 4px 4px 0 0;
-    background-color: var(--statistics-surface);
+    margin-bottom: 18px;
+    border: 1px solid var(--statistics-card-border);
+    border-radius: var(--statistics-card-radius);
+    background: var(--statistics-card-surface);
+    box-shadow: var(--statistics-card-shadow);
+    backdrop-filter: blur(64px);
+    -webkit-backdrop-filter: blur(64px);
     overflow: hidden;
 }
 
@@ -3738,12 +3753,12 @@ button.swiss-section-title {
     margin: 0;
 }
 
-.statistics-metric,
 .statistics-panel {
-    border: 1px solid var(--statistics-border);
-    background-color: var(--statistics-surface);
-    box-shadow: none;
-    backdrop-filter: none;
+    border: 1px solid var(--statistics-card-border);
+    background: var(--statistics-card-surface);
+    box-shadow: var(--statistics-card-shadow);
+    backdrop-filter: blur(64px);
+    -webkit-backdrop-filter: blur(64px);
 }
 
 .statistics-metric {
@@ -3754,7 +3769,10 @@ button.swiss-section-title {
     min-height: 132px;
     padding: 22px 20px 17px;
     border-width: 0 1px 0 0;
+    border-style: solid;
+    border-color: var(--statistics-border);
     border-radius: 0;
+    background: transparent;
     overflow: visible;
 }
 
@@ -3831,7 +3849,7 @@ button.swiss-section-title {
     min-height: 132px;
     padding: 20px 22px;
     border-left: 1px solid var(--statistics-border);
-    background-color: color-mix(in oklch, var(--color-base-content) 2%, var(--statistics-surface));
+    background-color: color-mix(in oklch, var(--color-base-content) 2%, transparent);
 }
 
 .statistics-comparison-status > .material-symbols-outlined {
@@ -3908,20 +3926,20 @@ button.swiss-section-title {
 .statistics-primary-grid {
     display: grid;
     grid-template-columns: minmax(0, 2.1fr) minmax(290px, 0.9fr);
-    gap: 14px;
-    margin-bottom: 14px;
+    gap: 18px;
+    margin-bottom: 18px;
 }
 
 .statistics-analysis-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 14px;
-    margin-bottom: 14px;
+    gap: 18px;
+    margin-bottom: 18px;
 }
 
 .statistics-panel {
-    padding: 18px;
-    border-radius: 6px;
+    padding: 22px;
+    border-radius: var(--statistics-card-radius);
     overflow: hidden;
 }
 
@@ -4046,7 +4064,7 @@ button.swiss-section-title {
     min-height: 230px;
     border: 1px dashed var(--statistics-border);
     border-color: var(--statistics-border);
-    border-radius: 5px;
+    border-radius: 14px;
     color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
 }
 
@@ -4064,7 +4082,7 @@ button.swiss-section-title {
     min-height: 260px;
     padding: 24px;
     border: 1px dashed var(--statistics-border-strong);
-    border-radius: 5px;
+    border-radius: 14px;
     color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
     text-align: center;
 }
@@ -4387,8 +4405,8 @@ button.swiss-section-title {
     min-height: 36px;
     padding: 7px 11px;
     border: 1px solid color-mix(in oklch, var(--statistics-blue) 42%, var(--statistics-border));
-    border-radius: 5px;
-    background-color: var(--statistics-surface);
+    border-radius: 12px;
+    background-color: color-mix(in oklch, var(--color-base-100) 58%, transparent);
     color: var(--statistics-blue);
     font-size: 0.76rem;
     font-weight: 730;
@@ -4414,8 +4432,8 @@ button.swiss-section-title {
     min-height: 34px;
     padding: 6px 12px;
     border: 1px solid var(--statistics-border);
-    border-radius: 4px;
-    background-color: var(--statistics-surface);
+    border-radius: 10px;
+    background-color: color-mix(in oklch, var(--color-base-100) 52%, transparent);
     color: color-mix(in oklch, var(--color-base-content) 72%, transparent);
     font-size: 0.75rem;
     font-weight: 710;
@@ -4486,8 +4504,8 @@ button.swiss-section-title {
     overflow-x: auto;
     border: 1px solid var(--statistics-border-strong);
     border-color: var(--statistics-border-strong);
-    border-radius: 4px;
-    background-color: var(--statistics-surface);
+    border-radius: 14px;
+    background-color: color-mix(in oklch, var(--color-base-100) 56%, transparent);
 }
 
 .statistics-table {
@@ -4533,26 +4551,42 @@ button.swiss-section-title {
 .statistics-pagination .btn {
     min-height: 34px;
     border: 1px solid var(--statistics-border);
-    border-radius: 4px;
-    background-color: var(--statistics-surface);
+    border-radius: 10px;
+    background-color: color-mix(in oklch, var(--color-base-100) 52%, transparent);
     box-shadow: none;
 }
 
 .statistics-disclaimer {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: center;
     gap: 9px;
-    margin: 0;
-    padding: 2px 12px 0;
+    margin: 2px auto 0;
+    padding: 18px 12px 0;
     color: color-mix(in oklch, var(--color-base-content) 56%, transparent);
     font-size: 0.78rem;
     line-height: 1.5;
+    text-align: center;
+    opacity: 1;
+}
+
+.statistics-disclaimer > span {
+    display: inline-flex;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    font-size: inherit;
+    line-height: inherit;
 }
 
 .statistics-disclaimer .material-symbols-outlined {
+    flex: 0 0 auto;
     color: color-mix(in oklch, var(--color-base-content) 64%, transparent);
     font-size: 1rem;
+}
+
+.statistics-disclaimer > span:last-child {
+    max-width: 78ch;
 }
 
 @media (max-width: 1180px) {
@@ -4719,7 +4753,7 @@ button.swiss-section-title {
     }
 
     .statistics-summary-strip {
-        border-radius: 8px 8px 0 0;
+        border-radius: 18px;
     }
 
     .statistics-metric {
@@ -4773,7 +4807,7 @@ button.swiss-section-title {
 
     .statistics-panel {
         padding: 14px;
-        border-radius: 8px;
+        border-radius: 18px;
     }
 
     .statistics-chart-box-primary,
@@ -4841,8 +4875,8 @@ button.swiss-section-title {
     }
 
     .statistics-disclaimer {
-        justify-content: flex-start;
-        padding-inline: 4px;
+        justify-content: center;
+        padding: 16px 4px 0;
         font-size: 0.72rem;
     }
 }

@@ -2245,11 +2245,16 @@ def ranking_endpoint() -> Response:
     with db() as conn:
         rows = conn.execute(
             f"""
-            SELECT train_key, train_number AS trainNumber, category, origin, destination,
-                   relation_key AS route, service_date AS serviceDate, status, {column} AS delay
-            FROM trains
-            WHERE date=?
-            ORDER BY {column} DESC
+            SELECT t.train_key, t.train_number AS trainNumber, t.category,
+                   COALESCE(NULLIF(TRIM(t.operator), ''), NULLIF(TRIM(s.operator), '')) AS operator,
+                   t.origin, t.destination, t.relation_key AS route,
+                   t.service_date AS serviceDate, t.status, t.{column} AS delay
+            FROM trains AS t
+            LEFT JOIN train_services AS s
+              ON s.service_date=COALESCE(NULLIF(t.service_date, ''), t.date)
+             AND s.train_key=t.train_key
+            WHERE t.date=?
+            ORDER BY t.{column} DESC
             LIMIT ?
             """,
             (date, limit),

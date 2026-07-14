@@ -560,6 +560,43 @@ class StatisticsAppIntegrationTest(unittest.TestCase):
         self.assertFalse(day["comparisonEligible"])
         self.assertEqual(day["reason"], "incomplete_collection_day")
 
+    def test_ranking_returns_legacy_operator_and_falls_back_to_v2(self):
+        legacy = service_row(6801)
+        legacy.update(operator="1", delay=90)
+        enriched = service_row(6802)
+        enriched.update(operator="   ", delay=80)
+        v2 = dict(enriched)
+        v2["operator"] = "63"
+        missing = service_row(6803)
+        missing.update(operator="", delay=70)
+        for row in (legacy, enriched, missing):
+            row.update(
+                latest_state_quality=100,
+                detail_quality=0,
+                raw_json=None,
+            )
+
+        with APP.db() as conn:
+            APP.upsert_train(conn, legacy)
+            APP.upsert_train(conn, enriched)
+            APP.upsert_train(conn, missing)
+            APP.upsert_train_service(
+                conn,
+                v2,
+                collection_date=v2["date"],
+                observed_at=v2["last_seen"],
+                source="board",
+            )
+            conn.commit()
+
+        APP.request.args = {"date": legacy["date"], "limit": "25"}
+        payload = APP.ranking_endpoint()
+        operators = {item["trainNumber"]: item["operator"] for item in payload["items"]}
+
+        self.assertEqual(operators["6801"], "1")
+        self.assertEqual(operators["6802"], "63")
+        self.assertIsNone(operators["6803"])
+
     def test_summary_missing_date_is_not_reported_as_zero_data(self):
         response = APP.summary_for_date("2026-07-18")
 
