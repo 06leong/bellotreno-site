@@ -118,6 +118,21 @@ service creates the additive v2 schema and dual-writes new structured collection
 data; it does **not** rewrite historical production rows or remove legacy data
 automatically.
 
+The current production rollout is intentionally **forward-only**. Structured v2
+coverage begins with observations collected after the v2 image was activated;
+the existing legacy tables continue to serve their rolling compatibility window.
+Do not run `migrate_statistics_v2.py --apply` merely to make the coverage date
+look older. The `/v1/days` response exposes the actual collection-date and
+service-date coverage so clients can label partial, live, complete, and
+unavailable days without turning missing history into zero.
+
+`coverage.rolloutDate` is a durable first-collection anchor and does not move
+when old observations expire; `coverage.collectionDate` describes the rows
+currently retained. A past date is comparison-eligible only when every required
+cadence/finalization slot has both a successful collector run and a successful
+snapshot. A date with some v2 observations but incomplete slot evidence remains
+`partial` with reason `incomplete_collection_day`.
+
 An existing compatible v2 database is upgraded in place with the four detail
 retry columns; rows are preserved and initialization is idempotent. Startup
 validates the full write schema, primary-key order, `WITHOUT ROWID` layout, and
@@ -157,7 +172,9 @@ with a backup, downtime plan, and sufficient temporary disk space.
 
 `migrate_statistics_v2.py` is included in the statistics image, but neither the
 container entrypoint nor application startup invokes it. Run it manually only
-after the new image is deployed.
+after the new image is deployed **and only if an explicit, capacity-reviewed
+backfill decision replaces the default forward-only policy**. Normal deployment
+and dashboard comparison do not require a historical backfill.
 
 First run the default read-only dry-run. It reports the legacy train and v2 row
 counts, rows with missing service dates, rows whose collection date differs

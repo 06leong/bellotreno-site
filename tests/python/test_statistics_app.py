@@ -181,6 +181,9 @@ def service_row(number: int, *, completed: int = 0) -> dict:
 class StatisticsAppIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.original_detail_limit = APP.DETAIL_LIMIT_PER_RUN
+        self.original_today_rome = APP.today_rome
+        self.original_request_args = APP.request.args
+        APP.request.args = {}
         conn = APP.db()
         try:
             for table in (
@@ -192,6 +195,7 @@ class StatisticsAppIntegrationTest(unittest.TestCase):
                 "trains",
                 "snapshots",
                 "collector_runs",
+                "statistics_coverage_state",
                 "station_stats",
                 "station_board_stats",
                 "relation_stats",
@@ -204,6 +208,92 @@ class StatisticsAppIntegrationTest(unittest.TestCase):
 
     def tearDown(self):
         APP.DETAIL_LIMIT_PER_RUN = self.original_detail_limit
+        APP.today_rome = self.original_today_rome
+        APP.request.args = self.original_request_args
+
+    def write_snapshot(self, date: str, *, trains: int = 0, running: int = 0) -> None:
+        captured_at = f"{date}T10:05:00Z"
+        conn = APP.db()
+        try:
+            conn.execute(
+                """
+                INSERT INTO snapshots (
+                    date, captured_at, finished_at, duration_seconds, status,
+                    treni_giorno, treni_circolanti, raw_json
+                ) VALUES (?, ?, ?, 1, 'success', ?, ?, '{}')
+                """,
+                (date, captured_at, captured_at, trains, running),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def write_v2_observation(
+        self,
+        number: int,
+        *,
+        service_date: str,
+        collection_date: str,
+        observed_at: str | None = None,
+    ) -> None:
+        observed_at = observed_at or f"{collection_date}T10:05:00Z"
+        row = service_row(number)
+        row.update(
+            date=collection_date,
+            service_date=service_date,
+            last_seen=observed_at,
+        )
+        conn = APP.db()
+        try:
+            APP.upsert_train_service(
+                conn,
+                row,
+                collection_date=collection_date,
+                observed_at=observed_at,
+                source="board",
+            )
+            APP.ensure_v2_coverage_state(conn)
+            conn.commit()
+        finally:
+            conn.close()
+
+    def write_complete_collection_day(self, date: str) -> list[str]:
+        day = datetime.fromisoformat(date).date()
+        required_slots = [
+            APP.to_utc_iso(slot)
+            for slot in APP.required_completion_slots_for_day(day)
+        ]
+        overlap_slots = [
+            APP.to_utc_iso(slot)
+            for slot in APP.slots_for_day(day)
+            if APP.to_utc_iso(slot) not in required_slots
+        ]
+        slots = sorted({*required_slots, *overlap_slots[:1]})
+        conn = APP.db()
+        try:
+            for slot_at in slots:
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO collector_runs (
+                        slot_at, date, status, trigger, started_at, finished_at,
+                        created_at
+                    ) VALUES (?, ?, 'success', 'scheduler', ?, ?, ?)
+                    """,
+                    (slot_at, date, slot_at, slot_at, slot_at),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO snapshots (
+                        date, captured_at, finished_at, duration_seconds, status,
+                        treni_giorno, treni_circolanti, raw_json
+                    ) VALUES (?, ?, ?, 1, 'success', 0, 0, '{}')
+                    """,
+                    (date, slot_at, slot_at),
+                )
+            conn.commit()
+        finally:
+            conn.close()
+        return slots
 
     def test_service_retention_covers_every_dependent_window(self):
         configured = load_statistics_app(
@@ -215,6 +305,335 @@ class StatisticsAppIntegrationTest(unittest.TestCase):
             }
         )
         self.assertEqual(configured.V2_SERVICE_RETENTION_DAYS, 9)
+
+    def test_completion_slots_allow_the_finalization_overlap(self):
+        slots = APP.required_completion_slots_for_day(
+            datetime.fromisoformat("2026-07-18").date()
+        )
+        local_times = {(slot.hour, slot.minute) for slot in slots}
+
+        self.assertEqual(len(slots), 48)
+        self.assertNotIn((0, 5), local_times)
+        self.assertIn((0, 35), local_times)
+        self.assertIn((23, 55), local_times)
+
+    def test_days_coverage_separates_cross_night_service_and_collection_dates(self):
+        APP.today_rome = lambda: "2026-07-20"
+        for date in ("2026-07-14", "2026-07-15", "2026-07-16"):
+            self.write_snapshot(date)
+        self.write_v2_observation(
+            6101,
+            service_date="2026-07-13",
+            collection_date="2026-07-14",
+        )
+        self.write_v2_observation(
+            6102,
+            service_date="2026-07-15",
+            collection_date="2026-07-16",
+        )
+        self.write_complete_collection_day("2026-07-16")
+
+        payload = APP.days_endpoint()
+        days = {item["date"]: item for item in payload["days"]}
+
+        self.assertEqual(payload["coverage"]["mode"], "forward_only")
+        self.assertEqual(payload["coverage"]["schemaVersion"], 2)
+        self.assertEqual(payload["coverage"]["rolloutDate"], "2026-07-14")
+        self.assertEqual(
+            payload["coverage"]["collectionDate"],
+            {
+                "availableFrom": "2026-07-14",
+                "availableTo": "2026-07-16",
+            },
+        )
+        self.assertEqual(
+            payload["coverage"]["serviceDate"],
+            {"availableFrom": "2026-07-13", "availableTo": "2026-07-15"},
+        )
+        self.assertTrue(days["2026-07-14"]["v2Available"])
+        self.assertEqual(days["2026-07-14"]["coverageStatus"], "partial")
+        self.assertFalse(days["2026-07-14"]["comparisonEligible"])
+        self.assertEqual(days["2026-07-14"]["reason"], "partial_rollout_day")
+        self.assertFalse(days["2026-07-15"]["v2Available"])
+        self.assertEqual(days["2026-07-15"]["coverageStatus"], "unavailable")
+        self.assertFalse(days["2026-07-15"]["comparisonEligible"])
+        self.assertEqual(days["2026-07-15"]["reason"], "v2_not_available")
+        self.assertTrue(days["2026-07-16"]["v2Available"])
+        self.assertEqual(days["2026-07-16"]["coverageStatus"], "complete")
+        self.assertTrue(days["2026-07-16"]["comparisonEligible"])
+        self.assertIsNone(days["2026-07-16"]["reason"])
+
+    def test_days_coverage_bounds_are_not_truncated_by_response_limit(self):
+        APP.today_rome = lambda: "2026-07-20"
+        for offset, date in enumerate(("2026-07-14", "2026-07-15", "2026-07-16")):
+            self.write_snapshot(date)
+            self.write_v2_observation(
+                6200 + offset,
+                service_date=date,
+                collection_date=date,
+            )
+        APP.request.args = {"limit": "1"}
+
+        payload = APP.days_endpoint()
+
+        self.assertEqual([item["date"] for item in payload["days"]], ["2026-07-16"])
+        self.assertEqual(
+            payload["coverage"]["collectionDate"],
+            {
+                "availableFrom": "2026-07-14",
+                "availableTo": "2026-07-16",
+            },
+        )
+
+    def test_days_empty_database_does_not_invent_today(self):
+        APP.today_rome = lambda: "2026-07-20"
+
+        payload = APP.days_endpoint()
+
+        self.assertEqual(payload["days"], [])
+        self.assertEqual(
+            payload["coverage"]["collectionDate"],
+            {"availableFrom": None, "availableTo": None},
+        )
+        self.assertEqual(
+            payload["coverage"]["serviceDate"],
+            {"availableFrom": None, "availableTo": None},
+        )
+        self.assertIsNone(payload["coverage"]["rolloutDate"])
+
+    def test_days_current_date_is_live_and_never_comparison_eligible(self):
+        APP.today_rome = lambda: "2026-07-16"
+        for offset, date in enumerate(("2026-07-14", "2026-07-16")):
+            self.write_snapshot(date)
+            self.write_v2_observation(
+                6300 + offset,
+                service_date=date,
+                collection_date=date,
+            )
+
+        days = {item["date"]: item for item in APP.days_endpoint()["days"]}
+
+        self.assertEqual(days["2026-07-16"]["coverageStatus"], "live")
+        self.assertFalse(days["2026-07-16"]["comparisonEligible"])
+        self.assertEqual(days["2026-07-16"]["reason"], "live_day")
+
+    def test_days_current_date_without_v2_data_is_unavailable_not_live(self):
+        APP.today_rome = lambda: "2026-07-16"
+        self.write_snapshot("2026-07-16")
+
+        day = APP.days_endpoint()["days"][0]
+
+        self.assertFalse(day["v2Available"])
+        self.assertEqual(day["coverageStatus"], "unavailable")
+        self.assertFalse(day["comparisonEligible"])
+        self.assertEqual(day["reason"], "v2_not_available")
+
+    def test_rollout_date_remains_fixed_after_first_observations_expire(self):
+        APP.today_rome = lambda: "2026-07-20"
+        self.write_snapshot("2026-07-14")
+        self.write_v2_observation(
+            6401,
+            service_date="2026-07-14",
+            collection_date="2026-07-14",
+        )
+        self.write_v2_observation(
+            6402,
+            service_date="2026-07-15",
+            collection_date="2026-07-15",
+        )
+        self.write_complete_collection_day("2026-07-15")
+        with APP.db() as conn:
+            conn.execute(
+                "DELETE FROM train_observations WHERE collection_date=?",
+                ("2026-07-14",),
+            )
+
+        payload = APP.days_endpoint()
+        days = {item["date"]: item for item in payload["days"]}
+
+        self.assertEqual(payload["coverage"]["rolloutDate"], "2026-07-14")
+        self.assertEqual(
+            payload["coverage"]["collectionDate"]["availableFrom"],
+            "2026-07-15",
+        )
+        self.assertEqual(days["2026-07-15"]["coverageStatus"], "complete")
+        self.assertTrue(days["2026-07-15"]["comparisonEligible"])
+
+    def test_rollout_date_does_not_move_for_later_older_rows(self):
+        APP.today_rome = lambda: "2026-07-20"
+        self.write_snapshot("2026-07-15")
+        self.write_v2_observation(
+            6451,
+            service_date="2026-07-15",
+            collection_date="2026-07-15",
+        )
+        self.write_snapshot("2026-07-14")
+        self.write_v2_observation(
+            6452,
+            service_date="2026-07-14",
+            collection_date="2026-07-14",
+        )
+
+        coverage = APP.days_endpoint()["coverage"]
+
+        self.assertEqual(coverage["rolloutDate"], "2026-07-15")
+        self.assertEqual(coverage["collectionDate"]["availableFrom"], "2026-07-14")
+
+    def test_past_day_with_one_observation_is_partial_not_complete(self):
+        APP.today_rome = lambda: "2026-07-20"
+        self.write_snapshot("2026-07-14")
+        self.write_v2_observation(
+            6501,
+            service_date="2026-07-14",
+            collection_date="2026-07-14",
+        )
+        self.write_snapshot("2026-07-19")
+        self.write_v2_observation(
+            6502,
+            service_date="2026-07-19",
+            collection_date="2026-07-19",
+            observed_at="2026-07-19T23:35:00Z",
+        )
+
+        day = {
+            item["date"]: item for item in APP.days_endpoint()["days"]
+        }["2026-07-19"]
+
+        self.assertTrue(day["v2Available"])
+        self.assertEqual(day["coverageStatus"], "partial")
+        self.assertFalse(day["comparisonEligible"])
+        self.assertEqual(day["reason"], "incomplete_collection_day")
+
+    def test_complete_day_requires_successful_snapshot_for_every_required_slot(self):
+        APP.today_rome = lambda: "2026-07-20"
+        self.write_snapshot("2026-07-14")
+        self.write_v2_observation(
+            6601,
+            service_date="2026-07-14",
+            collection_date="2026-07-14",
+        )
+        self.write_v2_observation(
+            6602,
+            service_date="2026-07-18",
+            collection_date="2026-07-18",
+        )
+        slots = self.write_complete_collection_day("2026-07-18")
+        with APP.db() as conn:
+            conn.execute(
+                "DELETE FROM snapshots WHERE date=? AND captured_at=?",
+                ("2026-07-18", slots[-1]),
+            )
+
+        day = {
+            item["date"]: item for item in APP.days_endpoint()["days"]
+        }["2026-07-18"]
+
+        self.assertEqual(day["coverageStatus"], "partial")
+        self.assertFalse(day["comparisonEligible"])
+        self.assertEqual(day["reason"], "incomplete_collection_day")
+
+    def test_complete_day_requires_successful_run_for_every_required_slot(self):
+        APP.today_rome = lambda: "2026-07-20"
+        self.write_snapshot("2026-07-14")
+        self.write_v2_observation(
+            6701,
+            service_date="2026-07-14",
+            collection_date="2026-07-14",
+        )
+        self.write_v2_observation(
+            6702,
+            service_date="2026-07-18",
+            collection_date="2026-07-18",
+        )
+        slots = self.write_complete_collection_day("2026-07-18")
+        with APP.db() as conn:
+            conn.execute(
+                "DELETE FROM collector_runs WHERE slot_at=?",
+                (slots[-1],),
+            )
+
+        day = {
+            item["date"]: item for item in APP.days_endpoint()["days"]
+        }["2026-07-18"]
+
+        self.assertEqual(day["coverageStatus"], "partial")
+        self.assertFalse(day["comparisonEligible"])
+        self.assertEqual(day["reason"], "incomplete_collection_day")
+
+    def test_ranking_returns_legacy_operator_and_falls_back_to_v2(self):
+        legacy = service_row(6801)
+        legacy.update(operator="1", delay=90)
+        enriched = service_row(6802)
+        enriched.update(operator="   ", delay=80)
+        v2 = dict(enriched)
+        v2["operator"] = "63"
+        missing = service_row(6803)
+        missing.update(operator="", delay=70)
+        for row in (legacy, enriched, missing):
+            row.update(
+                latest_state_quality=100,
+                detail_quality=0,
+                raw_json=None,
+            )
+
+        with APP.db() as conn:
+            APP.upsert_train(conn, legacy)
+            APP.upsert_train(conn, enriched)
+            APP.upsert_train(conn, missing)
+            APP.upsert_train_service(
+                conn,
+                v2,
+                collection_date=v2["date"],
+                observed_at=v2["last_seen"],
+                source="board",
+            )
+            conn.commit()
+
+        APP.request.args = {"date": legacy["date"], "limit": "25"}
+        payload = APP.ranking_endpoint()
+        operators = {item["trainNumber"]: item["operator"] for item in payload["items"]}
+
+        self.assertEqual(operators["6801"], "1")
+        self.assertEqual(operators["6802"], "63")
+        self.assertIsNone(operators["6803"])
+
+    def test_summary_missing_date_is_not_reported_as_zero_data(self):
+        response = APP.summary_for_date("2026-07-18")
+
+        self.assertEqual(
+            response,
+            {"available": False, "reason": "no_data", "date": "2026-07-18"},
+        )
+
+    def test_summary_successful_zero_snapshot_remains_available(self):
+        self.write_snapshot("2026-07-18", trains=0, running=0)
+
+        response = APP.summary_for_date("2026-07-18")
+
+        self.assertTrue(response["available"])
+        self.assertEqual(response["counts"]["circulated"], 0)
+        self.assertEqual(response["counts"]["running"], 0)
+        self.assertEqual(response["counts"]["monitored"], 0)
+        self.assertEqual(response["delayTotals"]["average"], 0)
+
+    def test_summary_train_data_without_snapshot_remains_available(self):
+        conn = APP.db()
+        try:
+            conn.execute(
+                """
+                INSERT INTO trains (date, train_key, status, delay)
+                VALUES ('2026-07-18', 'legacy-only', 'regular', 0)
+                """
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        response = APP.summary_for_date("2026-07-18")
+
+        self.assertTrue(response["available"])
+        self.assertEqual(response["counts"]["monitored"], 1)
+        self.assertEqual(response["counts"]["regular"], 1)
 
     def write_detail(self, payload: dict, collection_date: str, observed_at: str) -> dict:
         row = APP.normalize_train(

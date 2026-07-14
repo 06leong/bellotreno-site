@@ -1,4 +1,13 @@
 import { onBelloLanguageChanged } from "./language-events.js";
+import {
+    compareStatisticsMetric,
+    normalizeStatisticsDaysResponse,
+    normalizeStatisticsNumber,
+    selectStatisticsComparisonBaseline,
+    type StatisticsComparisonBaseline,
+    type StatisticsCoverage,
+    type StatisticsCoverageDay
+} from "../lib/normalizers/statistics.js";
 
 (function () {
     type StatisticsView = "trains" | "stations" | "relations" | "ranking";
@@ -12,12 +21,6 @@ import { onBelloLanguageChanged } from "./language-events.js";
     type TableColumn = "rank" | "train" | "route" | "category" | "operator" | "delay" | "status" | "station" | "code" | "relation" | "monitored" | "avgDelay" | "cancelled";
     type TableColumnDefinition = readonly [TableColumn, string];
     type VoidFunctionWithArgs<T extends unknown[]> = (...args: T) => void;
-
-    interface StatisticsDay extends JsonRecord {
-        date: string;
-        label?: string;
-        finalized?: boolean;
-    }
 
     interface StatisticsTableItem extends JsonRecord {
         arrivalDelay?: number;
@@ -94,14 +97,20 @@ import { onBelloLanguageChanged } from "./language-events.js";
 
     interface StatisticsState {
         activeView: StatisticsView;
+        compareDate: string;
+        comparisonBaseline: StatisticsComparisonBaseline | null;
+        comparisonSummary: StatisticsSummary | null;
+        coverage: StatisticsCoverage | null;
         date: string;
-        days: StatisticsDay[];
+        days: StatisticsCoverageDay[];
         loading: boolean;
         page: number;
         pageSize: number;
+        requestSerial: number;
         summary: StatisticsSummary | null;
         tableItems: StatisticsTableItem[];
         tableLoading: boolean;
+        tableRequestSerial: number;
         timeseries: StatisticsTimeseries | null;
         total: number;
     }
@@ -130,25 +139,25 @@ import { onBelloLanguageChanged } from "./language-events.js";
     }
 
     interface SummaryCounts {
-        arrivalDelayed: number;
-        arrivalEarly: number;
-        arrivalOnTime: number;
-        avgDelay: number;
-        cancelled: number;
-        circulated: number;
+        arrivalDelayed: number | null;
+        arrivalEarly: number | null;
+        arrivalOnTime: number | null;
+        avgDelay: number | null;
+        cancelled: number | null;
+        circulated: number | null;
         counts: JsonRecord;
         coverage: JsonRecord;
-        delayed: number;
+        delayed: number | null;
         delayTotals: JsonRecord;
-        departureDelayed: number;
-        departureOnTime: number;
+        departureDelayed: number | null;
+        departureOnTime: number | null;
         indexedStations: number | null;
-        monitored: number;
-        notDeparted: number;
+        monitored: number | null;
+        notDeparted: number | null;
         punctuality: JsonRecord;
-        regular: number;
-        rescheduled: number;
-        running: number;
+        regular: number | null;
+        rescheduled: number | null;
+        running: number | null;
         worstTrain: StatisticsTableItem | null;
     }
 
@@ -159,6 +168,10 @@ import { onBelloLanguageChanged } from "./language-events.js";
 
     const state: StatisticsState = {
         date: "",
+        compareDate: "",
+        comparisonBaseline: null,
+        comparisonSummary: null,
+        coverage: null,
         days: [],
         summary: null,
         timeseries: null,
@@ -168,7 +181,9 @@ import { onBelloLanguageChanged } from "./language-events.js";
         total: 0,
         tableItems: [],
         loading: false,
-        tableLoading: false
+        tableLoading: false,
+        requestSerial: 0,
+        tableRequestSerial: 0
     };
 
     const palette = ["#65bfc0", "#5b9ee4", "#ec6685", "#f4b35d", "#83c77f", "#a78bfa", "#f78fb3", "#7dd3fc"];
@@ -230,17 +245,32 @@ import { onBelloLanguageChanged } from "./language-events.js";
     }
 
     function pct(value: unknown, digits = 1): string {
-        const num = asNumber(value, 0);
-        return `${num.toFixed(digits)}%`;
+        const num = normalizeStatisticsNumber(value);
+        return num === null ? "—" : `${num.toFixed(digits)}%`;
     }
 
     function formatNumber(value: unknown): string {
-        return asNumber(value, 0).toLocaleString(window.currentLang === "zh" ? "zh-CN" : window.currentLang === "it" ? "it-IT" : "en-GB");
+        const number = normalizeStatisticsNumber(value);
+        return number === null
+            ? "—"
+            : number.toLocaleString(window.currentLang === "zh" ? "zh-CN" : window.currentLang === "it" ? "it-IT" : "en-GB");
     }
 
     function formatMinutes(value: unknown): string {
-        const minutes = asNumber(value, 0);
-        return `${minutes.toLocaleString(window.currentLang === "zh" ? "zh-CN" : "en-GB")} ${tr("minutes", "min")}`;
+        const minutes = normalizeStatisticsNumber(value);
+        return minutes === null
+            ? "—"
+            : `${minutes.toLocaleString(window.currentLang === "zh" ? "zh-CN" : window.currentLang === "it" ? "it-IT" : "en-GB")} ${tr("minutes", "min")}`;
+    }
+
+    function formatDate(value: string | null | undefined): string {
+        if (!value) return "—";
+        const date = new Date(`${value}T12:00:00Z`);
+        if (!Number.isFinite(date.getTime())) return value;
+        return new Intl.DateTimeFormat(window.currentLang === "zh" ? "zh-CN" : window.currentLang === "it" ? "it-IT" : "en-GB", {
+            timeZone: "UTC",
+            dateStyle: "medium"
+        }).format(date);
     }
 
     function categoryCode(value: unknown): string {
@@ -375,14 +405,6 @@ import { onBelloLanguageChanged } from "./language-events.js";
         if (el) el.textContent = message || "";
     }
 
-    function normalizeDays(payload: unknown): StatisticsDay[] {
-        const record = asRecord(payload);
-        const raw = Array.isArray(record.days) ? record.days : Array.isArray(payload) ? payload : [];
-        return raw.map((item) => typeof item === "string" ? { date: item } : asRecord(item))
-            .filter((item): item is StatisticsDay => typeof item.date === "string" && item.date.length > 0)
-            .slice(0, 30);
-    }
-
     function normalizeSummary(payload: unknown): StatisticsSummary {
         const record = asRecord(payload);
         return asRecord(record.summary || record) as StatisticsSummary;
@@ -396,22 +418,71 @@ import { onBelloLanguageChanged } from "./language-events.js";
     function normalizeItems(payload: unknown): { items: StatisticsTableItem[]; total: number } {
         const record = asRecord(payload) as StatisticsItemsPayload;
         const items = asArray<StatisticsTableItem>(record.items || record.trains || record.stations || record.relations || record.ranking || payload);
-        const total = asNumber(record.total || record.count || items.length, items.length);
+        const total = asNumber(record.total ?? record.count ?? items.length, items.length);
         return { items, total };
     }
 
     function fillDateSelect(): void {
         const select = $<HTMLSelectElement>("statisticsDate");
         if (!select) return;
-        const days = state.days.length ? state.days : [{ date: state.date || todayRome() }];
+        const days = state.days;
         const options = days.map((day) => {
             const option = document.createElement("option");
             option.value = day.date;
             option.selected = day.date === state.date;
-            option.textContent = `${day.label || day.date}${day.finalized ? "" : ` - ${tr("statistics_live", "live")}`}`;
+            const status = day.coverageStatus === "live"
+                ? tr("statistics_live", "live")
+                : day.coverageStatus === "partial"
+                    ? tr("statistics_partial", "partial")
+                    : "";
+            option.textContent = `${day.label || formatDate(day.date)}${status ? ` · ${status}` : ""}`;
             return option;
         });
         replaceChildrenSafe(select, options);
+        select.disabled = options.length === 0;
+    }
+
+    function comparisonCandidates(): StatisticsCoverageDay[] {
+        const selected = state.days.find((day) => day.date === state.date);
+        if (!selected?.comparisonEligible || selected.coverageStatus !== "complete") return [];
+        return state.days
+            .filter((day) => day.date < state.date && day.comparisonEligible && day.v2Available && day.coverageStatus === "complete")
+            .sort((left, right) => right.date.localeCompare(left.date));
+    }
+
+    function syncComparisonDate(): void {
+        const candidates = comparisonCandidates();
+        if (state.compareDate && candidates.some((day) => day.date === state.compareDate)) {
+            state.comparisonBaseline = {
+                date: state.compareDate,
+                gapDays: selectStatisticsComparisonBaseline(
+                    [state.days.find((day) => day.date === state.date), candidates.find((day) => day.date === state.compareDate)]
+                        .filter((day): day is StatisticsCoverageDay => Boolean(day)),
+                    state.date
+                )?.gapDays ?? 0
+            };
+            return;
+        }
+        state.comparisonBaseline = selectStatisticsComparisonBaseline(state.days, state.date);
+        state.compareDate = state.comparisonBaseline?.date || "";
+    }
+
+    function fillComparisonSelect(): void {
+        const select = $<HTMLSelectElement>("statisticsCompareDate");
+        if (!select) return;
+        const placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = tr("statistics_no_comparable_day", "No complete comparison day yet");
+        const options = comparisonCandidates().map((day) => {
+            const option = document.createElement("option");
+            option.value = day.date;
+            option.selected = day.date === state.compareDate;
+            option.textContent = day.label || formatDate(day.date);
+            return option;
+        });
+        replaceChildrenSafe(select, [placeholder, ...options]);
+        select.value = state.compareDate;
+        select.disabled = options.length === 0;
     }
 
     function fillCategorySelect(): void {
@@ -431,10 +502,18 @@ import { onBelloLanguageChanged } from "./language-events.js";
         select.value = current;
     }
 
-    function metricCardElement(id: string, icon: string, label: string, value: string, note = ""): HTMLDivElement {
+    function metricCardElement(
+        id: string,
+        icon: string,
+        label: string,
+        value: string,
+        note = "",
+        tone: "good" | "bad" | "neutral" = "neutral"
+    ): HTMLDivElement {
         const card = document.createElement("div");
         card.className = "statistics-metric";
         card.dataset.statMetric = id;
+        card.dataset.comparisonTone = tone;
 
         const iconEl = document.createElement("span");
         iconEl.className = "material-symbols-outlined";
@@ -457,28 +536,28 @@ import { onBelloLanguageChanged } from "./language-events.js";
         return card;
     }
 
-    function summaryCounts(): SummaryCounts {
-        const summary = state.summary || {};
+    function summaryCounts(source: StatisticsSummary | null = state.summary): SummaryCounts {
+        const summary = source || {};
         const counts = asRecord(summary.counts);
         const punctuality = asRecord(summary.punctuality);
         const delayTotals = asRecord(summary.delayTotals || summary.delays);
         const coverage = asRecord(summary.coverage || summary.completeness);
-        const monitored = asNumber(getPath(summary, ["counts.monitored", "monitored", "trains.monitored"], 0));
-        const circulated = asNumber(getPath(summary, ["counts.circulated", "counts.treniGiorno", "treniGiorno", "circulated"], 0));
-        const running = asNumber(getPath(summary, ["counts.running", "counts.treniCircolanti", "treniCircolanti", "running"], 0));
-        const regular = asNumber(getPath(summary, ["counts.regular", "regular"], 0));
-        const delayed = asNumber(getPath(summary, ["counts.delayed", "delayed"], 0));
-        const cancelled = asNumber(getPath(summary, ["counts.cancelled", "cancelled"], 0));
-        const rescheduled = asNumber(getPath(summary, ["counts.rescheduled", "rescheduled", "counts.reprogrammed"], 0));
-        const notDeparted = asNumber(getPath(summary, ["counts.notDeparted", "notDeparted", "counts.not_departed"], 0));
-        const avgDelay = asNumber(getPath(summary, ["delayTotals.average", "delayTotals.avg", "avgDelay", "averageDelay"], 0));
+        const monitored = normalizeStatisticsNumber(getPath(summary, ["counts.monitored", "monitored", "trains.monitored"], null));
+        const circulated = normalizeStatisticsNumber(getPath(summary, ["counts.circulated", "counts.treniGiorno", "treniGiorno", "circulated"], null));
+        const running = normalizeStatisticsNumber(getPath(summary, ["counts.running", "counts.treniCircolanti", "treniCircolanti", "running"], null));
+        const regular = normalizeStatisticsNumber(getPath(summary, ["counts.regular", "regular"], null));
+        const delayed = normalizeStatisticsNumber(getPath(summary, ["counts.delayed", "delayed"], null));
+        const cancelled = normalizeStatisticsNumber(getPath(summary, ["counts.cancelled", "cancelled"], null));
+        const rescheduled = normalizeStatisticsNumber(getPath(summary, ["counts.rescheduled", "rescheduled", "counts.reprogrammed"], null));
+        const notDeparted = normalizeStatisticsNumber(getPath(summary, ["counts.notDeparted", "notDeparted", "counts.not_departed"], null));
+        const avgDelay = normalizeStatisticsNumber(getPath(summary, ["delayTotals.average", "delayTotals.avg", "avgDelay", "averageDelay"], null));
         const indexedStationsRaw = getPath(summary, ["coverage.stations", "stationsIndexed", "stationCount"], null);
-        const indexedStations = indexedStationsRaw === null ? null : asNumber(indexedStationsRaw);
-        const departureDelayed = asNumber(getPath(summary, ["punctuality.departure.delayed", "departure.delayed"], 0));
-        const departureOnTime = asNumber(getPath(summary, ["punctuality.departure.onTime", "departure.onTime"], 0));
-        const arrivalDelayed = asNumber(getPath(summary, ["punctuality.arrival.delayed", "arrival.delayed"], 0));
-        const arrivalOnTime = asNumber(getPath(summary, ["punctuality.arrival.onTime", "arrival.onTime"], 0));
-        const arrivalEarly = asNumber(getPath(summary, ["punctuality.arrival.early", "arrival.early"], 0));
+        const indexedStations = normalizeStatisticsNumber(indexedStationsRaw);
+        const departureDelayed = normalizeStatisticsNumber(getPath(summary, ["punctuality.departure.delayed", "departure.delayed"], null));
+        const departureOnTime = normalizeStatisticsNumber(getPath(summary, ["punctuality.departure.onTime", "departure.onTime"], null));
+        const arrivalDelayed = normalizeStatisticsNumber(getPath(summary, ["punctuality.arrival.delayed", "arrival.delayed"], null));
+        const arrivalOnTime = normalizeStatisticsNumber(getPath(summary, ["punctuality.arrival.onTime", "arrival.onTime"], null));
+        const arrivalEarly = normalizeStatisticsNumber(getPath(summary, ["punctuality.arrival.early", "arrival.early"], null));
         const worstTrainRecord = asRecord(summary.worstTrain || summary.worst);
         const worstTrain = Object.keys(worstTrainRecord).length ? worstTrainRecord as StatisticsTableItem : null;
         return {
@@ -502,6 +581,43 @@ import { onBelloLanguageChanged } from "./language-events.js";
             arrivalOnTime,
             arrivalEarly,
             worstTrain
+        };
+    }
+
+    function ratioPercent(numerator: number | null, denominator: number | null): number | null {
+        return numerator === null || denominator === null || denominator <= 0
+            ? null
+            : (numerator / denominator) * 100;
+    }
+
+    function signedNumber(value: number, digits = 0): string {
+        const formatted = Math.abs(value).toLocaleString(
+            window.currentLang === "zh" ? "zh-CN" : window.currentLang === "it" ? "it-IT" : "en-GB",
+            { maximumFractionDigits: digits, minimumFractionDigits: digits }
+        );
+        return `${value > 0 ? "+" : value < 0 ? "−" : ""}${formatted}`;
+    }
+
+    function comparisonNote(
+        current: number | null,
+        baseline: number | null,
+        kind: "number" | "percentage" | "minutes",
+        lowerIsBetter = false
+    ): { text: string; tone: "good" | "bad" | "neutral" } {
+        if (!state.comparisonSummary || !state.compareDate) return { text: "", tone: "neutral" };
+        const comparison = compareStatisticsMetric(current, baseline);
+        if (!comparison) return { text: tr("statistics_comparison_unavailable", "Comparison unavailable"), tone: "neutral" };
+        const deltaText = kind === "percentage"
+            ? `${signedNumber(comparison.delta, 1)} pp`
+            : kind === "minutes"
+                ? `${signedNumber(comparison.delta, 1)} ${tr("minutes", "min")}`
+                : signedNumber(comparison.delta);
+        const tone = comparison.delta === 0
+            ? "neutral"
+            : (lowerIsBetter ? comparison.delta < 0 : comparison.delta > 0) ? "good" : "bad";
+        return {
+            text: `${deltaText} · ${formatDate(state.compareDate)}`,
+            tone
         };
     }
 
@@ -533,28 +649,173 @@ import { onBelloLanguageChanged } from "./language-events.js";
         if (coverageEl) coverageEl.textContent = stationValue;
     }
 
+    function renderCoverageNotice(): void {
+        const element = $("statisticsCoverageNotice");
+        if (!element) return;
+        const range = state.coverage?.collectionDate;
+        const rolloutDate = state.coverage?.rolloutDate || range?.availableFrom;
+        const selected = state.days.find((day) => day.date === state.date);
+        const icon = document.createElement("span");
+        icon.className = "material-symbols-outlined";
+        icon.textContent = "info";
+        const body = document.createElement("div");
+        const title = document.createElement("strong");
+        const detail = document.createElement("span");
+        if (!rolloutDate) {
+            title.textContent = tr("statistics_coverage_unavailable", "Detailed-data coverage is not available yet");
+            detail.textContent = tr("statistics_coverage_accumulating", "New observations will appear here as they are collected.");
+        } else {
+            title.textContent = `${tr("statistics_detailed_data_from", "Detailed observations from")} ${formatDate(rolloutDate)}`;
+            const end = range?.availableTo && range.availableTo !== rolloutDate
+                ? ` · ${tr("statistics_through", "through")} ${formatDate(range.availableTo)}`
+                : "";
+            const selectedStatus = selected?.coverageStatus === "partial"
+                ? selected.reason === "incomplete_collection_day"
+                    ? tr("statistics_incomplete_day_note", "This day is missing one or more successful collection slots and is not used as a comparison baseline.")
+                    : tr("statistics_partial_day_note", "The rollout day is partial and is not used as a comparison baseline.")
+                : selected?.coverageStatus === "live"
+                    ? tr("statistics_live_day_note", "The selected day is still being collected.")
+                    : tr("statistics_forward_only_note", "Coverage grows forward from the rollout date; missing dates are never treated as zero.");
+            detail.textContent = `${selectedStatus}${end}`;
+        }
+        body.append(title, detail);
+        replaceChildrenSafe(element, [icon, body]);
+    }
+
+    function renderComparisonStatus(): void {
+        const element = $("statisticsComparisonStatus");
+        if (!element) return;
+        const selected = state.days.find((day) => day.date === state.date);
+        const icon = document.createElement("span");
+        icon.className = "material-symbols-outlined";
+        const body = document.createElement("div");
+        const title = document.createElement("strong");
+        const detail = document.createElement("span");
+        if (state.comparisonSummary && state.compareDate) {
+            icon.textContent = "check_circle";
+            title.textContent = `${tr("statistics_change_vs", "Compared with")} ${formatDate(state.compareDate)}`;
+            detail.textContent = state.comparisonBaseline?.gapDays
+                ? `${tr("statistics_comparison_gap", "Nearest complete baseline; missing calendar days between dates")}: ${state.comparisonBaseline.gapDays}`
+                : tr("statistics_comparison_ready", "Metric changes use the same daily definitions and a complete baseline.");
+        } else {
+            icon.textContent = "info";
+            title.textContent = tr("statistics_comparison_pending", "Not enough complete data for a daily comparison");
+            if (selected?.coverageStatus === "live") {
+                detail.textContent = tr("statistics_comparison_live_day", "A live partial day is not compared with a completed day.");
+            } else if (selected?.coverageStatus === "partial") {
+                detail.textContent = selected.reason === "incomplete_collection_day"
+                    ? tr("statistics_comparison_incomplete_day", "This day has incomplete collection evidence and cannot be used for comparison.")
+                    : tr("statistics_comparison_partial_day", "The rollout day is partial and cannot be used for comparison.");
+            } else if (!selected?.v2Available) {
+                detail.textContent = tr("statistics_comparison_before_coverage", "This date predates detailed v2 observations.");
+            } else {
+                detail.textContent = tr("statistics_comparison_accumulating", "Comparison becomes available after two complete eligible days exist.");
+            }
+        }
+        body.append(title, detail);
+        replaceChildrenSafe(element, [icon, body]);
+    }
+
+    function insightElement(iconName: string, titleText: string, detailText: string, tone: string): HTMLDivElement {
+        const item = document.createElement("div");
+        item.className = "statistics-insight";
+        item.dataset.insightTone = tone;
+        const icon = document.createElement("span");
+        icon.className = "material-symbols-outlined statistics-insight-severity";
+        icon.textContent = iconName;
+        const body = document.createElement("div");
+        const title = document.createElement("strong");
+        title.textContent = titleText;
+        const detail = document.createElement("p");
+        detail.textContent = detailText;
+        body.append(title, detail);
+        item.append(icon, body);
+        return item;
+    }
+
+    function renderInsights(): void {
+        const element = $("statisticsInsights");
+        if (!element) return;
+        if (!state.summary) {
+            const empty = document.createElement("p");
+            empty.className = "statistics-insights-empty";
+            empty.textContent = tr("statistics_insights_empty", "No reliable insights are available for this date.");
+            replaceChildrenSafe(element, [empty]);
+            return;
+        }
+        const values = summaryCounts();
+        const items: HTMLDivElement[] = [];
+        const delayedRate = ratioPercent(values.delayed, values.monitored);
+        const cancelledRate = ratioPercent(values.cancelled, values.monitored);
+        const worst = values.worstTrain;
+        if (worst) {
+            const number = `${worst.category || ""} ${worst.trainNumber || worst.train_number || worst.number || worst.train || ""}`.trim();
+            const route = [worst.origin, worst.destination].filter(Boolean).join(" → ");
+            const delay = normalizeStatisticsNumber(worst.delay);
+            items.push(insightElement(
+                "warning",
+                tr("statistics_insight_worst_train", "Most delayed observed train"),
+                [number || "—", route, delay === null ? "" : `+${formatMinutes(delay)}`].filter(Boolean).join(" · "),
+                "high"
+            ));
+        }
+        if (delayedRate !== null) {
+            items.push(insightElement(
+                "schedule",
+                tr("statistics_insight_delayed", "Observed delayed trains"),
+                `${formatNumber(values.delayed)} · ${pct(delayedRate)}`,
+                delayedRate >= 20 ? "high" : "medium"
+            ));
+        }
+        if (cancelledRate !== null) {
+            items.push(insightElement(
+                "cancel",
+                tr("statistics_insight_cancelled", "Observed cancellations"),
+                `${formatNumber(values.cancelled)} · ${pct(cancelledRate)}`,
+                cancelledRate >= 5 ? "high" : "medium"
+            ));
+        }
+        const selected = state.days.find((day) => day.date === state.date);
+        if (selected?.coverageStatus === "partial" || selected?.coverageStatus === "live") {
+            items.push(insightElement(
+                "info",
+                tr("statistics_insight_coverage", "Interpret with coverage context"),
+                selected.coverageStatus === "live"
+                    ? tr("statistics_live_day_note", "The selected day is still being collected.")
+                    : selected.reason === "incomplete_collection_day"
+                        ? tr("statistics_incomplete_day_note", "This day is missing one or more successful collection slots and is not used as a comparison baseline.")
+                        : tr("statistics_partial_day_note", "The rollout day is partial and is not used as a comparison baseline."),
+                "info"
+            ));
+        }
+        if (!items.length) {
+            const empty = document.createElement("p");
+            empty.className = "statistics-insights-empty";
+            empty.textContent = tr("statistics_insights_empty", "No reliable insights are available for this date.");
+            replaceChildrenSafe(element, [empty]);
+            return;
+        }
+        replaceChildrenSafe(element, items);
+    }
+
     function renderMetrics(): void {
         const el = $("statisticsMetrics");
         if (!el) return;
         const values = summaryCounts();
-        const worst = values.worstTrain;
-        const worstNumber = worst?.trainNumber || worst?.train_number || worst?.number || worst?.train || "";
-        const worstRoute = [worst?.origin, worst?.destination].filter(Boolean).join(" -> ");
-        const worstLabel = worst
-            ? `${worst.category || ""} ${worstNumber}`.trim() || "--"
-            : "--";
-        const worstNote = worst
-            ? [worstRoute, worst?.delay ? `+${worst.delay} ${tr("minutes", "min")}` : ""].filter(Boolean).join(" - ")
-            : "";
+        const baseline = summaryCounts(state.comparisonSummary);
+        const regularity = ratioPercent(values.regular, values.monitored);
+        const baselineRegularity = ratioPercent(baseline.regular, baseline.monitored);
+        const cancellationRate = ratioPercent(values.cancelled, values.monitored);
+        const baselineCancellationRate = ratioPercent(baseline.cancelled, baseline.monitored);
+        const monitoredNote = comparisonNote(values.monitored, baseline.monitored, "number");
+        const regularityNote = comparisonNote(regularity, baselineRegularity, "percentage");
+        const cancellationNote = comparisonNote(cancellationRate, baselineCancellationRate, "percentage", true);
+        const delayNote = comparisonNote(values.avgDelay, baseline.avgDelay, "minutes", true);
         replaceChildrenSafe(el, [
-            metricCardElement("running", "directions_railway", tr("statistics_running_now", "Running now"), formatNumber(values.running)),
-            metricCardElement("circulated", "today", tr("statistics_circulated_today", "Operated today"), formatNumber(values.circulated)),
-            metricCardElement("monitored", "visibility", tr("statistics_monitored", "Monitored"), formatNumber(values.monitored)),
-            metricCardElement("regular", "verified", tr("statistics_regular", "Regular"), formatNumber(values.regular)),
-            metricCardElement("cancelled", "cancel", tr("statistics_cancelled", "Cancelled"), formatNumber(values.cancelled)),
-            metricCardElement("rescheduled", "published_with_changes", tr("statistics_rescheduled", "Rescheduled"), formatNumber(values.rescheduled)),
-            metricCardElement("avg_delay", "timer", tr("statistics_avg_delay", "Average delay"), formatMinutes(values.avgDelay)),
-            metricCardElement("worst", "warning", tr("statistics_worst_train", "Worst train"), worstLabel, worstNote)
+            metricCardElement("monitored", "train", tr("statistics_monitored", "Monitored trains"), formatNumber(values.monitored), monitoredNote.text, monitoredNote.tone),
+            metricCardElement("regularity", "check_circle", tr("statistics_regularity_rate", "Regularity rate"), pct(regularity), regularityNote.text, regularityNote.tone),
+            metricCardElement("cancellation", "cancel", tr("statistics_cancellation_rate", "Cancellation rate"), pct(cancellationRate), cancellationNote.text, cancellationNote.tone),
+            metricCardElement("avg_delay", "schedule", tr("statistics_avg_delay", "Average delay"), formatMinutes(values.avgDelay), delayNote.text, delayNote.tone)
         ]);
     }
 
@@ -569,8 +830,8 @@ import { onBelloLanguageChanged } from "./language-events.js";
         return element;
     }
 
-    function pointValue(point: JsonRecord): number {
-        return asNumber(point.value ?? point.running ?? point.treniCircolanti ?? point.count ?? point.y, 0);
+    function pointValue(point: JsonRecord): number | null {
+        return normalizeStatisticsNumber(point.value ?? point.running ?? point.treniCircolanti ?? point.count ?? point.y);
     }
 
     function pointLabel(point: JsonRecord): string {
@@ -588,9 +849,11 @@ import { onBelloLanguageChanged } from "./language-events.js";
     }
 
     function renderLineChart(points: unknown): string {
-        const data = asArray(points).filter(Boolean);
+        const data = asArray(points)
+            .map((point) => ({ point, value: pointValue(point) }))
+            .filter((item): item is { point: JsonRecord; value: number } => item.value !== null);
         if (!data.length) return emptyChart();
-        const values = data.map(pointValue);
+        const values = data.map((item) => item.value);
         const max = Math.max(...values, 1);
         const width = 680;
         const height = 260;
@@ -601,9 +864,9 @@ import { onBelloLanguageChanged } from "./language-events.js";
         const plotWidth = width - padLeft - padRight;
         const plotHeight = height - padTop - padBottom;
         const step = data.length > 1 ? plotWidth / (data.length - 1) : 0;
-        const coords = data.map((point, index): [number, number] => {
+        const coords = data.map((item, index): [number, number] => {
             const x = padLeft + step * index;
-            const y = height - padBottom - (pointValue(point) / max) * plotHeight;
+            const y = height - padBottom - (item.value / max) * plotHeight;
             return [x, y];
         });
         const line = coords.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
@@ -627,8 +890,8 @@ import { onBelloLanguageChanged } from "./language-events.js";
                     <polygon points="${area}" />
                     <polyline points="${line}" />
                     ${coords.map(([x, y], index) => {
-                        const label = pointLabel(data[index]);
-                        const value = pointValue(data[index]);
+                        const label = pointLabel(data[index].point);
+                        const value = data[index].value;
                         return `
                             <circle class="statistics-chart-point" tabindex="0" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5"
                                 data-label="${esc(label)}" data-value="${esc(formatNumber(value))}" data-x="${x.toFixed(1)}" data-y="${y.toFixed(1)}">
@@ -636,11 +899,11 @@ import { onBelloLanguageChanged } from "./language-events.js";
                             </circle>
                         `;
                     }).join("")}
-                    ${xTicks.map((point, index) => {
-                        const dataIndex = data.indexOf(point);
+                    ${xTicks.map((item, index) => {
+                        const dataIndex = data.indexOf(item);
                         const x = padLeft + step * dataIndex;
                         const anchor = index === 0 ? "start" : index === xTicks.length - 1 ? "end" : "middle";
-                        return `<text x="${x.toFixed(1)}" y="${height - 8}" text-anchor="${anchor}">${esc(pointLabel(point))}</text>`;
+                        return `<text x="${x.toFixed(1)}" y="${height - 8}" text-anchor="${anchor}">${esc(pointLabel(item.point))}</text>`;
                     }).join("")}
                 </svg>
                 <div class="statistics-chart-tooltip" hidden></div>
@@ -854,10 +1117,10 @@ import { onBelloLanguageChanged } from "./language-events.js";
         const regularityChart = $("statisticsRegularityChart");
         if (regularityChart) {
             regularityChart.innerHTML = renderInteractiveDonut([
-                { label: tr("statistics_regular", "Regular"), value: values.regular, color: "#65bfc0" },
-                { label: tr("statistics_status_delayed", "Delayed"), value: values.delayed, color: "#5b9ee4" },
-                { label: tr("statistics_rescheduled", "Rescheduled"), value: values.rescheduled, color: "#f4b35d" },
-                { label: tr("statistics_cancelled", "Cancelled"), value: values.cancelled, color: "#ec6685" }
+                { label: tr("statistics_regular", "Regular"), value: values.regular ?? 0, color: "#138a8a" },
+                { label: tr("statistics_status_delayed", "Delayed"), value: values.delayed ?? 0, color: "#2869d8" },
+                { label: tr("statistics_rescheduled", "Rescheduled"), value: values.rescheduled ?? 0, color: "#f59e0b" },
+                { label: tr("statistics_cancelled", "Cancelled"), value: values.cancelled ?? 0, color: "#d71920" }
             ], tr("statistics_trains", "trains"));
         }
         const punctualityChart = $("statisticsPunctualityChart");
@@ -867,16 +1130,16 @@ import { onBelloLanguageChanged } from "./language-events.js";
                     <div>
                         <h3>${esc(tr("statistics_departure_punctuality", "Departure punctuality"))}</h3>
                         ${renderInteractiveDonut([
-                            { label: tr("on_time", "On Time"), value: values.departureOnTime, color: "#65bfc0" },
-                            { label: tr("statistics_status_delayed", "Delayed"), value: values.departureDelayed, color: "#ec6685" }
+                            { label: tr("on_time", "On Time"), value: values.departureOnTime ?? 0, color: "#138a8a" },
+                            { label: tr("statistics_status_delayed", "Delayed"), value: values.departureDelayed ?? 0, color: "#d71920" }
                         ], tr("departures", "Departures"))}
                     </div>
                     <div>
                         <h3>${esc(tr("statistics_arrival_punctuality", "Arrival punctuality"))}</h3>
                         ${renderInteractiveDonut([
-                            { label: tr("statistics_early", "Early"), value: values.arrivalEarly, color: "#5b9ee4" },
-                            { label: tr("on_time", "On Time"), value: values.arrivalOnTime, color: "#65bfc0" },
-                            { label: tr("statistics_status_delayed", "Delayed"), value: values.arrivalDelayed, color: "#ec6685" }
+                            { label: tr("statistics_early", "Early"), value: values.arrivalEarly ?? 0, color: "#2869d8" },
+                            { label: tr("on_time", "On Time"), value: values.arrivalOnTime ?? 0, color: "#138a8a" },
+                            { label: tr("statistics_status_delayed", "Delayed"), value: values.arrivalDelayed ?? 0, color: "#d71920" }
                         ], tr("arrivals", "Arrivals"))}
                     </div>
                 </div>
@@ -890,10 +1153,14 @@ import { onBelloLanguageChanged } from "./language-events.js";
 
     function renderAll(): void {
         fillDateSelect();
+        fillComparisonSelect();
         fillCategorySelect();
         renderMeta();
+        renderCoverageNotice();
+        renderComparisonStatus();
         renderMetrics();
         renderCharts();
+        renderInsights();
         renderTable();
     }
 
@@ -905,12 +1172,17 @@ import { onBelloLanguageChanged } from "./language-events.js";
         state.activeView = view;
         state.page = 1;
         document.querySelectorAll<HTMLElement>(".statistics-tab").forEach((tab) => {
-            tab.classList.toggle("active", tab.dataset.statView === view);
+            const selected = tab.dataset.statView === view;
+            tab.classList.toggle("active", selected);
+            tab.setAttribute("aria-selected", String(selected));
         });
         const category = $<HTMLSelectElement>("statisticsCategory");
         const status = $<HTMLSelectElement>("statisticsStatusFilter");
-        if (category) category.style.display = view === "trains" ? "" : "none";
-        if (status) status.style.display = view === "trains" ? "" : "none";
+        const showTrainFilters = view === "trains";
+        const categoryField = category?.closest<HTMLElement>(".statistics-filter-field");
+        const statusField = status?.closest<HTMLElement>(".statistics-filter-field");
+        if (categoryField) categoryField.hidden = !showTrainFilters;
+        if (statusField) statusField.hidden = !showTrainFilters;
         if (shouldLoad) loadTable();
     }
 
@@ -925,6 +1197,7 @@ import { onBelloLanguageChanged } from "./language-events.js";
 
     async function loadTable(): Promise<void> {
         if (!state.date) return;
+        const requestSerial = ++state.tableRequestSerial;
         state.tableLoading = true;
         setTableStatus(tr("loading", "Loading..."));
         renderTable();
@@ -949,15 +1222,18 @@ import { onBelloLanguageChanged } from "./language-events.js";
 
         try {
             const payload = await fetchJson(path, params);
+            if (requestSerial !== state.tableRequestSerial) return;
             const normalized = normalizeItems(payload);
             state.tableItems = normalized.items;
             state.total = normalized.total;
             setTableStatus("");
         } catch (error) {
+            if (requestSerial !== state.tableRequestSerial) return;
             state.tableItems = [];
             state.total = 0;
             setTableStatus(reasonMessage(errorReason(error)));
         } finally {
+            if (requestSerial !== state.tableRequestSerial) return;
             state.tableLoading = false;
             renderTable();
         }
@@ -967,6 +1243,7 @@ import { onBelloLanguageChanged } from "./language-events.js";
         if (reason === "not_configured") return tr("statistics_not_configured", "Statistics API is not configured yet.");
         if (reason === "forbidden") return tr("statistics_forbidden", "Statistics API access denied.");
         if (reason === "upstream_error") return tr("statistics_upstream_error", "Statistics service is unavailable.");
+        if (reason === "no_data") return tr("statistics_no_data_for_day", "No observations are available for this date.");
         return tr("load_error", "Failed to load, please try again later");
     }
 
@@ -1005,12 +1282,23 @@ import { onBelloLanguageChanged } from "./language-events.js";
         if (column === "code") return item.code || item.stationCode || item.id || "--";
         if (column === "relation") return item.relation || [item.from, item.to].filter(Boolean).join(" -> ") || "--";
         if (column === "category") return item.category || item.trainCategory || "--";
-        if (column === "operator") return operatorName(item.operator || item.client);
+        if (column === "operator") {
+            const operator = String(item.operator ?? "").trim() ? item.operator : item.client;
+            return operatorName(operator);
+        }
         if (column === "delay") return formatMinutes(item.delay ?? item.totalDelay ?? item.arrivalDelay ?? item.departureDelay);
         if (column === "avgDelay") return formatMinutes(item.avgDelay ?? item.averageDelay ?? item.delayAverage);
         if (column === "monitored") return formatNumber(item.monitored ?? item.count ?? item.total);
         if (column === "cancelled") return formatNumber(item.cancelled);
-        if (column === "status") return statusLabel(item.status || item.state || (item.notDeparted ? "not_departed" : item.cancelled ? "cancelled" : (item.delay ?? 0) > 5 ? "delayed" : "regular"));
+        if (column === "status") {
+            const explicitStatus = item.status || item.state;
+            if (explicitStatus) return statusLabel(explicitStatus);
+            if (item.notDeparted) return statusLabel("not_departed");
+            if (item.cancelled === true || normalizeStatisticsNumber(item.cancelled) === 1) return statusLabel("cancelled");
+            const delay = normalizeStatisticsNumber(item.delay);
+            if (delay !== null) return statusLabel(delay > 5 ? "delayed" : "regular");
+            return tr("statistics_status_unknown", "Unknown");
+        }
         return asString(item[column], "--");
     }
 
@@ -1065,6 +1353,7 @@ import { onBelloLanguageChanged } from "./language-events.js";
 
     function statusLabel(status: unknown): string {
         const normalized = String(status || "").toLowerCase();
+        if (!normalized) return tr("statistics_status_unknown", "Unknown");
         if (normalized.includes("cancel")) return tr("statistics_status_cancelled", "Cancelled");
         if (normalized.includes("not_departed") || normalized.includes("not departed") || normalized.includes("non_partito") || normalized.includes("nonpartito")) return tr("statistics_status_not_departed", tr("not_departed", "Not Departed"));
         if (normalized.includes("resched") || normalized.includes("ripro")) return tr("statistics_status_rescheduled", "Rescheduled");
@@ -1116,45 +1405,89 @@ import { onBelloLanguageChanged } from "./language-events.js";
     }
 
     async function loadCore(): Promise<void> {
+        const requestSerial = ++state.requestSerial;
+        state.tableRequestSerial += 1;
         state.loading = true;
+        state.summary = null;
+        state.timeseries = null;
+        state.comparisonSummary = null;
+        state.tableItems = [];
+        state.total = 0;
+        state.tableLoading = false;
         setStatus(tr("statistics_loading", "Loading statistics..."), "info");
+        renderAll();
         try {
-            const daysPayload = await fetchJson("/days", { limit: 30 });
-            state.days = normalizeDays(daysPayload);
-            state.date = state.date || state.days[0]?.date || todayRome();
+            const daysPayload = await fetchJson("/days", { limit: 90 });
+            if (requestSerial !== state.requestSerial) return;
+            const normalized = normalizeStatisticsDaysResponse(daysPayload);
+            state.days = normalized.days;
+            state.coverage = normalized.coverage;
+            if (!state.days.some((day) => day.date === state.date)) {
+                state.date = state.days[0]?.date || "";
+            }
+            syncComparisonDate();
             fillDateSelect();
+            fillComparisonSelect();
         } catch (error) {
-            state.days = [{ date: state.date || todayRome(), label: state.date || todayRome() }];
-            state.date = state.date || todayRome();
+            if (requestSerial !== state.requestSerial) return;
+            state.days = [];
+            state.coverage = null;
+            state.compareDate = "";
+            state.comparisonBaseline = null;
+            state.comparisonSummary = null;
             fillDateSelect();
+            fillComparisonSelect();
             setStatus(reasonMessage(errorReason(error)), "warning");
         }
 
-        try {
-            const [summary, timeseries] = await Promise.all([
-                fetchJson("/summary", { date: state.date }),
-                fetchJson("/timeseries", { date: state.date }).catch(() => ({}))
-            ]);
-            state.summary = normalizeSummary(summary);
-            state.timeseries = normalizeTimeseries(timeseries);
-            setStatus("");
-        } catch (error) {
+        if (!state.date) {
             state.summary = null;
             state.timeseries = null;
-            setStatus(reasonMessage(errorReason(error)), "warning");
-        } finally {
+            state.comparisonSummary = null;
             state.loading = false;
             renderAll();
-            loadTable();
+            return;
+        }
+
+        try {
+            const [summary, timeseries, comparisonSummary] = await Promise.all([
+                fetchJson("/summary", { date: state.date }),
+                fetchJson("/timeseries", { date: state.date }).catch(() => ({})),
+                state.compareDate
+                    ? fetchJson("/summary", { date: state.compareDate }).then(normalizeSummary).catch(() => null)
+                    : Promise.resolve(null)
+            ]);
+            if (requestSerial !== state.requestSerial) return;
+            state.summary = normalizeSummary(summary);
+            state.timeseries = normalizeTimeseries(timeseries);
+            state.comparisonSummary = comparisonSummary;
+            setStatus("");
+        } catch (error) {
+            if (requestSerial !== state.requestSerial) return;
+            state.summary = null;
+            state.timeseries = null;
+            state.comparisonSummary = null;
+            setStatus(reasonMessage(errorReason(error)), "warning");
+        } finally {
+            if (requestSerial !== state.requestSerial) return;
+            state.loading = false;
+            renderAll();
+            if (state.summary) loadTable();
         }
     }
 
     function downloadCsv(): void {
         if (!state.date) return;
         const view = state.activeView;
+        const exportView: Record<StatisticsView, string> = {
+            trains: "trains",
+            stations: "station",
+            relations: "relation",
+            ranking: "trains"
+        };
         const query = paramsString({
             date: state.date,
-            view,
+            view: exportView[view],
             q: queryValue(),
             category: $<HTMLSelectElement>("statisticsCategory")?.value || "",
             status: $<HTMLSelectElement>("statisticsStatusFilter")?.value || ""
@@ -1173,7 +1506,16 @@ import { onBelloLanguageChanged } from "./language-events.js";
     function bindEvents(): void {
         $<HTMLSelectElement>("statisticsDate")?.addEventListener("change", (event) => {
             state.date = (event.currentTarget as HTMLSelectElement).value;
+            state.compareDate = "";
+            state.comparisonBaseline = null;
+            state.comparisonSummary = null;
             state.page = 1;
+            loadCore();
+        });
+        $<HTMLSelectElement>("statisticsCompareDate")?.addEventListener("change", (event) => {
+            state.compareDate = (event.currentTarget as HTMLSelectElement).value;
+            state.comparisonSummary = null;
+            syncComparisonDate();
             loadCore();
         });
         document.querySelectorAll<HTMLElement>(".statistics-tab").forEach((tab) => {
@@ -1202,6 +1544,24 @@ import { onBelloLanguageChanged } from "./language-events.js";
         });
         bindRunningChartEvents();
         bindDonutChartEvents();
+        document.querySelectorAll<HTMLElement>(".statistics-analysis-tab").forEach((tab) => {
+            tab.addEventListener("click", () => {
+                document.querySelectorAll<HTMLElement>(".statistics-analysis-tab").forEach((item) => {
+                    const selected = item === tab;
+                    item.classList.toggle("active", selected);
+                    item.setAttribute("aria-selected", String(selected));
+                });
+                const view = tab.dataset.analysisView;
+                if (view === "network") setActiveView("stations");
+                if (view === "details") setActiveView("trains");
+                const target = view === "overview"
+                    ? document.querySelector<HTMLElement>(".statistics-summary-strip")
+                    : view === "trends"
+                        ? document.querySelector<HTMLElement>(".statistics-primary-grid")
+                        : document.querySelector<HTMLElement>(".statistics-search-panel");
+                target?.scrollIntoView({ behavior: "smooth", block: "start" });
+            });
+        });
     }
 
     function initStatisticsPage(): void {

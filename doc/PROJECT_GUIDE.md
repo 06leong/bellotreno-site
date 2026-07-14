@@ -240,6 +240,20 @@ Application startup initializes empty v2 tables and new collector
 runs dual-write structured data; it never automatically rewrites the existing
 production history.
 
+The production policy is forward-only: legacy rows remain queryable through
+their existing rolling retention, while v2 analysis starts at the first real
+`train_observations.collection_date`. `/v1/days` publishes separate collection-
+date and service-date coverage plus per-day comparison eligibility. The browser
+must consume those flags rather than infer coverage from a continuous range or
+render absent dates as zero. Historical backfill is optional maintenance work,
+not a prerequisite for the v2 collector or Statistics dashboard.
+
+The response keeps `coverage.rolloutDate` as an immutable first-v2-collection
+anchor even after observation retention advances `collectionDate.availableFrom`.
+Past dates become comparison-eligible only when all required scheduled slots
+have matching successful collector-run and snapshot evidence. Partly observed
+days remain `partial` with `reason: incomplete_collection_day`.
+
 The release also writes compressed BLOB values into legacy `trains.raw_json`.
 Older statistics images cannot decode those new rows, so changing only the
 image tag is not a safe rollback after the first new collector write. Preserve
@@ -272,8 +286,10 @@ history remains for 30 days. The v2 latest-service raw layer remains for seven
 days, while the compressed collection-date parent in the legacy API row follows
 that row's independent 30-day window.
 
-Legacy history is backfilled only through the resumable
-`migrate_statistics_v2.py` utility. The safe operating sequence is:
+If a future capacity-reviewed decision calls for historical v2 data, legacy
+history can be backfilled through the resumable `migrate_statistics_v2.py`
+utility. Do not run `--apply` under the current forward-only policy. The safe
+operating sequence for an explicitly approved backfill is:
 
 ```bash
 # Read-only profile; includes train/v2 row counts, missing service dates,
