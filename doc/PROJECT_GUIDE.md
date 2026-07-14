@@ -176,7 +176,7 @@ compose project but has a different role from the main proxy.
 | WSGI server | Gunicorn, 1 worker + 4 threads by default |
 | Internal port | 8081 |
 | External domain | `https://stats-api.bellotreno.org/v1` |
-| Storage | SQLite + WAL |
+| Storage | SQLite + WAL; additive statistics schema v2 alongside legacy tables |
 | Data volume | `./statistics-data:/data` |
 | Auth | `X-Bello-Stats-Token`, injected by Pages Functions |
 
@@ -187,9 +187,21 @@ Collector behavior:
 3. Fetches both `partenze` and `arrivi` when
    `STATISTICS_BOARD_TYPES=partenze,arrivi`.
 4. Calls `andamentoTreno` for train details discovered from boards.
-5. Stores train, stop, station, relation, ranking, and time-series aggregates.
-6. Uses the scheduled collection slot date as the reporting date while keeping
-   the original train `service_date`.
+5. Continues to populate the legacy train, stop, station, relation, ranking, and
+   time-series data used by the current API.
+6. Also writes the additive v2 service, observation, stop-event, and compressed
+   latest-raw-payload tables.
+7. Uses the scheduled collection slot date as the reporting `collection_date`
+   while keeping the original train `service_date`.
+8. Uses a short one-day discovery lookback but continues known unfinished
+   services for `STATISTICS_ACTIVE_SERVICE_TTL_DAYS` (seven days by default),
+   covering D+2 and later arrivals without accepting arbitrary old board rows.
+   During the additive rollout, legacy and v2 completion state are merged and
+   any completed observation wins, allowing old active keys to self-bootstrap.
+9. Persists detail retry state. Failures back off from 60 minutes to a 720-minute
+   ceiling; successful unfinished services refresh after 120 minutes, while
+   completed services stop retrying. A default 750-attempt run budget reserves
+   capacity for both current boards and already-due backlog.
 
 Scheduling is slot-based, not "collect then sleep":
 
@@ -197,6 +209,143 @@ Scheduling is slot-based, not "collect then sleep":
 - an additional Europe/Rome `23:55` end-of-day collection may run;
 - all board requests in one collection run use the same logical sampling time;
 - overlapping runs are skipped and recorded instead of started twice.
+
+### Statistics storage v2
+
+The additive v2 schema makes service identity and observation time explicit:
+
+| Table | Grain |
+| --- | --- |
+| `train_services` | One service keyed by `(service_date, train_key)`, where a canonical key represents train number + origin station code + scheduled departure epoch. `codLocOrig` is preferred consistently for the ViaggiaTreno origin identity, followed by `idOrigine` and `codOrigine`. Incomplete identities remain deterministic but are marked `provisional`; equal-time updates use a persisted completeness score, and restart-safe retry fields track detail attempts, failures, next eligibility, and the last error. |
+| `train_observations` | One board/detail observation per service, `observed_at`, and `collection_date`; observation history is no longer collapsed into a single daily state, and extreme values retain the strongest available event evidence. |
+| `train_stop_events` | One stop per service with separate expected/actual arrival/departure dates, including dates after the service day. Older, empty, and lower-quality equal-time detail cannot clear a fuller stop set. |
+| `train_raw_payloads` | One latest detailed payload per service, encoded as compressed `zlib-json-v1`; the default raw retention is seven days and a partial equal-time retry cannot replace a fuller payload. |
+
+Delay magnitude is preserved, including multi-hour and greater-than-24-hour
+values. Observations carry quality flags for extreme values instead of treating
+the magnitude alone as proof that the source data is invalid.
+
+Legacy `trains`, `train_stops`, aggregate tables, CSV exports, and existing API
+routes remain the compatibility layer and continue to be written and queried;
+there is no separate v2 query API yet. The train-detail route keeps decoded
+`train.raw` and normalized stops. Accepted details keep one compressed parent
+payload in each legacy collection-date `trains` row for the 30-day v1 contract,
+and also keep the latest service-level payload in `train_raw_payloads` for seven
+days. A v2 fallback must match `detail_collection_date` to the requested date,
+so the latest D+1 service state cannot leak into a D response. For response
+compatibility, `stops[].raw_json` remains present: old stored values are
+returned unchanged, new values are reconstructed from the matching parent
+payload when available, and otherwise use the JSON string `'{}'`.
+Application startup initializes empty v2 tables and new collector
+runs dual-write structured data; it never automatically rewrites the existing
+production history.
+
+The release also writes compressed BLOB values into legacy `trains.raw_json`.
+Older statistics images cannot decode those new rows, so changing only the
+image tag is not a safe rollback after the first new collector write. Preserve
+a consistent pre-deploy SQLite backup; a full rollback restores both that
+database and the previous image and therefore loses post-backup observations.
+
+Compatible older v2 tables receive the four retry columns in place. Startup
+validates every write column, primary-key order, `WITHOUT ROWID`, and service
+foreign keys; incompatible structures fail closed and are never dropped or
+rebuilt automatically.
+
+The relevant VPS settings are:
+
+```env
+STATISTICS_SERVICE_DATE_LOOKBACK_DAYS=1
+STATISTICS_ACTIVE_SERVICE_TTL_DAYS=7
+STATISTICS_DETAIL_LIMIT_PER_RUN=750
+STATISTICS_DETAIL_RETRY_BASE_MINUTES=60
+STATISTICS_DETAIL_RETRY_MAX_MINUTES=720
+STATISTICS_DETAIL_SUCCESS_REFRESH_MINUTES=120
+STATISTICS_RETENTION_DAYS=30
+STATISTICS_V2_SERVICE_RETENTION_DAYS=90
+STATISTICS_V2_OBSERVATION_RETENTION_DAYS=30
+STATISTICS_RAW_PAYLOAD_RETENTION_DAYS=7
+```
+
+This applies a nominal 90-day cutoff to normalized service and stop facts;
+retained observations keep their referenced parent service. Sampled observation
+history remains for 30 days. The v2 latest-service raw layer remains for seven
+days, while the compressed collection-date parent in the legacy API row follows
+that row's independent 30-day window.
+
+Legacy history is backfilled only through the resumable
+`migrate_statistics_v2.py` utility. The safe operating sequence is:
+
+```bash
+# Read-only profile; includes row counts, missing service dates, valid
+# collection-date/service-date differences, storage sizes,
+# estimatedV2GrowthBytes, and requiredFreeBytes without changing tables.
+docker compose exec -T bellotreno-statistics \
+  python migrate_statistics_v2.py
+
+# Apply a bounded service/observation batch. Rerun to resume recorded progress.
+docker compose exec -T bellotreno-statistics \
+  python migrate_statistics_v2.py --apply --batch-size 500 --max-batches 10
+
+# Finish remaining service/observation batches after reviewing the bounded run.
+docker compose exec -T bellotreno-statistics \
+  python migrate_statistics_v2.py --apply --batch-size 500
+```
+
+The first apply run records a fixed legacy `rowid` high-water mark in
+`statistics_migration_state`; subsequent runs resume toward that boundary
+instead of chasing rows added later by the collector. Batches commit separately
+and pause for `100` milliseconds by default. `--pause-ms` can change the pause
+from `0` through `60000` milliseconds. Do not run `VACUUM` until the migration
+finishes: it can renumber legacy rowids and invalidate resumable progress.
+
+`--include-stops` is a separate, optional backfill. From the `rfi-proxy/`
+Compose directory on the VPS, pause the collector, establish a maintenance
+window, and check the host filesystem first:
+
+```bash
+docker compose exec -T bellotreno-statistics \
+  python migrate_statistics_v2.py --include-stops
+
+df -h statistics-data
+du -sh statistics-data
+```
+
+The first command is still read-only because it omits `--apply`, but its growth
+estimate includes the legacy stop count before a maintenance window is booked.
+
+Normalized stop events for millions of rows can materially increase both the
+database and WAL, and a safe run also needs space for a backup/rollback copy.
+All parameter and capacity guards run through a read-only connection before the
+utility creates tables or changes progress. It estimates `1024` bytes per train
+row plus `768` bytes per requested stop; required free space is the largest of
+1 GiB, twice that estimate, or 10% of the main database, with an additional
+2 GiB minimum for stop backfill. This does not replace capacity planning or a
+verified external backup. `--force-low-space` bypasses it only after an operator
+has reviewed those safeguards. Start with a smaller bounded batch;
+`--include-stops --apply` must include `--maintenance-window` to acknowledge
+that the collector is paused:
+
+```bash
+docker compose stop bellotreno-statistics
+docker compose run --rm --no-deps bellotreno-statistics \
+  python migrate_statistics_v2.py --apply --include-stops --maintenance-window \
+  --batch-size 250 --max-batches 2
+docker compose up -d bellotreno-statistics
+```
+
+Then resume only while disk and collector health remain acceptable. The utility
+keeps the latest detailed stop set for each service, does not migrate historical
+raw payloads, and `--reset-progress` restarts an idempotent scan rather than
+rolling a migration back. When the scan reaches its recorded high-water mark,
+it runs `PRAGMA foreign_key_check` and returns up to 20 findings in
+`foreignKeyViolationsSample`; any finding keeps the state incomplete and makes
+the command exit non-zero, while success reports an empty list.
+`foreignKeyViolationsTruncated=true` indicates more findings than the 20-row
+sample, while `missingV2Tables` is the read-only list of additive tables not yet
+created. Historical legacy train raw values remain readable until their
+legacy rows expire. New detail writes use a compressed collection-date legacy
+copy for that same window plus the seven-day v2 `train_raw_payloads` copy, which
+is expired by `observed_at`.
 
 Main APIs:
 
