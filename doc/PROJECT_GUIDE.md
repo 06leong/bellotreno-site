@@ -276,9 +276,10 @@ Legacy history is backfilled only through the resumable
 `migrate_statistics_v2.py` utility. The safe operating sequence is:
 
 ```bash
-# Read-only profile; includes row counts, missing service dates, valid
-# collection-date/service-date differences, storage sizes,
+# Read-only profile; includes train/v2 row counts, missing service dates,
+# valid collection-date/service-date differences, storage sizes,
 # estimatedV2GrowthBytes, and requiredFreeBytes without changing tables.
+# The default skips exact legacy and v2 stop-table scans.
 docker compose exec -T bellotreno-statistics \
   python migrate_statistics_v2.py
 
@@ -312,6 +313,9 @@ du -sh statistics-data
 
 The first command is still read-only because it omits `--apply`, but its growth
 estimate includes the legacy stop count before a maintenance window is booked.
+Only `--include-stops` requests exact legacy and v2 stop-table counts. Those
+explicit scans can take several minutes on a large database. Preflight stages
+are printed to stderr; the final stdout remains a single JSON document.
 
 Normalized stop events for millions of rows can materially increase both the
 database and WAL, and a safe run also needs space for a backup/rollback copy.

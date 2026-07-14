@@ -142,6 +142,13 @@ This representation is forward-compatible with the new image but not readable
 by older statistics images, so keep the pre-deploy database backup until the
 new collector and API have completed their production verification window.
 
+For a multi-gigabyte rollback copy, successful completion of SQLite's Backup
+API plus a lightweight immutable open, page-count, schema, and sampled-row
+check is the deployment gate. A full `PRAGMA quick_check` scans the whole file
+and can run separately against the offline copy; it is not required to block a
+first deployment when there are no prior I/O or corruption warnings. The
+lightweight check confirms usability, not every individual data page.
+
 SQLite deletes make pages reusable but do not by themselves shrink the main
 database file. Treat physical compaction as a separate maintenance operation
 with a backup, downtime plan, and sufficient temporary disk space.
@@ -152,11 +159,16 @@ with a backup, downtime plan, and sufficient temporary disk space.
 container entrypoint nor application startup invokes it. Run it manually only
 after the new image is deployed.
 
-First run the default read-only dry-run. It reports legacy and v2 row counts,
-rows with missing service dates, rows whose collection date differs from their
-valid service date (`collectionDateDiffersFromServiceDate`), database/WAL/free-space sizes,
-`estimatedV2GrowthBytes`, and `requiredFreeBytes`. It does not create or change
-tables:
+First run the default read-only dry-run. It reports the legacy train and v2 row
+counts, rows with missing service dates, rows whose collection date differs
+from their valid service date (`collectionDateDiffersFromServiceDate`),
+database/WAL/free-space sizes, `estimatedV2GrowthBytes`, and
+`requiredFreeBytes`. It deliberately skips exact counts of both legacy
+`train_stops` and v2 `train_stop_events` unless `--include-stops` is requested,
+returning null stop counts with `legacyStopsCounted: false` and
+`v2StopEventsCounted: false`. Stage progress is written to stderr while stdout
+remains one machine-readable JSON document. The command does not create or
+change tables:
 
 ```bash
 docker compose exec -T bellotreno-statistics \
@@ -198,7 +210,10 @@ can require substantial additional database and WAL space. Keep room for a
 verified external backup and rollback copy as well as the migration itself.
 
 Run the stop-inclusive profile first; it remains read-only without `--apply`
-and makes `estimatedV2GrowthBytes` include the legacy stop count:
+and is the only profile mode that performs exact legacy and v2 stop-table
+counts. It makes `estimatedV2GrowthBytes` include the legacy stop count. On a
+large database these explicit stop-count stages can take several minutes; the
+utility prints a progress message before and after them:
 
 ```bash
 docker compose exec -T bellotreno-statistics \

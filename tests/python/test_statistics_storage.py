@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 MIGRATION_SCRIPT = ROOT / "rfi-proxy" / "statistics" / "migrate_statistics_v2.py"
 sys.path.insert(0, str(ROOT / "rfi-proxy" / "statistics"))
 
+from migrate_statistics_v2 import profile  # noqa: E402
 from statistics_storage import (  # noqa: E402
     backfill_legacy_batch,
     cleanup_v2_rows,
@@ -1105,11 +1106,8 @@ class StatisticsStorageTest(unittest.TestCase):
                         service_date TEXT,
                         train_key TEXT NOT NULL
                     );
-                    CREATE TABLE train_stops (
-                        date TEXT NOT NULL,
-                        train_key TEXT NOT NULL,
-                        stop_number INTEGER NOT NULL
-                    );
+                    CREATE VIEW train_stops AS
+                        SELECT * FROM deliberately_missing_stop_source;
                     """
                 )
 
@@ -1127,16 +1125,152 @@ class StatisticsStorageTest(unittest.TestCase):
 
             self.assertEqual(output["mode"], "dry-run")
             self.assertEqual(output["legacyTrains"], 0)
+            self.assertIsNone(output["legacyStops"])
+            self.assertFalse(output["legacyStopsCounted"])
+            self.assertIsNone(output["v2StopEvents"])
+            self.assertFalse(output["v2StopEventsCounted"])
             self.assertEqual(output["collectionDateDiffersFromServiceDate"], 0)
             self.assertNotIn("nonCanonicalLegacyRows", output)
+            self.assertIn("skipping legacy stop count", completed.stderr)
             self.assertIsNone(v2_exists)
+
+    def test_default_profile_never_reads_legacy_or_v2_stop_tables(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "statistics.db"
+            with closing(sqlite3.connect(database, cached_statements=0)) as conn:
+                conn.row_factory = sqlite3.Row
+                conn.executescript(
+                    """
+                    CREATE TABLE trains (
+                        date TEXT NOT NULL,
+                        service_date TEXT,
+                        train_key TEXT NOT NULL
+                    );
+                    CREATE TABLE train_stops (value INTEGER);
+                    CREATE TABLE train_stop_events (value INTEGER);
+                    """
+                )
+                stop_reads = []
+
+                def authorizer(action, arg1, arg2, database_name, source):
+                    if action == sqlite3.SQLITE_READ and arg1 in {
+                        "train_stops",
+                        "train_stop_events",
+                    }:
+                        stop_reads.append((arg1, arg2))
+                        return sqlite3.SQLITE_DENY
+                    return sqlite3.SQLITE_OK
+
+                conn.set_authorizer(authorizer)
+                messages = []
+                output = profile(
+                    conn,
+                    str(database),
+                    include_stops=False,
+                    progress=messages.append,
+                )
+
+            self.assertEqual(stop_reads, [])
+            self.assertIsNone(output["legacyStops"])
+            self.assertFalse(output["legacyStopsCounted"])
+            self.assertIsNone(output["v2StopEvents"])
+            self.assertFalse(output["v2StopEventsCounted"])
+            self.assertTrue(any("skipping legacy stop count" in item for item in messages))
+            self.assertTrue(any("skipping train_stop_events" in item for item in messages))
+
+    def test_migration_cli_counts_stops_only_when_requested(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "statistics.db"
+            with closing(sqlite3.connect(database)) as conn:
+                conn.executescript(
+                    """
+                    CREATE TABLE trains (
+                        date TEXT NOT NULL,
+                        service_date TEXT,
+                        train_key TEXT NOT NULL
+                    );
+                    CREATE TABLE train_stops (
+                        date TEXT NOT NULL,
+                        train_key TEXT NOT NULL,
+                        stop_number INTEGER NOT NULL
+                    );
+                    INSERT INTO train_stops VALUES
+                        ('2026-07-13', 'service-1', 0),
+                        ('2026-07-13', 'service-1', 1);
+                    CREATE TABLE train_stop_events (value INTEGER);
+                    INSERT INTO train_stop_events VALUES (1);
+                    """
+                )
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(MIGRATION_SCRIPT),
+                    "--database",
+                    str(database),
+                    "--include-stops",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            output = json.loads(completed.stdout)
+
+            self.assertEqual(output["legacyStops"], 2)
+            self.assertTrue(output["legacyStopsCounted"])
+            self.assertEqual(output["v2StopEvents"], 1)
+            self.assertTrue(output["v2StopEventsCounted"])
+            self.assertTrue(output["estimateIncludesStops"])
+            self.assertEqual(output["estimatedV2GrowthBytes"], 2 * 768)
+            self.assertIn("counting legacy stops", completed.stderr)
+            self.assertIn("legacy stop count complete (2 rows)", completed.stderr)
+
+    def test_default_apply_does_not_require_or_count_stop_tables(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "statistics.db"
+            with closing(sqlite3.connect(database)) as conn:
+                conn.execute(
+                    """
+                    CREATE TABLE trains (
+                        date TEXT NOT NULL,
+                        service_date TEXT,
+                        train_key TEXT NOT NULL
+                    )
+                    """
+                )
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(MIGRATION_SCRIPT),
+                    "--database",
+                    str(database),
+                    "--apply",
+                    "--max-batches",
+                    "1",
+                    "--pause-ms",
+                    "0",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            output = json.loads(completed.stdout)
+
+            self.assertTrue(output["completed"])
+            self.assertIsNone(output["legacyStops"])
+            self.assertFalse(output["legacyStopsCounted"])
+            self.assertIsNone(output["v2StopEvents"])
+            self.assertFalse(output["v2StopEventsCounted"])
+            self.assertIn("batch 1 committed", completed.stderr)
 
     def test_stop_migration_guard_rejects_before_any_database_write(self):
         with tempfile.TemporaryDirectory() as directory:
             database = Path(directory) / "statistics.db"
             with closing(sqlite3.connect(database)) as conn:
-                conn.row_factory = sqlite3.Row
-                create_legacy_tables(conn)
+                conn.execute(
+                    "CREATE TABLE trains (date TEXT, service_date TEXT, train_key TEXT)"
+                )
 
             completed = subprocess.run(
                 [
@@ -1147,6 +1281,7 @@ class StatisticsStorageTest(unittest.TestCase):
                     "--apply",
                     "--include-stops",
                     "--reset-progress",
+                    "--force-low-space",
                 ],
                 check=False,
                 capture_output=True,
@@ -1159,6 +1294,7 @@ class StatisticsStorageTest(unittest.TestCase):
 
             self.assertNotEqual(completed.returncode, 0)
             self.assertIn("--maintenance-window", completed.stderr)
+            self.assertNotIn("[statistics-v2]", completed.stderr)
             self.assertIsNone(v2_exists)
 
     def test_migration_foreign_key_failure_stays_incomplete_and_exits_nonzero(self):
