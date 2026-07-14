@@ -156,12 +156,43 @@ def ensure_column(conn: sqlite3.Connection, table: str, column: str, definition:
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
+V2_ROLLOUT_DATE_STATE = "v2_collection_rollout_date"
+
+
+def ensure_v2_coverage_state(conn: sqlite3.Connection) -> None:
+    """Persist the first real v2 collection date exactly once."""
+    existing = conn.execute(
+        "SELECT 1 FROM statistics_coverage_state WHERE name=?",
+        (V2_ROLLOUT_DATE_STATE,),
+    ).fetchone()
+    if existing:
+        return
+    first_observation = conn.execute(
+        "SELECT MIN(collection_date) AS collection_date FROM train_observations"
+    ).fetchone()
+    rollout_date = first_observation["collection_date"] if first_observation else None
+    if not rollout_date:
+        return
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO statistics_coverage_state (name, value, created_at)
+        VALUES (?, ?, ?)
+        """,
+        (V2_ROLLOUT_DATE_STATE, rollout_date, iso_now()),
+    )
+
+
 def init_db() -> None:
     os.makedirs(CACHE_DIR, exist_ok=True)
     with db() as conn:
         require_compatible_table(conn, "station_registry", {"station_code", "station_name", "region_code", "updated_at"})
         require_compatible_table(conn, "trains", {"date", "train_key", "departure_epoch_ms", "has_details", "completed"})
         require_compatible_table(conn, "train_stops", {"date", "train_key", "stop_number", "station_code"})
+        require_compatible_table(
+            conn,
+            "statistics_coverage_state",
+            {"name", "value", "created_at"},
+        )
 
         conn.executescript(
             """
@@ -201,6 +232,12 @@ def init_db() -> None:
 
             CREATE INDEX IF NOT EXISTS idx_collector_runs_date_slot
                 ON collector_runs(date, slot_at);
+
+            CREATE TABLE IF NOT EXISTS statistics_coverage_state (
+                name TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
 
             CREATE TABLE IF NOT EXISTS station_registry (
                 station_code TEXT PRIMARY KEY,
@@ -329,6 +366,7 @@ def init_db() -> None:
         ensure_column(conn, "train_stops", "detail_observed_at", "TEXT")
         ensure_column(conn, "train_stops", "detail_quality", "INTEGER DEFAULT 0")
         initialize_v2_schema(conn)
+        ensure_v2_coverage_state(conn)
 
 
 def now_rome() -> datetime:
@@ -409,6 +447,29 @@ def slots_for_day(day, include_neighbors: bool = False) -> list[datetime]:
         midnight = datetime.combine(current_day, datetime.min.time(), tzinfo=APP_TZ)
         slots.extend(midnight + timedelta(minutes=minute) for minute in scheduled_minutes())
     return sorted(slots)
+
+
+def required_completion_slots_for_day(day) -> list[datetime]:
+    """Return the slots required before a past collection day is complete.
+
+    The optional finalization slot may sit immediately before the next day's
+    first cadence slot (23:55 followed by 00:05 by default). A healthy final
+    run normally overlaps that first slot, so the first cadence slot is not a
+    completeness requirement when the gap is shorter than the configured
+    cadence. Every other scheduled slot remains required.
+    """
+    minutes = scheduled_minutes()
+    first_cadence_minute = COLLECTOR_SCHEDULE_OFFSET_MINUTES
+    final_hour, final_minute = parse_time_of_day(COLLECTOR_FINALIZE_TIME)
+    final_total_minutes = final_hour * 60 + final_minute
+    gap_after_final = (first_cadence_minute + 24 * 60 - final_total_minutes) % (24 * 60)
+    if (
+        final_total_minutes > first_cadence_minute
+        and 0 < gap_after_final < COLLECTOR_INTERVAL_MINUTES
+    ):
+        minutes = [minute for minute in minutes if minute != first_cadence_minute]
+    midnight = datetime.combine(day, datetime.min.time(), tzinfo=APP_TZ)
+    return [midnight + timedelta(minutes=minute) for minute in minutes]
 
 
 def previous_scheduled_slot(reference: datetime | None = None) -> datetime:
@@ -1545,6 +1606,7 @@ def collect_once(slot_at: datetime | None = None, trigger: str = "manual") -> di
                         candidate["service_date"],
                         candidate["train_key"],
                     )
+            ensure_v2_coverage_state(conn)
             rebuild_daily_aggregates(conn, date)
             cleanup_old_rows(conn)
             finished_at = iso_now()
@@ -1652,6 +1714,12 @@ def summary_for_date(date: str) -> dict[str, Any]:
             "SELECT * FROM snapshots WHERE date=? ORDER BY captured_at DESC LIMIT 1",
             (date,),
         ).fetchone()
+        has_train_data = conn.execute(
+            "SELECT 1 FROM trains WHERE date=? LIMIT 1",
+            (date,),
+        ).fetchone()
+        if not snapshot and not has_train_data:
+            return {"available": False, "reason": "no_data", "date": date}
         counts = conn.execute(
             """
             SELECT
@@ -1764,6 +1832,143 @@ def summary_for_date(date: str) -> dict[str, Any]:
     }
 
 
+def v2_coverage(conn: sqlite3.Connection) -> dict[str, Any]:
+    ensure_v2_coverage_state(conn)
+    rollout_row = conn.execute(
+        "SELECT value FROM statistics_coverage_state WHERE name=?",
+        (V2_ROLLOUT_DATE_STATE,),
+    ).fetchone()
+    collection_first = conn.execute(
+        """
+        SELECT collection_date
+        FROM train_observations
+        ORDER BY collection_date ASC, observed_at ASC
+        LIMIT 1
+        """
+    ).fetchone()
+    collection_last = conn.execute(
+        """
+        SELECT collection_date
+        FROM train_observations
+        ORDER BY collection_date DESC, observed_at DESC
+        LIMIT 1
+        """
+    ).fetchone()
+    service_first = conn.execute(
+        "SELECT service_date FROM train_services ORDER BY service_date ASC LIMIT 1"
+    ).fetchone()
+    service_last = conn.execute(
+        "SELECT service_date FROM train_services ORDER BY service_date DESC LIMIT 1"
+    ).fetchone()
+    return {
+        "mode": "forward_only",
+        "schemaVersion": STATISTICS_STORAGE_SCHEMA_VERSION,
+        "rolloutDate": rollout_row["value"] if rollout_row else None,
+        "collectionDate": {
+            "availableFrom": collection_first["collection_date"] if collection_first else None,
+            "availableTo": collection_last["collection_date"] if collection_last else None,
+        },
+        "serviceDate": {
+            "availableFrom": service_first["service_date"] if service_first else None,
+            "availableTo": service_last["service_date"] if service_last else None,
+        },
+    }
+
+
+def collection_day_is_complete(conn: sqlite3.Connection, date: str) -> bool:
+    try:
+        day = datetime.fromisoformat(date).date()
+    except ValueError:
+        return False
+    required_slots = {
+        to_utc_iso(slot) for slot in required_completion_slots_for_day(day)
+    }
+    if not required_slots:
+        return False
+    scheduled_slots = {to_utc_iso(slot) for slot in slots_for_day(day)}
+    overlap_slots = scheduled_slots - required_slots
+    dates = [date]
+    bridge_slots: set[str] = set()
+    if overlap_slots:
+        previous_day = day - timedelta(days=1)
+        final_hour, final_minute = parse_time_of_day(COLLECTOR_FINALIZE_TIME)
+        previous_final = datetime.combine(
+            previous_day,
+            datetime.min.time(),
+            tzinfo=APP_TZ,
+        ) + timedelta(hours=final_hour, minutes=final_minute)
+        bridge_slots = {*overlap_slots, to_utc_iso(previous_final)}
+        dates.append(previous_day.isoformat())
+    placeholders = ",".join("?" for _ in dates)
+    successful_runs = {
+        row["slot_at"]
+        for row in conn.execute(
+            f"SELECT slot_at FROM collector_runs WHERE date IN ({placeholders}) AND status='success'",
+            dates,
+        ).fetchall()
+    }
+    successful_snapshots = {
+        row["captured_at"]
+        for row in conn.execute(
+            f"SELECT captured_at FROM snapshots WHERE date IN ({placeholders}) AND status='success'",
+            dates,
+        ).fetchall()
+    }
+    required_complete = required_slots.issubset(
+        successful_runs
+    ) and required_slots.issubset(successful_snapshots)
+    bridge_complete = not bridge_slots or any(
+        slot in successful_runs and slot in successful_snapshots
+        for slot in bridge_slots
+    )
+    return required_complete and bridge_complete
+
+
+def day_v2_coverage(
+    conn: sqlite3.Connection,
+    date: str,
+    *,
+    today: str,
+    rollout_date: str | None,
+) -> dict[str, Any]:
+    v2_available = conn.execute(
+        "SELECT 1 FROM train_observations WHERE collection_date=? LIMIT 1",
+        (date,),
+    ).fetchone() is not None
+
+    if not v2_available:
+        coverage_status = "unavailable"
+        comparison_eligible = False
+        reason = "v2_not_available"
+    elif date == today:
+        coverage_status = "live"
+        comparison_eligible = False
+        reason = "live_day"
+    elif date > today:
+        coverage_status = "unavailable"
+        comparison_eligible = False
+        reason = "v2_not_available"
+    elif date == rollout_date:
+        coverage_status = "partial"
+        comparison_eligible = False
+        reason = "partial_rollout_day"
+    elif not collection_day_is_complete(conn, date):
+        coverage_status = "partial"
+        comparison_eligible = False
+        reason = "incomplete_collection_day"
+    else:
+        coverage_status = "complete"
+        comparison_eligible = True
+        reason = None
+
+    return {
+        "v2Available": v2_available,
+        "coverageStatus": coverage_status,
+        "comparisonEligible": comparison_eligible,
+        "reason": reason,
+    }
+
+
 @app.get("/health")
 def health() -> Response:
     return jsonify({
@@ -1819,9 +2024,25 @@ def days_endpoint() -> Response:
             "SELECT date, MAX(COALESCE(finished_at, captured_at)) AS lastUpdated FROM snapshots GROUP BY date ORDER BY date DESC LIMIT ?",
             (limit,),
         ).fetchall()
-    if not rows:
-        return jsonify({"days": [{"date": today_rome(), "label": today_rome(), "finalized": False}]})
-    return jsonify({"days": [{"date": row["date"], "label": row["date"], "lastUpdated": row["lastUpdated"], "finalized": row["date"] < today_rome()} for row in rows]})
+        coverage = v2_coverage(conn)
+        today = today_rome()
+        rollout_date = coverage["rolloutDate"]
+        days = [
+            {
+                "date": row["date"],
+                "label": row["date"],
+                "lastUpdated": row["lastUpdated"],
+                "finalized": row["date"] < today,
+                **day_v2_coverage(
+                    conn,
+                    row["date"],
+                    today=today,
+                    rollout_date=rollout_date,
+                ),
+            }
+            for row in rows
+        ]
+    return jsonify({"days": days, "coverage": coverage})
 
 
 @app.get("/v1/summary")

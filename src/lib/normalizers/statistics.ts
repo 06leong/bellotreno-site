@@ -12,6 +12,55 @@ export interface CategoryCount {
   value: number;
 }
 
+export type StatisticsCoverageMode = "forward_only";
+export type StatisticsCoverageStatus = "live" | "partial" | "complete" | "unavailable";
+export type StatisticsCoverageReason =
+  | "live_day"
+  | "partial_rollout_day"
+  | "incomplete_collection_day"
+  | "v2_not_available"
+  | null;
+
+export interface StatisticsCoverageRange {
+  availableFrom: string | null;
+  availableTo: string | null;
+}
+
+export interface StatisticsCoverage {
+  schemaVersion: 2 | null;
+  mode: StatisticsCoverageMode | null;
+  rolloutDate: string | null;
+  collectionDate: StatisticsCoverageRange;
+  serviceDate: StatisticsCoverageRange;
+}
+
+export interface StatisticsCoverageDay {
+  date: string;
+  label?: string;
+  finalized: boolean;
+  v2Available: boolean;
+  coverageStatus: StatisticsCoverageStatus;
+  comparisonEligible: boolean;
+  reason: StatisticsCoverageReason;
+}
+
+export interface StatisticsDaysResponse {
+  days: StatisticsCoverageDay[];
+  coverage: StatisticsCoverage;
+}
+
+export interface StatisticsMetricComparison {
+  current: number;
+  baseline: number;
+  delta: number;
+  percent: number | null;
+}
+
+export interface StatisticsComparisonBaseline {
+  date: string;
+  gapDays: number;
+}
+
 export const CATEGORY_ORDER = [
   "REG",
   "MET",
@@ -45,6 +94,175 @@ export const CATEGORY_COLORS: Record<string, string> = {
   IR: "#7c8796",
   TS: "#69c6d4",
 };
+
+const ISO_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
+const COVERAGE_STATUSES = new Set<StatisticsCoverageStatus>([
+  "live",
+  "partial",
+  "complete",
+  "unavailable",
+]);
+const COVERAGE_REASONS = new Set<Exclude<StatisticsCoverageReason, null>>([
+  "live_day",
+  "partial_rollout_day",
+  "incomplete_collection_day",
+  "v2_not_available",
+]);
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function normalizedIsoDate(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const match = ISO_DATE_PATTERN.exec(value);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year
+    && date.getUTCMonth() === month - 1
+    && date.getUTCDate() === day
+    ? value
+    : null;
+}
+
+function dateOrdinal(value: string): number | null {
+  const normalized = normalizedIsoDate(value);
+  if (!normalized) return null;
+  const [year, month, day] = normalized.split("-").map(Number);
+  return Math.floor(Date.UTC(year, month - 1, day) / 86_400_000);
+}
+
+function normalizeCoverageRange(value: unknown): StatisticsCoverageRange {
+  const record = asRecord(value);
+  return {
+    availableFrom: normalizedIsoDate(record.availableFrom),
+    availableTo: normalizedIsoDate(record.availableTo),
+  };
+}
+
+function normalizeCoverageDay(value: unknown): StatisticsCoverageDay | null {
+  const record = asRecord(value);
+  const date = normalizedIsoDate(record.date);
+  if (!date) return null;
+  const coverageStatus = typeof record.coverageStatus === "string"
+    && COVERAGE_STATUSES.has(record.coverageStatus as StatisticsCoverageStatus)
+    ? record.coverageStatus as StatisticsCoverageStatus
+    : "unavailable";
+  const reason = record.reason === null
+    ? null
+    : typeof record.reason === "string"
+      && COVERAGE_REASONS.has(record.reason as Exclude<StatisticsCoverageReason, null>)
+      ? record.reason as Exclude<StatisticsCoverageReason, null>
+      : "v2_not_available";
+  const day: StatisticsCoverageDay = {
+    date,
+    finalized: record.finalized === true,
+    v2Available: record.v2Available === true,
+    coverageStatus,
+    comparisonEligible: record.comparisonEligible === true,
+    reason,
+  };
+  if (typeof record.label === "string" && record.label.trim()) {
+    day.label = record.label;
+  }
+  return day;
+}
+
+/**
+ * Normalize a number without collapsing absent values into a real zero.
+ */
+export function normalizeStatisticsNumber(value: unknown): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value !== "string" || value.trim() === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/**
+ * Compare two present metric values. A zero baseline has a valid absolute
+ * delta, but no finite percentage change.
+ */
+export function compareStatisticsMetric(
+  currentValue: unknown,
+  baselineValue: unknown,
+): StatisticsMetricComparison | null {
+  const current = normalizeStatisticsNumber(currentValue);
+  const baseline = normalizeStatisticsNumber(baselineValue);
+  if (current === null || baseline === null) return null;
+  const delta = current - baseline;
+  return {
+    current,
+    baseline,
+    delta,
+    percent: baseline === 0 ? null : (delta / baseline) * 100,
+  };
+}
+
+/**
+ * Parse the `/days` response without inventing coverage dates or numeric
+ * values. Malformed day entries are omitted and malformed coverage fields fail
+ * closed to null/unavailable values.
+ */
+export function normalizeStatisticsDaysResponse(value: unknown): StatisticsDaysResponse {
+  const record = asRecord(value);
+  const coverageRecord = asRecord(record.coverage);
+  const rawDays = Array.isArray(record.days) ? record.days : [];
+  return {
+    days: rawDays
+      .map(normalizeCoverageDay)
+      .filter((day): day is StatisticsCoverageDay => day !== null),
+    coverage: {
+      schemaVersion: coverageRecord.schemaVersion === 2 ? 2 : null,
+      mode: coverageRecord.mode === "forward_only" ? "forward_only" : null,
+      rolloutDate: normalizedIsoDate(coverageRecord.rolloutDate),
+      collectionDate: normalizeCoverageRange(coverageRecord.collectionDate),
+      serviceDate: normalizeCoverageRange(coverageRecord.serviceDate),
+    },
+  };
+}
+
+function isComparisonEligible(day: StatisticsCoverageDay): boolean {
+  return day.comparisonEligible
+    && day.v2Available
+    && day.coverageStatus === "complete";
+}
+
+/**
+ * Select the nearest earlier day explicitly marked as comparison eligible.
+ * Eligibility is never inferred from the global coverage ranges. `gapDays`
+ * counts missing calendar days between the selected and baseline dates.
+ */
+export function selectStatisticsComparisonBaseline(
+  days: readonly StatisticsCoverageDay[],
+  selectedDate: string,
+): StatisticsComparisonBaseline | null {
+  const selectedOrdinal = dateOrdinal(selectedDate);
+  if (selectedOrdinal === null) return null;
+  const selected = days.find((day) => day.date === selectedDate);
+  if (!selected || !isComparisonEligible(selected)) return null;
+
+  let baseline: StatisticsCoverageDay | null = null;
+  let baselineOrdinal: number | null = null;
+  for (const day of days) {
+    if (!isComparisonEligible(day)) continue;
+    const ordinal = dateOrdinal(day.date);
+    if (ordinal === null || ordinal >= selectedOrdinal) continue;
+    if (baselineOrdinal === null || ordinal > baselineOrdinal) {
+      baseline = day;
+      baselineOrdinal = ordinal;
+    }
+  }
+  if (!baseline || baselineOrdinal === null) return null;
+  return {
+    date: baseline.date,
+    gapDays: Math.max(0, selectedOrdinal - baselineOrdinal - 1),
+  };
+}
 
 export function categoryCode(value: unknown): string {
   const raw = String(value || "").trim().toUpperCase();

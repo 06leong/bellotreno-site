@@ -118,6 +118,7 @@ on observable data rather than official full-network reports.
 Detailed implementation notes live in the `doc/` directory:
 
 - [Project guide](doc/PROJECT_GUIDE.md)
+- [Statistics analytics roadmap](doc/statistics-analytics-roadmap.md)
 - [Repository-wide agent/developer notes](AGENTS.md)
 - [TypeScript migration audit](doc/typescript-migration-audit.md)
 - [innerHTML audit notes](doc/innerhtml-audit.md)

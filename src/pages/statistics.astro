@@ -13,97 +13,180 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     </Fragment>
 
     <main class="statistics-page container">
-        <section class="statistics-header">
-            <div>
+        <header class="statistics-header">
+            <div class="statistics-heading">
                 <p class="statistics-kicker" data-i18n="statistics_kicker">ViaggiaTreno observable data</p>
                 <h1 data-i18n="statistics_title">Railway Statistics</h1>
                 <p data-i18n="statistics_subtitle">Daily operational statistics based on trains visible through ViaggiaTreno.</p>
             </div>
-            <div class="statistics-controls">
+
+            <div class="statistics-controls" aria-label="Statistics date controls">
                 <label class="statistics-date-field">
                     <span data-i18n="statistics_date">Date</span>
-                    <select id="statisticsDate" class="select select-bordered rounded-full"></select>
+                    <span class="statistics-select-shell">
+                        <span class="material-symbols-outlined" aria-hidden="true">calendar_month</span>
+                        <select id="statisticsDate" class="select select-bordered"></select>
+                    </span>
+                </label>
+                <label class="statistics-date-field">
+                    <span data-i18n="statistics_compare_date">Compare date</span>
+                    <span class="statistics-select-shell">
+                        <span class="material-symbols-outlined" aria-hidden="true">calendar_month</span>
+                        <select id="statisticsCompareDate" class="select select-bordered" disabled>
+                            <option value="" data-i18n="statistics_no_comparable_day">No comparable complete day</option>
+                        </select>
+                    </span>
                 </label>
             </div>
-        </section>
+        </header>
 
-        <section id="statisticsStatus" class="statistics-status" hidden></section>
+        <section id="statisticsStatus" class="statistics-status" aria-live="polite" hidden></section>
 
-        <section class="statistics-meta-row">
-            <div class="statistics-meta-item">
-                <span class="material-symbols-outlined">update</span>
-                <span data-i18n="statistics_last_updated">Last updated</span>
-                <strong id="statisticsLastUpdated">--</strong>
+        <section class="statistics-context-rail" aria-label="Data freshness and coverage">
+            <div id="statisticsCoverageNotice" class="statistics-coverage-notice" aria-live="polite">
+                <span class="material-symbols-outlined" aria-hidden="true">info</span>
+                <span data-i18n="statistics_coverage_loading">Checking detailed-data coverage...</span>
             </div>
-            <div class="statistics-meta-item">
-                <span class="material-symbols-outlined">schedule</span>
-                <span data-i18n="statistics_cadence">Sampling</span>
-                <strong id="statisticsCadence">--</strong>
-            </div>
-            <div class="statistics-meta-item">
-                <span class="material-symbols-outlined">location_on</span>
-                <span data-i18n="statistics_coverage">Coverage</span>
-                <strong id="statisticsCoverage">--</strong>
-            </div>
-        </section>
 
-        <section id="statisticsMetrics" class="statistics-metrics" aria-live="polite"></section>
-
-        <section class="statistics-grid">
-            <div class="statistics-panel">
-                <div class="statistics-panel-head">
-                    <h2 data-i18n="statistics_chart_running">Trains in circulation</h2>
+            <div class="statistics-meta-row">
+                <div class="statistics-meta-item">
+                    <span class="material-symbols-outlined" aria-hidden="true">update</span>
+                    <span data-i18n="statistics_last_updated">Last updated</span>
+                    <strong id="statisticsLastUpdated">--</strong>
                 </div>
-                <div id="statisticsRunningChart" class="statistics-chart-box"></div>
+                <div class="statistics-meta-item">
+                    <span class="material-symbols-outlined" aria-hidden="true">schedule</span>
+                    <span data-i18n="statistics_cadence">Sampling</span>
+                    <strong id="statisticsCadence">--</strong>
+                </div>
+                <div class="statistics-meta-item">
+                    <span class="material-symbols-outlined" aria-hidden="true">location_on</span>
+                    <span data-i18n="statistics_coverage">Coverage</span>
+                    <strong id="statisticsCoverage">--</strong>
+                </div>
             </div>
-            <div class="statistics-panel">
+        </section>
+
+        <section class="statistics-summary-strip" aria-label="Daily summary">
+            <div id="statisticsMetrics" class="statistics-metrics" aria-live="polite"></div>
+            <aside id="statisticsComparisonStatus" class="statistics-comparison-status" aria-live="polite">
+                <span class="material-symbols-outlined" aria-hidden="true">monitoring</span>
+                <div>
+                    <strong data-i18n="statistics_comparison_pending">Daily comparison is not available yet</strong>
+                    <span data-i18n="statistics_comparison_pending_detail">A complete comparison date is required.</span>
+                </div>
+            </aside>
+        </section>
+
+        <nav id="statisticsAnalysisTabs" class="statistics-analysis-tabs" aria-label="Statistics analysis" role="tablist">
+            <button type="button" class="statistics-analysis-tab active" role="tab" aria-selected="true" data-analysis-view="overview" data-i18n="statistics_analysis_overview">Overview</button>
+            <button type="button" class="statistics-analysis-tab" role="tab" aria-selected="false" data-analysis-view="trends" data-i18n="statistics_analysis_trends">Trends</button>
+            <button type="button" class="statistics-analysis-tab" role="tab" aria-selected="false" data-analysis-view="network" data-i18n="statistics_analysis_network">Stations &amp; routes</button>
+            <button type="button" class="statistics-analysis-tab" role="tab" aria-selected="false" data-analysis-view="details" data-i18n="statistics_analysis_details">Data details</button>
+        </nav>
+
+        <section class="statistics-primary-grid">
+            <article class="statistics-panel statistics-trend-panel">
                 <div class="statistics-panel-head">
-                    <h2 data-i18n="statistics_chart_regular">Regularity</h2>
+                    <div>
+                        <span class="statistics-panel-kicker" data-i18n="statistics_analysis_overview">Overview</span>
+                        <h2 data-i18n="statistics_chart_running">Trains in circulation</h2>
+                    </div>
+                </div>
+                <div id="statisticsRunningChart" class="statistics-chart-box statistics-chart-box-primary"></div>
+            </article>
+
+            <aside class="statistics-panel statistics-insights-panel">
+                <div class="statistics-panel-head">
+                    <div>
+                        <span class="statistics-panel-kicker" data-i18n="statistics_analysis_attention">Operational attention</span>
+                        <h2 data-i18n="statistics_insights_title">Needs attention</h2>
+                    </div>
+                </div>
+                <div id="statisticsInsights" class="statistics-insights" aria-live="polite">
+                    <div class="statistics-insights-empty">
+                        <span class="material-symbols-outlined" aria-hidden="true">fact_check</span>
+                        <p data-i18n="statistics_insights_empty">Insights will appear when enough data is available.</p>
+                    </div>
+                </div>
+            </aside>
+        </section>
+
+        <section class="statistics-analysis-grid" aria-label="Supporting analysis">
+            <article class="statistics-panel">
+                <div class="statistics-panel-head">
+                    <div>
+                        <span class="statistics-panel-kicker" data-i18n="statistics_analysis_reliability">Reliability</span>
+                        <h2 data-i18n="statistics_chart_regular">Regularity</h2>
+                    </div>
                 </div>
                 <div id="statisticsRegularityChart" class="statistics-chart-box"></div>
-            </div>
-            <div class="statistics-panel">
+            </article>
+            <article class="statistics-panel">
                 <div class="statistics-panel-head">
-                    <h2 data-i18n="statistics_chart_punctuality">Punctuality</h2>
+                    <div>
+                        <span class="statistics-panel-kicker" data-i18n="statistics_analysis_punctuality">Arrival and departure</span>
+                        <h2 data-i18n="statistics_chart_punctuality">Punctuality</h2>
+                    </div>
                 </div>
                 <div id="statisticsPunctualityChart" class="statistics-chart-box"></div>
-            </div>
-            <div class="statistics-panel">
+            </article>
+            <article class="statistics-panel">
                 <div class="statistics-panel-head">
-                    <h2 data-i18n="statistics_chart_categories">Categories</h2>
+                    <div>
+                        <span class="statistics-panel-kicker" data-i18n="statistics_analysis_mix">Service mix</span>
+                        <h2 data-i18n="statistics_chart_categories">Categories</h2>
+                    </div>
                 </div>
                 <div id="statisticsCategoryChart" class="statistics-chart-box"></div>
-            </div>
+            </article>
         </section>
 
         <section class="statistics-panel statistics-search-panel">
             <div class="statistics-panel-head statistics-query-head">
-                <h2 data-i18n="statistics_query_title">Explore statistics</h2>
+                <div>
+                    <span class="statistics-panel-kicker" data-i18n="statistics_filters_title">Filter and inspect</span>
+                    <h2 data-i18n="statistics_query_title">Explore statistics</h2>
+                </div>
+                <button id="statisticsCsv" class="statistics-export-button" type="button">
+                    <span class="material-symbols-outlined" aria-hidden="true">download</span>
+                    <span data-i18n="statistics_export_csv">Export CSV</span>
+                </button>
             </div>
 
-            <div class="statistics-tabs" role="tablist">
-                <button type="button" class="statistics-tab active" data-stat-view="trains" data-i18n="statistics_tab_trains">Trains</button>
-                <button type="button" class="statistics-tab" data-stat-view="stations" data-i18n="statistics_tab_stations">Stations</button>
-                <button type="button" class="statistics-tab" data-stat-view="relations" data-i18n="statistics_tab_relations">Relations</button>
-                <button type="button" class="statistics-tab" data-stat-view="ranking" data-i18n="statistics_tab_ranking">Ranking</button>
+            <div class="statistics-tabs" role="tablist" aria-label="Statistics data view">
+                <button type="button" class="statistics-tab active" role="tab" aria-selected="true" data-stat-view="trains" data-i18n="statistics_tab_trains">Trains</button>
+                <button type="button" class="statistics-tab" role="tab" aria-selected="false" data-stat-view="stations" data-i18n="statistics_tab_stations">Stations</button>
+                <button type="button" class="statistics-tab" role="tab" aria-selected="false" data-stat-view="relations" data-i18n="statistics_tab_relations">Relations</button>
+                <button type="button" class="statistics-tab" role="tab" aria-selected="false" data-stat-view="ranking" data-i18n="statistics_tab_ranking">Ranking</button>
             </div>
 
             <div class="statistics-filter-grid">
-                <input id="statisticsSearch" class="input input-bordered rounded-full" type="search" autocomplete="off" data-i18n="statistics_search_placeholder" placeholder="Search train, station or relation">
-                <select id="statisticsCategory" class="select select-bordered rounded-full">
-                    <option value="" data-i18n="statistics_all_categories">All categories</option>
-                </select>
-                <select id="statisticsStatusFilter" class="select select-bordered rounded-full">
-                    <option value="" data-i18n="statistics_all_statuses">All statuses</option>
-                    <option value="regular" data-i18n="statistics_status_regular">Regular</option>
-                    <option value="delayed" data-i18n="statistics_status_delayed">Delayed</option>
-                    <option value="not_departed" data-i18n="statistics_status_not_departed">Not Departed</option>
-                    <option value="cancelled" data-i18n="statistics_status_cancelled">Cancelled</option>
-                    <option value="rescheduled" data-i18n="statistics_status_rescheduled">Rescheduled</option>
-                </select>
+                <label class="statistics-filter-field statistics-filter-search">
+                    <span class="statistics-visually-hidden" data-i18n="statistics_search_placeholder">Search train, station or relation</span>
+                    <span class="material-symbols-outlined" aria-hidden="true">search</span>
+                    <input id="statisticsSearch" class="input input-bordered" type="search" autocomplete="off" data-i18n="statistics_search_placeholder" placeholder="Search train, station or relation">
+                </label>
+                <label class="statistics-filter-field">
+                    <span class="statistics-visually-hidden" data-i18n="statistics_all_categories">All categories</span>
+                    <select id="statisticsCategory" class="select select-bordered">
+                        <option value="" data-i18n="statistics_all_categories">All categories</option>
+                    </select>
+                </label>
+                <label class="statistics-filter-field">
+                    <span class="statistics-visually-hidden" data-i18n="statistics_all_statuses">All statuses</span>
+                    <select id="statisticsStatusFilter" class="select select-bordered">
+                        <option value="" data-i18n="statistics_all_statuses">All statuses</option>
+                        <option value="regular" data-i18n="statistics_status_regular">Regular</option>
+                        <option value="delayed" data-i18n="statistics_status_delayed">Delayed</option>
+                        <option value="not_departed" data-i18n="statistics_status_not_departed">Not Departed</option>
+                        <option value="cancelled" data-i18n="statistics_status_cancelled">Cancelled</option>
+                        <option value="rescheduled" data-i18n="statistics_status_rescheduled">Rescheduled</option>
+                    </select>
+                </label>
             </div>
 
-            <div id="statisticsTableStatus" class="statistics-table-status"></div>
+            <div id="statisticsTableStatus" class="statistics-table-status" aria-live="polite"></div>
             <div class="statistics-table-wrap">
                 <table class="statistics-table">
                     <thead id="statisticsTableHead"></thead>
@@ -111,21 +194,21 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                 </table>
             </div>
             <div class="statistics-pagination">
-                <button id="statisticsPrev" class="btn btn-sm rounded-full" type="button">
-                    <span class="material-symbols-outlined text-[1rem]">chevron_left</span>
+                <button id="statisticsPrev" class="btn btn-sm" type="button">
+                    <span class="material-symbols-outlined" aria-hidden="true">chevron_left</span>
                     <span data-i18n="statistics_prev">Previous</span>
                 </button>
                 <span id="statisticsPageInfo">--</span>
-                <button id="statisticsNext" class="btn btn-sm rounded-full" type="button">
+                <button id="statisticsNext" class="btn btn-sm" type="button">
                     <span data-i18n="statistics_next">Next</span>
-                    <span class="material-symbols-outlined text-[1rem]">chevron_right</span>
+                    <span class="material-symbols-outlined" aria-hidden="true">chevron_right</span>
                 </button>
             </div>
         </section>
 
-        <section class="statistics-disclaimer">
-            <span class="material-symbols-outlined">info</span>
+        <footer class="statistics-disclaimer">
+            <span class="material-symbols-outlined" aria-hidden="true">info</span>
             <span data-i18n="statistics_disclaimer">Statistics are derived from observable ViaggiaTreno data and are not official full-network figures.</span>
-        </section>
+        </footer>
     </main>
 </BaseLayout>
