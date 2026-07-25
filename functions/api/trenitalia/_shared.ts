@@ -66,8 +66,13 @@ function isAllowedHost(hostname: string, requestHost: string): boolean {
 
 export function requestIsAllowed(request: Request): boolean {
     const requestHost = new URL(request.url).hostname;
+    const fetchSite = request.headers.get("sec-fetch-site");
     const origin = request.headers.get("origin");
     const referer = request.headers.get("referer");
+    // Cloudflare Access can preserve its login domain as the referrer on the
+    // first request after authentication. Sec-Fetch-Site is the browser's
+    // authoritative signal that the API call still came from this page.
+    if (fetchSite === "same-origin") return true;
     if (origin) return isAllowedHost(getUrlHostname(origin), requestHost);
     if (referer) return isAllowedHost(getUrlHostname(referer), requestHost);
     return isLocalHost(requestHost);

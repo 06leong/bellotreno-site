@@ -7,6 +7,7 @@ import {
     selectLeFrecceSolution,
     selectLeFrecceTrainDetail,
 } from "../../src/lib/normalizers/lefrecce.ts";
+import { requestIsAllowed } from "../../functions/api/trenitalia/_shared.ts";
 import { onRequestGet } from "../../functions/api/trenitalia/onboard.ts";
 
 interface ServiceFixture {
@@ -20,6 +21,26 @@ interface ServiceFixture {
 
 const commonWheelchair = "Treno con carrozza dotata di posto attrezzato e bagno accessibile per passeggeri su sedia a ruote.";
 const commonBar = "Treno con servizio bar.";
+
+test("allows same-origin API calls after a Cloudflare Access redirect", () => {
+    const request = new Request("https://preview.bellotreno-site.pages.dev/api/trenitalia/onboard", {
+        headers: {
+            referer: "https://example.cloudflareaccess.com/",
+            "sec-fetch-site": "same-origin",
+        },
+    });
+    assert.equal(requestIsAllowed(request), true);
+});
+
+test("does not trust a Cloudflare Access referrer for cross-site API calls", () => {
+    const request = new Request("https://preview.bellotreno-site.pages.dev/api/trenitalia/onboard", {
+        headers: {
+            referer: "https://example.cloudflareaccess.com/",
+            "sec-fetch-site": "cross-site",
+        },
+    });
+    assert.equal(requestIsAllowed(request), false);
+});
 
 const serviceFixtures: ServiceFixture[] = [
     {

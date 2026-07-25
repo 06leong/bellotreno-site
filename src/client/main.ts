@@ -1262,6 +1262,7 @@ async function loadLeFrecceOnboard(data: TrainData, triple: string, requestSeq: 
         if (!onboardData.available) {
             currentLeFrecceOnboardData = null;
             hideLeFrecceOnboardCard();
+            console.warn('LeFrecce onboard enrichment unavailable:', onboardData.reason);
             return;
         }
         currentLeFrecceOnboardData = onboardData;
