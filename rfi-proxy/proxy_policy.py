@@ -61,5 +61,5 @@ def method_is_allowed(target_url, method):
 
 
 def lefrecce_session_cookie(value):
-    match = re.search(r"(?:^|;\s*)WSESSIONID=([A-Za-z0-9._~-]+)", value or "")
+    match = re.search(r"(?:^|;\s*)WSESSIONID=([^;,\s]+)", value or "")
     return f"WSESSIONID={match.group(1)}" if match else ""

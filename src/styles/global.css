@@ -2492,6 +2492,10 @@ a.info-chip:focus-visible {
     margin-bottom: 16px;
 }
 
+.onboard-card.onboard-collapsed .onboard-header {
+    margin-bottom: 0;
+}
+
 .onboard-title {
     min-width: 0;
     display: flex;
@@ -2506,15 +2510,49 @@ a.info-chip:focus-visible {
     font-size: 1.35rem;
 }
 
-.onboard-provider {
+.onboard-toggle {
+    appearance: none;
     flex-shrink: 0;
-    padding: 4px 8px;
-    border-radius: 999px;
-    color: var(--color-primary);
-    background: color-mix(in oklch, var(--color-primary) 10%, transparent);
-    border: 1px solid color-mix(in oklch, var(--color-primary) 18%, transparent);
-    font-size: 0.68rem;
-    font-weight: 750;
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid color-mix(in oklch, var(--color-base-content) 10%, transparent);
+    border-radius: 50%;
+    color: var(--color-base-content);
+    background: color-mix(in oklch, var(--color-base-content) 6%, transparent);
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.onboard-toggle:hover {
+    background: color-mix(in oklch, var(--color-primary) 14%, transparent);
+}
+
+.onboard-toggle .material-symbols-outlined {
+    font-size: 1.2rem;
+    transition: transform 0.25s ease;
+}
+
+.onboard-toggle .onboard-rotated {
+    transform: rotate(180deg);
+}
+
+.onboard-body-wrap {
+    display: grid;
+    grid-template-rows: 1fr;
+    opacity: 1;
+    transition: grid-template-rows 0.3s ease, opacity 0.25s ease;
+}
+
+.onboard-body-wrap.onboard-body-collapsed {
+    grid-template-rows: 0fr;
+    opacity: 0;
+}
+
+.onboard-body-wrap > .onboard-body {
+    overflow: hidden;
 }
 
 .onboard-body {
@@ -2674,14 +2712,6 @@ a.info-chip:focus-visible {
     font-size: 0.74rem;
     line-height: 1.45;
     opacity: 0.72;
-}
-
-.onboard-source-note {
-    margin: 14px 0 0;
-    color: var(--color-base-content);
-    font-size: 0.69rem;
-    line-height: 1.45;
-    opacity: 0.55;
 }
 
 /* ===== Swiss Formation Card ===== */
@@ -3313,13 +3343,6 @@ button.swiss-section-title {
     .onboard-title > span:last-child {
         overflow: hidden;
         text-overflow: ellipsis;
-    }
-
-    .onboard-provider {
-        max-width: 42%;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
     }
 
     .onboard-body {

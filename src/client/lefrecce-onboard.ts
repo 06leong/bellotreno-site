@@ -97,8 +97,15 @@ const AMENITY_ICONS: Readonly<Record<string, string>> = Object.freeze({
     bar: 'local_bar',
     restaurant: 'restaurant',
     minibar: 'room_service',
-    bicycle: 'pedal_bike',
+    bicycle: 'directions_bike',
     'seat-service': 'airline_seat_recline_normal'
+});
+
+const CLASS_SERVICE_ICONS: Readonly<Record<string, string>> = Object.freeze({
+    'executive-meal': 'restaurant',
+    'business-welcome': 'room_service',
+    'business-catering': 'restaurant',
+    'premium-catering': 'restaurant'
 });
 
 function t(): TranslationMap {
@@ -296,7 +303,7 @@ function createClassServiceChip(item: LeFrecceOnboardItem): HTMLElement {
     const chip = createNode('span', 'onboard-chip onboard-class-chip');
     chip.title = item.rawDescription;
     chip.append(
-        icon('room_service'),
+        icon(CLASS_SERVICE_ICONS[item.code] || 'room_service'),
         createNode(
             'span',
             '',
@@ -323,21 +330,29 @@ function createNotes(notes: string[]): HTMLElement | null {
 export function renderLeFrecceOnboardCard(payload: LeFrecceOnboardPayload): void {
     const card = cardElement();
     if (!card) return;
+    const wasCollapsed = card.dataset.onboardCollapsed === 'true';
     card.replaceChildren();
     card.style.display = 'block';
+    card.classList.toggle('onboard-collapsed', wasCollapsed);
 
     const title = createNode('div', 'onboard-title');
     title.append(
         icon('train'),
         createNode('span', '', t().onboard_title || 'Rolling stock and onboard services')
     );
-    const provider = createNode(
-        'span',
-        'onboard-provider',
-        t().onboard_provider || 'Trenitalia LeFrecce'
+    const toggle = createNode('button', 'onboard-toggle');
+    toggle.type = 'button';
+    toggle.setAttribute('aria-expanded', wasCollapsed ? 'false' : 'true');
+    toggle.setAttribute(
+        'aria-label',
+        t().onboard_toggle || 'Toggle rolling stock and onboard services'
     );
+    toggle.append(icon(
+        'expand_more',
+        `material-symbols-outlined${wasCollapsed ? '' : ' onboard-rotated'}`
+    ));
     const header = createNode('header', 'onboard-header');
-    header.append(title, provider);
+    header.append(title, toggle);
 
     const details = createNode('div', 'onboard-details');
     const levels = createSection(
@@ -360,14 +375,19 @@ export function renderLeFrecceOnboardCard(payload: LeFrecceOnboardPayload): void
 
     const body = createNode('div', 'onboard-body');
     body.append(createMedia(payload), details);
-
-    const sourceText = payload.rollingStock
-        ? t().onboard_source_note
-        : t().onboard_source_note_no_stock;
-    const source = createNode(
-        'p',
-        'onboard-source-note',
-        sourceText || 'Scheduled information supplied by Trenitalia LeFrecce; actual rolling stock may change.'
+    const bodyWrap = createNode(
+        'div',
+        `onboard-body-wrap${wasCollapsed ? ' onboard-body-collapsed' : ''}`
     );
-    card.append(header, body, source);
+    bodyWrap.append(body);
+    card.append(header, bodyWrap);
+
+    toggle.addEventListener('click', () => {
+        const collapsed = bodyWrap.classList.toggle('onboard-body-collapsed');
+        card.dataset.onboardCollapsed = collapsed ? 'true' : 'false';
+        card.classList.toggle('onboard-collapsed', collapsed);
+        toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        toggle.querySelector('.material-symbols-outlined')
+            ?.classList.toggle('onboard-rotated', !collapsed);
+    });
 }
