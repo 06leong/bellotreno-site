@@ -42,6 +42,16 @@ test("does not trust a Cloudflare Access referrer for cross-site API calls", () 
     assert.equal(requestIsAllowed(request), false);
 });
 
+test("allows Pages Functions calls when Cloudflare strips navigation metadata", () => {
+    const request = new Request("https://preview.bellotreno-site.pages.dev/api/trenitalia/onboard");
+    assert.equal(requestIsAllowed(request), true);
+});
+
+test("rejects metadata-free requests addressed to unknown hosts", () => {
+    const request = new Request("https://example.com/api/trenitalia/onboard");
+    assert.equal(requestIsAllowed(request), false);
+});
+
 const serviceFixtures: ServiceFixture[] = [
     {
         number: "9303",

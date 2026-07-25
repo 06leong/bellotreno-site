@@ -51,17 +51,19 @@ function getUrlHostname(value: string): string {
     }
 }
 
-function isLocalHost(hostname: string): boolean {
-    return hostname === "localhost"
-        || hostname === "127.0.0.1"
-        || hostname === "::1"
-        || hostname === "[::1]";
-}
-
 function isAllowedHost(hostname: string, requestHost: string): boolean {
     return hostname === requestHost
         || ALLOWED_HOSTS.has(hostname)
         || ALLOWED_HOST_SUFFIXES.some((suffix) => hostname.endsWith(suffix));
+}
+
+function isKnownRequestHost(hostname: string): boolean {
+    return ALLOWED_HOSTS.has(hostname)
+        || ALLOWED_HOST_SUFFIXES.some((suffix) => hostname.endsWith(suffix));
+}
+
+function isCloudflareAccessHost(hostname: string): boolean {
+    return hostname.endsWith(".cloudflareaccess.com");
 }
 
 export function requestIsAllowed(request: Request): boolean {
@@ -69,13 +71,22 @@ export function requestIsAllowed(request: Request): boolean {
     const fetchSite = request.headers.get("sec-fetch-site");
     const origin = request.headers.get("origin");
     const referer = request.headers.get("referer");
+    if (!isKnownRequestHost(requestHost)) return false;
+    if (origin) return isAllowedHost(getUrlHostname(origin), requestHost);
+    if (fetchSite === "cross-site") return false;
     // Cloudflare Access can preserve its login domain as the referrer on the
     // first request after authentication. Sec-Fetch-Site is the browser's
     // authoritative signal that the API call still came from this page.
     if (fetchSite === "same-origin") return true;
-    if (origin) return isAllowedHost(getUrlHostname(origin), requestHost);
-    if (referer) return isAllowedHost(getUrlHostname(referer), requestHost);
-    return isLocalHost(requestHost);
+    if (referer) {
+        const refererHost = getUrlHostname(referer);
+        return isAllowedHost(refererHost, requestHost)
+            || isCloudflareAccessHost(refererHost);
+    }
+    // Pages/Access may strip navigation metadata before invoking a Function.
+    // The endpoint exposes only public normalized railway data, while CORS
+    // continues to prevent unapproved browser origins from reading it.
+    return true;
 }
 
 export function corsHeaders(request: Request): HeaderMap {
