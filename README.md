@@ -124,6 +124,7 @@ Detailed implementation notes live in the `doc/` directory:
 - [innerHTML audit notes](doc/innerhtml-audit.md)
 - [ViaggiaTreno API notes](doc/blog-viaggiatreno-api.md)
 - [Italo realtime integration guide](doc/italo-integration-guide.md)
+- [LeFrecce rolling stock and onboard services guide](doc/lefrecce-onboard-integration-guide.md)
 - [Swiss Open Data integration guide](doc/swiss-open-data-integration-guide.md)
 
 VPS-side service notes are in [rfi-proxy/README.md](rfi-proxy/README.md).

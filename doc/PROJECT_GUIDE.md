@@ -39,15 +39,18 @@ The main data paths are:
 2. **Italo in Viaggio real-time data**: `/api/italo/*` Pages Functions resolve
    confirmed Italo station mappings and call Italo train/station endpoints
    through the VPS proxy when configured.
-3. **Swiss OpenTransportData formation data**: a Cloudflare Pages Function reads
+3. **Trenitalia LeFrecce onboard data**: `/api/trenitalia/onboard` matches a
+   long-distance train against the LeFrecce booking BFF and returns normalized
+   scheduled rolling-stock and onboard-service metadata.
+4. **Swiss OpenTransportData formation data**: a Cloudflare Pages Function reads
    the Train Formation token from Pages Secrets and calls the Swiss upstream
    server-side. The browser never sees the token.
-4. **Statistics aggregate data**: `/api/statistics/*` proxies to the VPS
+5. **Statistics aggregate data**: `/api/statistics/*` proxies to the VPS
    `bellotreno-statistics` service, currently deployed at
    `https://stats-api.bellotreno.org/v1`. The collector scans station registry
    data, `partenze`/`arrivi` boards, and `andamentoTreno`, then stores SQLite
    and JSON aggregate output.
-5. **Trenord line notices**: `/api/trenord/traffic` fetches Trenord train BFF
+6. **Trenord line notices**: `/api/trenord/traffic` fetches Trenord train BFF
    data and the `direttrici` feed, maps a train to a line, and returns normalized
    line-level notice data for the collapsed Traffic info card.
 
@@ -110,6 +113,7 @@ Cloudflare Pages Functions: bellotreno.org/api/*
   - /api/swiss/formation
   - /api/statistics/*
   - /api/italo/*
+  - /api/trenitalia/onboard
   - /api/trenord/traffic
   - Reads Pages Secrets
   - Does not expose API tokens to browser code
@@ -402,6 +406,7 @@ Pages Functions are in this repo and are written in TypeScript:
 | Function | Upstream | Secret/config |
 | --- | --- | --- |
 | `/api/italo/*` | Italo in Viaggio via VPS proxy | `ITALO_PROXY_BASE_URL`, `ITALO_PROXY_TOKEN` |
+| `/api/trenitalia/onboard` | LeFrecce rolling stock and onboard services | optional `TRENITALIA_LEFRECCE_ENABLED=false` kill switch |
 | `/api/swiss/formation` | OpenTransportData.swiss `formations_full` | `SWISS_TRAIN_FORMATION_API_KEY` |
 | `/api/statistics/*` | VPS statistics API | `STATISTICS_API_BASE_URL`, `STATISTICS_API_TOKEN` |
 | `/api/trenord/traffic` | Trenord BFF + direttrici feeds via VPS proxy when configured | `TRENORD_BFF_SECRET`, optional `TRENORD_PROXY_BASE_URL`, `TRENORD_PROXY_TOKEN` |
@@ -442,6 +447,7 @@ Astro/Vite-managed TypeScript modules. `src/client/**/*.ts` is checked with
 | `src/client/i18n.ts` | `zh`, `en`, and `it` translation dictionaries |
 | `src/client/common.ts` | language, theme, visitor counter, `escapeHtml`, shared behavior |
 | `src/client/main.ts` | homepage search, homepage infomobilita ticker, train details, SmartCaring and Trenord cards |
+| `src/client/lefrecce-onboard.ts` | LeFrecce onboard fetch, localized card rendering, rolling-stock image manifest |
 | `src/client/station.ts` | station departure/arrival boards |
 | `src/client/station-navigation.ts` | canonical station-board URL building |
 | `src/client/infomobilita.ts` | Trenitalia NewsService and RFI RSS notice page |
@@ -619,6 +625,7 @@ Cloudflare Pages variables:
 | `ITALO_PROXY_BASE_URL` | Plain text | Italo proxy endpoint, e.g. `https://api.bellotreno.org/` |
 | `ITALO_PROXY_TOKEN` | Secret | token injected as `X-Bello-Token` when calling the VPS proxy directly |
 | `ITALO_PROXY_CALLER_ORIGIN` | Plain text | optional referer origin when `ITALO_PROXY_BASE_URL` points to the public Worker |
+| `TRENITALIA_LEFRECCE_ENABLED` | Plain text | optional emergency switch; only `false` disables LeFrecce enrichment |
 | `TRENORD_PROXY_BASE_URL` | Plain text | optional Trenord proxy endpoint; falls back to `ITALO_PROXY_BASE_URL` when unset |
 | `TRENORD_PROXY_TOKEN` | Secret | optional Trenord proxy token; falls back to `ITALO_PROXY_TOKEN` when unset |
 | `SWISS_TRAIN_FORMATION_API_KEY` | Secret | OpenTransportData.swiss Train Formation token |

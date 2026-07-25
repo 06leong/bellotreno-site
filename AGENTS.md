@@ -79,6 +79,8 @@ Important modules:
   TypeScript with `?raw`; browsers cannot execute TypeScript syntax.
 - `main.ts`: homepage train/station search, train details, SmartCaring and
   Trenord traffic card rendering.
+- `lefrecce-onboard.ts`: LeFrecce scheduled rolling-stock and onboard-service
+  fetch, localized card rendering, and rolling-stock image manifest.
 - `train-url-state.ts`: train-search query parsing, canonical URL creation, and
   history state helpers.
 - `station.ts`: station departure/arrival board behavior.
@@ -154,6 +156,7 @@ secrets:
 | Function | Secret/config |
 | --- | --- |
 | `/api/italo/*` | `ITALO_PROXY_BASE_URL`, `ITALO_PROXY_TOKEN` |
+| `/api/trenitalia/onboard` | optional `TRENITALIA_LEFRECCE_ENABLED=false` kill switch |
 | `/api/swiss/formation` | `SWISS_TRAIN_FORMATION_API_KEY` |
 | `/api/statistics/*` | `STATISTICS_API_BASE_URL`, `STATISTICS_API_TOKEN` |
 | `/api/trenord/traffic` | `TRENORD_BFF_SECRET`, optional `TRENORD_PROXY_BASE_URL`, `TRENORD_PROXY_TOKEN` |

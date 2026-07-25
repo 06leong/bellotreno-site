@@ -14,6 +14,7 @@ declare global {
     SWISS_TRAIN_FORMATION_EVU?: string;
     SWISS_TRAIN_FORMATION_FULL_PATH?: string;
     SWISS_TRAIN_FORMATION_USER_AGENT?: string;
+    TRENITALIA_LEFRECCE_ENABLED?: string;
     TRENORD_BFF_SECRET?: string;
     TRENORD_PROXY_BASE_URL?: string;
     TRENORD_PROXY_TOKEN?: string;
