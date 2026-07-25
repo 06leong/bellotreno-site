@@ -12,14 +12,16 @@ import {
     cacheControl,
     cachePayload,
     corsHeaders,
-    fetchWithTimeout,
+    fetchLeFrecceUpstream,
     getCachedPayload,
     json,
+    leFrecceProxyConfig,
     requestIsAllowed,
     resolveLeFrecceLocationByName,
     unavailable,
     upstreamHeaders,
     type CachedLeFreccePayload,
+    type LeFrecceProxyConfig,
 } from "./_shared.ts";
 
 interface OnboardQuery {
@@ -82,10 +84,14 @@ function makeCacheKey(query: OnboardQuery): string {
     ].join("|");
 }
 
-async function resolveLocationId(id: string | null, name: string): Promise<number | null> {
+async function resolveLocationId(
+    id: string | null,
+    name: string,
+    proxy: LeFrecceProxyConfig | null,
+): Promise<number | null> {
     const directId = rfiStationIdToLeFrecceId(id);
     if (directId) return directId;
-    return (await resolveLeFrecceLocationByName(name))?.id || null;
+    return (await resolveLeFrecceLocationByName(name, proxy))?.id || null;
 }
 
 function responseFor(
@@ -103,14 +109,25 @@ function isDisabled(env: PagesEnv): boolean {
     return String(env.TRENITALIA_LEFRECCE_ENABLED || "").trim().toLowerCase() === "false";
 }
 
-async function fetchOnboardPayload(query: OnboardQuery): Promise<CachedLeFreccePayload> {
+function upstreamHttpReason(
+    stage: "search" | "stops",
+    status: number,
+    proxy: LeFrecceProxyConfig | null,
+): string {
+    return `${proxy ? "proxy" : "upstream"}_${stage}_http_${status}`;
+}
+
+async function fetchOnboardPayload(
+    query: OnboardQuery,
+    proxy: LeFrecceProxyConfig | null,
+): Promise<CachedLeFreccePayload> {
     const [originLocationId, destinationLocationId] = await Promise.all([
-        resolveLocationId(query.originId, query.originName),
-        resolveLocationId(query.destinationId, query.destinationName),
+        resolveLocationId(query.originId, query.originName, proxy),
+        resolveLocationId(query.destinationId, query.destinationName, proxy),
     ]);
     if (!originLocationId || !destinationLocationId) return unavailable("location_not_found");
 
-    const searchResponse = await fetchWithTimeout(`${LEFRECCE_BASE_URL}/ticket/solutions`, {
+    const searchResponse = await fetchLeFrecceUpstream(`${LEFRECCE_BASE_URL}/ticket/solutions`, {
         method: "POST",
         headers: upstreamHeaders({ "content-type": "application/json" }),
         body: JSON.stringify({
@@ -129,8 +146,10 @@ async function fetchOnboardPayload(query: OnboardQuery): Promise<CachedLeFrecceP
             },
             advancedSearchRequest: { bestFare: false },
         }),
-    });
-    if (!searchResponse.ok) return unavailable(`upstream_search_http_${searchResponse.status}`);
+    }, proxy);
+    if (!searchResponse.ok) {
+        return unavailable(upstreamHttpReason("search", searchResponse.status, proxy));
+    }
 
     const sessionId = extractWSessionId(searchResponse.headers.get("set-cookie"));
     const searchPayload = await searchResponse.json() as Record<string, unknown>;
@@ -158,10 +177,12 @@ async function fetchOnboardPayload(query: OnboardQuery): Promise<CachedLeFrecceP
     const stopsUrl = new URL(`${LEFRECCE_BASE_URL}/stops`);
     stopsUrl.searchParams.set("cartId", cartId);
     stopsUrl.searchParams.set("solutionId", solutionId);
-    const stopsResponse = await fetchWithTimeout(stopsUrl, {
+    const stopsResponse = await fetchLeFrecceUpstream(stopsUrl, {
         headers: upstreamHeaders({ "cookie": `WSESSIONID=${sessionId}` }),
-    });
-    if (!stopsResponse.ok) return unavailable(`upstream_stops_http_${stopsResponse.status}`);
+    }, proxy);
+    if (!stopsResponse.ok) {
+        return unavailable(upstreamHttpReason("stops", stopsResponse.status, proxy));
+    }
 
     const selectedDetail = selectLeFrecceTrainDetail(await stopsResponse.json(), query.number);
     if (selectedDetail.status !== "matched") {
@@ -207,7 +228,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     if (cached) return responseFor(cached, headers);
 
     try {
-        const payload = await fetchOnboardPayload(query);
+        const payload = await fetchOnboardPayload(query, leFrecceProxyConfig(context.env));
         cachePayload(cacheKey, payload);
         return responseFor(payload, headers);
     } catch {

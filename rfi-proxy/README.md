@@ -2,8 +2,10 @@
 
 This folder contains the VPS-side services used by BelloTreno:
 
-- `rfi-proxy`: the ViaggiaTreno/RFI/Italo/Trenord proxy on port `8080`.
+- `rfi-proxy`: the ViaggiaTreno/RFI/Italo/Trenord/LeFrecce proxy on port `8080`.
 - `bellotreno-statistics`: the statistics collector/API on port `8081`.
+
+Both Python services target Python 3.11, matching the repository CI runtime.
 
 Both services are started by the same `docker-compose.yml` and share the external Docker network `bellotreno-network`.
 The production compose file pulls prebuilt GHCR images:
@@ -319,6 +321,7 @@ The `rfi-proxy` service accepts only targets under these base domains:
 - `rfi.it`
 - `italotreno.com`
 - `trenord.it`
+- `lefrecce.it` (only `/Channels.Website.BFF.WEB/website/*`)
 
 Every request still requires `X-Bello-Token: <RFI_PROXY_SECURITY_TOKEN>`.
 For Italo in Viaggio, the proxy uses `curl_cffi` Chrome impersonation plus an
@@ -326,12 +329,24 @@ Italo referer and JSON accept headers. This is required because Cloudflare Pages
 direct `fetch()` can receive upstream `403` responses from
 `italoinviaggio.italotreno.com` even when the same URL works in a normal browser.
 Trenord BFF traffic uses the same proxy pattern with a Trenord journey referer.
+LeFrecce uses the same Chrome impersonation because its BFF can also reject
+Cloudflare Pages egress. POST is enabled only for the restricted LeFrecce BFF
+path. The proxy accepts only a sanitized `WSESSIONID` through
+`X-Bello-Upstream-Cookie`; it does not forward arbitrary caller cookies.
 
 Cloudflare Pages should call this proxy for `/api/italo/*` with:
 
 ```text
 ITALO_PROXY_BASE_URL=https://api.bellotreno.org/
 ITALO_PROXY_TOKEN=<same secret as RFI_PROXY_SECURITY_TOKEN>
+```
+
+LeFrecce can use dedicated Pages variables or reuse the generic/Italo proxy
+configuration:
+
+```text
+TRENITALIA_LEFRECCE_PROXY_BASE_URL=https://api.bellotreno.org/
+TRENITALIA_LEFRECCE_PROXY_TOKEN=<same secret as RFI_PROXY_SECURITY_TOKEN>
 ```
 
 If the public Cloudflare Worker `https://ah.bellotreno.workers.dev/` is used as

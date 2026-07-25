@@ -14,7 +14,9 @@ GET /api/trenitalia/onboard
 ```
 
 It never calls LeFrecce directly. The Pages Function owns the upstream session,
-strict train matching, normalization, and caching.
+strict train matching, normalization, and caching. Production requests use the
+authenticated BelloTreno VPS proxy because the LeFrecce edge can reject
+Cloudflare Pages egress with HTTP 403.
 
 ## Public request
 
@@ -141,14 +143,18 @@ The Pages Function performs this sequence:
 8. Parse only explicit rolling-stock and service descriptions and return the
    public normalized contract.
 
-All upstream paths use this base:
+All upstream targets use this base:
 
 ```text
 https://www.lefrecce.it/Channels.Website.BFF.WEB/website
 ```
 
 Italian is requested upstream so phrase classification is stable. Calls have an
-eight-second timeout and are not retried inside one request.
+eight-second timeout and are not retried inside one request. When proxy
+configuration is present, the Pages Function wraps each target URL with the
+VPS proxy URL. The first `Set-Cookie` response stays server-side; only the
+validated `WSESSIONID` value is forwarded to the proxy for the matching stops
+request.
 
 ## Caching and operations
 
@@ -157,6 +163,18 @@ The Function keeps a bounded in-isolate cache and emits CDN cache headers:
 - successful enrichment: approximately 30 minutes;
 - unavailable enrichment: approximately 5 minutes.
 
+Cloudflare Pages should configure the dedicated proxy variables:
+
+```text
+TRENITALIA_LEFRECCE_PROXY_BASE_URL=https://api.bellotreno.org/
+TRENITALIA_LEFRECCE_PROXY_TOKEN=<same secret as RFI_PROXY_SECURITY_TOKEN>
+```
+
+For compatibility, the Function falls back to `RFI_PROXY_BASE_URL` /
+`RFI_PROXY_TOKEN`, then `ITALO_PROXY_BASE_URL` / `ITALO_PROXY_TOKEN`. Existing
+deployments that already configured the Italo VPS proxy therefore do not need a
+second secret.
+
 The integration is enabled by default. This optional Cloudflare Pages variable
 is an emergency switch:
 
@@ -164,7 +182,8 @@ is an emergency switch:
 TRENITALIA_LEFRECCE_ENABLED=false
 ```
 
-No secret is required. Only the case-insensitive string `false` disables it.
+Only the case-insensitive string `false` disables it. The proxy token is read
+only by the Pages Function and must never use a `PUBLIC_*` variable.
 
 ## Frontend behavior and photos
 
@@ -192,7 +211,9 @@ Adding a file at the documented path requires no code change.
 
 `tests/js/lefrecce.test.ts` covers FR 9303, FR 9607, FR 9703, FR 9757, EC 301,
 EC 141 without an inferred model, station-ID conversion, cookie extraction,
-ambiguous matching, unknown notes, and upstream failure.
+authenticated VPS proxy routing, ambiguous matching, unknown notes, and
+upstream failure. `tests/python/test_rfi_proxy.py` verifies the restricted
+LeFrecce allowlist, POST forwarding, and sanitized session-cookie forwarding.
 
 Before publishing:
 

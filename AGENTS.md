@@ -156,7 +156,7 @@ secrets:
 | Function | Secret/config |
 | --- | --- |
 | `/api/italo/*` | `ITALO_PROXY_BASE_URL`, `ITALO_PROXY_TOKEN` |
-| `/api/trenitalia/onboard` | optional `TRENITALIA_LEFRECCE_ENABLED=false` kill switch |
+| `/api/trenitalia/onboard` | `TRENITALIA_LEFRECCE_PROXY_BASE_URL`, `TRENITALIA_LEFRECCE_PROXY_TOKEN` (or shared RFI/Italo proxy variables), optional `TRENITALIA_LEFRECCE_ENABLED=false` kill switch |
 | `/api/swiss/formation` | `SWISS_TRAIN_FORMATION_API_KEY` |
 | `/api/statistics/*` | `STATISTICS_API_BASE_URL`, `STATISTICS_API_TOKEN` |
 | `/api/trenord/traffic` | `TRENORD_BFF_SECRET`, optional `TRENORD_PROXY_BASE_URL`, `TRENORD_PROXY_TOKEN` |

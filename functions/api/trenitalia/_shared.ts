@@ -28,6 +28,11 @@ export interface LeFrecceLocation {
     name: string;
 }
 
+export interface LeFrecceProxyConfig {
+    baseUrl: string;
+    token?: string;
+}
+
 export interface LeFrecceUnavailablePayload {
     available: false;
     provider: "trenitalia-lefrecce";
@@ -158,6 +163,54 @@ export function upstreamHeaders(extra: HeadersInit = {}): HeadersInit {
     };
 }
 
+function cleanEnvValue(value: string | undefined): string {
+    return (value || "").trim();
+}
+
+export function leFrecceProxyConfig(env: PagesEnv): LeFrecceProxyConfig | null {
+    const baseUrl = cleanEnvValue(env.TRENITALIA_LEFRECCE_PROXY_BASE_URL)
+        || cleanEnvValue(env.RFI_PROXY_BASE_URL)
+        || cleanEnvValue(env.ITALO_PROXY_BASE_URL);
+    if (!baseUrl) return null;
+
+    const token = cleanEnvValue(env.TRENITALIA_LEFRECCE_PROXY_TOKEN)
+        || cleanEnvValue(env.RFI_PROXY_TOKEN)
+        || cleanEnvValue(env.ITALO_PROXY_TOKEN);
+    return {
+        baseUrl,
+        ...(token ? { token } : {}),
+    };
+}
+
+function proxiedLeFrecceUrl(targetUrl: string, proxy: LeFrecceProxyConfig): string {
+    const url = new URL(proxy.baseUrl);
+    url.searchParams.set("url", targetUrl);
+    return url.toString();
+}
+
+export async function fetchLeFrecceUpstream(
+    input: string | URL,
+    init: RequestInit = {},
+    proxy: LeFrecceProxyConfig | null = null,
+): Promise<Response> {
+    if (!proxy) return fetchWithTimeout(input, init);
+
+    const sourceHeaders = new Headers(init.headers);
+    const headers = new Headers({
+        "accept": sourceHeaders.get("accept") || "application/json, text/plain, */*",
+    });
+    const contentType = sourceHeaders.get("content-type");
+    const cookie = sourceHeaders.get("cookie");
+    if (contentType) headers.set("content-type", contentType);
+    if (cookie) headers.set("x-bello-upstream-cookie", cookie);
+    if (proxy.token) headers.set("x-bello-token", proxy.token);
+
+    return fetchWithTimeout(proxiedLeFrecceUrl(String(input), proxy), {
+        ...init,
+        headers,
+    });
+}
+
 export async function fetchWithTimeout(
     input: string | URL,
     init: RequestInit = {},
@@ -187,14 +240,17 @@ function locationCandidates(payload: unknown): unknown[] {
     return [];
 }
 
-export async function resolveLeFrecceLocationByName(name: string): Promise<LeFrecceLocation | null> {
+export async function resolveLeFrecceLocationByName(
+    name: string,
+    proxy: LeFrecceProxyConfig | null = null,
+): Promise<LeFrecceLocation | null> {
     const normalizedName = normalizeLeFrecceStationName(name);
     if (!normalizedName) return null;
 
     const url = new URL(`${LEFRECCE_BASE_URL}/locations/search`);
     url.searchParams.set("name", name);
     url.searchParams.set("limit", "20");
-    const response = await fetchWithTimeout(url, { headers: upstreamHeaders() });
+    const response = await fetchLeFrecceUpstream(url, { headers: upstreamHeaders() }, proxy);
     if (!response.ok) return null;
 
     const matches = locationCandidates(await response.json())

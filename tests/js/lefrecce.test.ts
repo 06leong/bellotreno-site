@@ -337,6 +337,78 @@ test("orchestrates the LeFrecce session and exposes only normalized JSON", async
     }
 });
 
+test("routes the LeFrecce session through the authenticated VPS proxy", async () => {
+    const originalFetch = globalThis.fetch;
+    let requestIndex = 0;
+    globalThis.fetch = async (input, init) => {
+        const proxyUrl = new URL(String(input));
+        const targetUrl = new URL(proxyUrl.searchParams.get("url") || "");
+        const headers = new Headers(init?.headers);
+        assert.equal(proxyUrl.origin, "https://proxy.example");
+        assert.equal(headers.get("x-bello-token"), "proxy-secret");
+        assert.equal(headers.get("cookie"), null);
+
+        if (requestIndex++ === 0) {
+            assert.equal(targetUrl.pathname.endsWith("/ticket/solutions"), true);
+            assert.equal(init?.method, "POST");
+            assert.equal(headers.get("x-bello-upstream-cookie"), null);
+            return new Response(JSON.stringify({
+                cartId: "proxy-cart",
+                solutions: [{
+                    solution: {
+                        id: "proxy-solution",
+                        departureTime: "2026-07-27T06:45:00+02:00",
+                        arrivalTime: "2026-07-27T09:00:00+02:00",
+                        departureLocationId: 830001700,
+                        arrivalLocationId: 830002580,
+                        trains: [{ description: "9703" }],
+                    },
+                }],
+            }), {
+                headers: {
+                    "content-type": "application/json",
+                    "set-cookie": "WSESSIONID=proxy-session; Path=/; Secure; HttpOnly",
+                },
+            });
+        }
+
+        assert.equal(targetUrl.pathname.endsWith("/stops"), true);
+        assert.equal(targetUrl.searchParams.get("cartId"), "proxy-cart");
+        assert.equal(targetUrl.searchParams.get("solutionId"), "proxy-solution");
+        assert.equal(headers.get("x-bello-upstream-cookie"), "WSESSIONID=proxy-session");
+        return new Response(JSON.stringify([{
+            summary: { trainInfo: { description: "Frecciarossa 9703" } },
+            services: [{ description: "Treno effettuato con ETR 700" }],
+        }]), {
+            headers: { "content-type": "application/json" },
+        });
+    };
+
+    try {
+        const response = await onRequestGet({
+            request: new Request(
+                "https://preview.bellotreno-site.pages.dev/api/trenitalia/onboard"
+                + "?number=9703&date=2026-07-27"
+                + "&departureAt=2026-07-27T04%3A45%3A00.000Z"
+                + "&arrivalAt=2026-07-27T07%3A00%3A00.000Z"
+                + "&originId=S01700&originName=Milano%20Centrale"
+                + "&destinationId=S02580&destinationName=Venezia%20Mestre",
+            ),
+            env: {
+                RFI_PROXY_BASE_URL: "https://proxy.example/",
+                RFI_PROXY_TOKEN: "proxy-secret",
+            },
+        } as PagesContext);
+        assert.equal(response.status, 200);
+        const payload = await response.json() as Record<string, unknown>;
+        assert.equal(payload.available, true);
+        assert.equal((payload.rollingStock as Record<string, unknown>).code, "etr-700");
+        assert.equal(requestIndex, 2);
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
+});
+
 test("returns an unavailable payload when the LeFrecce upstream fails", async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = async () => {

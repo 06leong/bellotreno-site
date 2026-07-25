@@ -1,10 +1,20 @@
 import json
 import os
-from urllib.parse import urlparse
 
 from curl_cffi import requests
 from flask import Flask, Response, request
 from flask_cors import CORS
+from proxy_policy import (
+    MAX_PROXY_BODY_BYTES,
+    is_allowed,
+    is_italo_api_url,
+    is_italo_url,
+    is_lefrecce_api_url,
+    is_lefrecce_url,
+    is_trenord_url,
+    lefrecce_session_cookie,
+    method_is_allowed,
+)
 
 app = Flask(__name__)
 CORS(app)
@@ -12,46 +22,31 @@ CORS(app)
 SECURITY_TOKEN = os.getenv("SECURITY_TOKEN", "")
 LOG_REQUESTS = os.getenv("LOG_REQUESTS", "false").lower() == "true"
 
-ALLOWED_BASE_DOMAINS = ("viaggiatreno.it", "rfi.it", "italotreno.com", "trenord.it")
-ITALO_BASE_DOMAINS = ("italotreno.com",)
-TRENORD_BASE_DOMAINS = ("trenord.it",)
 CHROME_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 
+def upstream_headers(target_url, method="GET", upstream_cookie=""):
+    if is_lefrecce_url(target_url):
+        headers = {
+            "User-Agent": CHROME_USER_AGENT,
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Origin": "https://www.lefrecce.it",
+            "Referer": "https://www.lefrecce.it/Channels.Website.WEB/",
+            "Sec-Fetch-Dest": "empty",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "same-origin",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
+        }
+        if method == "POST":
+            headers["Content-Type"] = "application/json"
+        if upstream_cookie:
+            headers["Cookie"] = upstream_cookie
+        return headers
 
-def hostname_for(target_url):
-    try:
-        return (urlparse(target_url).hostname or "").lower()
-    except Exception:
-        return ""
-
-
-def host_matches(domain, allowed_base_domains):
-    return any(domain == allowed or domain.endswith(f".{allowed}") for allowed in allowed_base_domains)
-
-
-def is_allowed(target_url):
-    return host_matches(hostname_for(target_url), ALLOWED_BASE_DOMAINS)
-
-
-def is_italo_url(target_url):
-    return host_matches(hostname_for(target_url), ITALO_BASE_DOMAINS)
-
-
-def is_trenord_url(target_url):
-    return host_matches(hostname_for(target_url), TRENORD_BASE_DOMAINS)
-
-
-def is_italo_api_url(target_url):
-    try:
-        return urlparse(target_url).path.startswith("/api/")
-    except Exception:
-        return False
-
-
-def upstream_headers(target_url):
     if is_italo_url(target_url):
         accept = (
             "application/json, text/plain, */*"
@@ -85,7 +80,7 @@ def upstream_headers(target_url):
     }
 
 
-@app.route("/", methods=["GET"])
+@app.route("/", methods=["GET", "POST"])
 def proxy():
     client_token = request.headers.get("X-Bello-Token")
 
@@ -105,14 +100,28 @@ def proxy():
     if not is_allowed(target_url):
         return json.dumps({"error": "Forbidden: Domain not in whitelist"}), 403
 
+    if not method_is_allowed(target_url, request.method):
+        return json.dumps({"error": "Method Not Allowed"}), 405
+
+    if (request.content_length or 0) > MAX_PROXY_BODY_BYTES:
+        return json.dumps({"error": "Request body too large"}), 413
+
     if LOG_REQUESTS:
         print(f"Fetching: {target_url}")
 
     try:
-        response = requests.get(
+        response = requests.request(
+            request.method,
             target_url,
             impersonate="chrome120",
-            headers=upstream_headers(target_url),
+            headers=upstream_headers(
+                target_url,
+                method=request.method,
+                upstream_cookie=lefrecce_session_cookie(
+                    request.headers.get("X-Bello-Upstream-Cookie")
+                ) if is_lefrecce_url(target_url) else "",
+            ),
+            data=request.get_data() if request.method == "POST" else None,
             timeout=30,
         )
 

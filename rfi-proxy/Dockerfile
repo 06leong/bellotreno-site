@@ -1,5 +1,5 @@
 # 使用官方轻量级 Python 镜像
-FROM python:3.9-slim
+FROM python:3.11-slim
 
 # 设置工作目录
 WORKDIR /app
@@ -8,8 +8,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 复制核心代码
-COPY app.py .
+# 复制核心代码与无依赖安全策略
+COPY app.py proxy_policy.py ./
 
 # 暴露 8080 端口
 EXPOSE 8080
