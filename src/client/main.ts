@@ -13,6 +13,14 @@ import {
     trainStateToSearch,
     trainTripleToSearch
 } from './train-url-state.js';
+import {
+    fetchLeFrecceOnboard,
+    hideLeFrecceOnboardCard,
+    renderLeFrecceOnboardCard,
+    renderLeFrecceOnboardLoading,
+    shouldQueryLeFrecceOnboard,
+    type LeFrecceOnboardPayload
+} from './lefrecce-onboard.js';
 
 export {};
 
@@ -183,6 +191,8 @@ let disambiguationData: string[] | null = null;
 let disambiguationUrlMode: UrlMode = 'push';
 let currentSmartCaringData: JsonRecord | null = null;
 let currentTrainCategory = '';
+let currentLeFrecceOnboardData: LeFrecceOnboardPayload | null = null;
+let onboardRequestSeq = 0;
 let currentSwissFormationData: SwissFormationPayload | null = null;
 let swissRequestSeq = 0;
 let currentTrenordLineInfo: TrenordLineInfo | null = null;
@@ -513,10 +523,13 @@ function switchSearchMode(mode: SearchMode) {
     if (disambiguation) disambiguation.style.display = 'none';
     currentSmartCaringData = null;
     currentTrenordLineInfo = null;
+    currentLeFrecceOnboardData = null;
+    onboardRequestSeq++;
     currentSwissFormationData = null;
     swissRequestSeq++;
     const scCard = document.getElementById('smartCaringCard');
     if (scCard) scCard.style.display = 'none';
+    hideLeFrecceOnboardCard();
     if (window.BelloSwiss) window.BelloSwiss.hideFormationCard();
 }
 
@@ -541,6 +554,9 @@ onBelloLanguageChanged(() => {
         renderTrenordTrafficInformation(currentSmartCaringData);
     } else if (currentSmartCaringData) {
         renderSmartCaring(currentSmartCaringData);
+    }
+    if (currentLeFrecceOnboardData) {
+        renderLeFrecceOnboardCard(currentLeFrecceOnboardData);
     }
 });
 
@@ -1151,11 +1167,14 @@ async function fetchItaloDetails(trainNumber: string, options: SearchOptions = {
     currentItaloTrainNumber = cleanTrainNumber;
     currentSmartCaringData = null;
     currentTrenordLineInfo = null;
+    currentLeFrecceOnboardData = null;
+    onboardRequestSeq++;
     currentSwissFormationData = null;
     swissRequestSeq++;
 
     const scCard = document.getElementById('smartCaringCard');
     if (scCard) scCard.style.display = 'none';
+    hideLeFrecceOnboardCard();
     if (window.BelloSwiss) window.BelloSwiss.hideFormationCard();
 
     try {
@@ -1188,10 +1207,13 @@ async function fetchDetails(triple: string, options: SearchOptions = {}): Promis
     currentTriple = triple;
     currentSmartCaringData = null;
     currentTrenordLineInfo = null;
+    currentLeFrecceOnboardData = null;
+    const onboardSeq = ++onboardRequestSeq;
     currentSwissFormationData = null;
     const requestSeq = ++swissRequestSeq;
     const scCard = document.getElementById('smartCaringCard');
     if (scCard) scCard.style.display = 'none';
+    hideLeFrecceOnboardCard();
     if (window.BelloSwiss) window.BelloSwiss.hideFormationCard();
     const [tNum, originID, ts] = triple.split('-');
     try {
@@ -1209,6 +1231,7 @@ async function fetchDetails(triple: string, options: SearchOptions = {}): Promis
         applyTrainTripleUrl(triple, options.urlMode || 'push');
         lastLoadedTrainSearch = trainTripleToSearch(triple);
         fetchTrafficInformation(data);
+        void loadLeFrecceOnboard(data, triple, onboardSeq);
         loadSwissFormation(data, triple, requestSeq);
 
 
@@ -1219,6 +1242,36 @@ async function fetchDetails(triple: string, options: SearchOptions = {}): Promis
             window.currentLang === 'it' ? "Impossibile caricare i dettagli" :
                 "Failed to load details";
         alert(msg);
+    }
+}
+
+async function loadLeFrecceOnboard(data: TrainData, triple: string, requestSeq: number): Promise<void> {
+    if (!shouldQueryLeFrecceOnboard(data, currentTrainCategory)) {
+        hideLeFrecceOnboardCard();
+        return;
+    }
+
+    renderLeFrecceOnboardLoading();
+    try {
+        const onboardData = await fetchLeFrecceOnboard(
+            data,
+            currentTrainCategory,
+            getTrainOperationDate(data)
+        );
+        if (requestSeq !== onboardRequestSeq || triple !== currentTriple) return;
+        if (!onboardData.available) {
+            currentLeFrecceOnboardData = null;
+            hideLeFrecceOnboardCard();
+            console.warn('LeFrecce onboard enrichment unavailable:', onboardData.reason);
+            return;
+        }
+        currentLeFrecceOnboardData = onboardData;
+        renderLeFrecceOnboardCard(onboardData);
+    } catch (error) {
+        if (requestSeq !== onboardRequestSeq || triple !== currentTriple) return;
+        currentLeFrecceOnboardData = null;
+        hideLeFrecceOnboardCard();
+        console.warn('LeFrecce onboard enrichment unavailable:', error);
     }
 }
 
