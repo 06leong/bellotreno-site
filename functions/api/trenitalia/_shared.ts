@@ -17,9 +17,9 @@ const ALLOWED_HOSTS = new Set([
 ]);
 
 const ALLOWED_HOST_SUFFIXES = [".bellotreno-site.pages.dev"];
-const SUCCESS_TTL_MS = 30 * 60 * 1000;
 const FAILURE_TTL_MS = 5 * 60 * 1000;
 const MAX_CACHE_ENTRIES = 200;
+const ROME_TIME_ZONE = "Europe/Rome";
 
 type HeaderMap = Record<string, string>;
 
@@ -47,6 +47,63 @@ interface CacheEntry {
 }
 
 const responseCache = new Map<string, CacheEntry>();
+
+function datePartsInRome(value: Date): { day: number; month: number; year: number } {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+        day: "2-digit",
+        month: "2-digit",
+        timeZone: ROME_TIME_ZONE,
+        year: "numeric",
+    }).formatToParts(value);
+    const part = (type: Intl.DateTimeFormatPartTypes): number =>
+        Number(parts.find((item) => item.type === type)?.value || 0);
+    return {
+        day: part("day"),
+        month: part("month"),
+        year: part("year"),
+    };
+}
+
+function zonedMidnightUtc(year: number, month: number, day: number): number {
+    const desiredUtc = Date.UTC(year, month - 1, day);
+    let guess = desiredUtc;
+    const formatter = new Intl.DateTimeFormat("en-CA", {
+        day: "2-digit",
+        hour: "2-digit",
+        hourCycle: "h23",
+        minute: "2-digit",
+        month: "2-digit",
+        second: "2-digit",
+        timeZone: ROME_TIME_ZONE,
+        year: "numeric",
+    });
+    for (let iteration = 0; iteration < 3; iteration += 1) {
+        const parts = formatter.formatToParts(new Date(guess));
+        const part = (type: Intl.DateTimeFormatPartTypes): number =>
+            Number(parts.find((item) => item.type === type)?.value || 0);
+        const representedUtc = Date.UTC(
+            part("year"),
+            part("month") - 1,
+            part("day"),
+            part("hour"),
+            part("minute"),
+            part("second"),
+        );
+        guess += desiredUtc - representedUtc;
+    }
+    return guess;
+}
+
+export function successfulCacheTtlMs(now = Date.now()): number {
+    const current = datePartsInRome(new Date(now));
+    const nextDate = new Date(Date.UTC(current.year, current.month - 1, current.day + 1));
+    const expiresAt = zonedMidnightUtc(
+        nextDate.getUTCFullYear(),
+        nextDate.getUTCMonth() + 1,
+        nextDate.getUTCDate(),
+    );
+    return Math.max(60_000, expiresAt - now);
+}
 
 function getUrlHostname(value: string): string {
     try {
@@ -137,21 +194,25 @@ export function getCachedPayload(key: string): CachedLeFreccePayload | null {
     return cached.value;
 }
 
-export function cachePayload(key: string, value: CachedLeFreccePayload): void {
+export function cachePayload(
+    key: string,
+    value: CachedLeFreccePayload,
+    now = Date.now(),
+): void {
     if (responseCache.size >= MAX_CACHE_ENTRIES) {
         const oldestKey = responseCache.keys().next().value;
         if (typeof oldestKey === "string") responseCache.delete(oldestKey);
     }
     responseCache.set(key, {
-        expiresAt: Date.now() + (value.available ? SUCCESS_TTL_MS : FAILURE_TTL_MS),
+        expiresAt: now + (value.available ? successfulCacheTtlMs(now) : FAILURE_TTL_MS),
         value,
     });
 }
 
-export function cacheControl(value: CachedLeFreccePayload): string {
-    return value.available
-        ? "public, max-age=300, s-maxage=1800, stale-while-revalidate=300"
-        : "public, max-age=60, s-maxage=300";
+export function cacheControl(value: CachedLeFreccePayload, now = Date.now()): string {
+    if (!value.available) return "public, max-age=60, s-maxage=300";
+    const edgeTtlSeconds = Math.max(60, Math.floor(successfulCacheTtlMs(now) / 1000));
+    return `public, max-age=300, s-maxage=${edgeTtlSeconds}, stale-while-revalidate=300`;
 }
 
 export function upstreamHeaders(extra: HeadersInit = {}): HeadersInit {

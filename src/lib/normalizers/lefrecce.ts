@@ -211,7 +211,7 @@ function timestampsWithinTolerance(actual: string | null, expected: string | nul
     const actualMs = Date.parse(actual);
     const expectedMs = Date.parse(expected);
     if (!Number.isFinite(actualMs) || !Number.isFinite(expectedMs)) return false;
-    return Math.abs(actualMs - expectedMs) <= 60 * 60 * 1000;
+    return Math.abs(actualMs - expectedMs) <= 5 * 60 * 1000;
 }
 
 function locationMatches(

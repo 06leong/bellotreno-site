@@ -135,7 +135,9 @@ The Pages Function performs this sequence:
    one adult, a bounded result limit, and no fare optimization.
 4. Read `cartId` from JSON and `WSESSIONID` from `Set-Cookie`.
 5. Require one solution matching train number, operation date, endpoints, and
-   planned timestamps. Multiple matches are rejected.
+   planned timestamps. The departure and arrival tolerance is five minutes, so
+   a similarly timed connection containing the requested train does not compete
+   with the requested direct service. Multiple exact matches are rejected.
 6. Call `GET /website/stops?cartId=...&solutionId=...` with
    `Cookie: WSESSIONID=...`.
 7. For multi-train solutions, require one detail segment whose
@@ -154,14 +156,24 @@ eight-second timeout and are not retried inside one request. When proxy
 configuration is present, the Pages Function wraps each target URL with the
 VPS proxy URL. The first `Set-Cookie` response stays server-side; only the
 validated `WSESSIONID` value is forwarded to the proxy for the matching stops
-request.
+request. `WSESSIONID` is treated as an opaque cookie value: punctuation such as
+the colon used by some sessions is preserved while every unrelated cookie is
+discarded.
 
 ## Caching and operations
 
-The Function keeps a bounded in-isolate cache and emits CDN cache headers:
+The Function keeps a bounded in-isolate cache and also uses Cloudflare's
+per-data-center Cache API:
 
-- successful enrichment: approximately 30 minutes;
+- successful enrichment: until the next midnight in `Europe/Rome`;
 - unavailable enrichment: approximately 5 minutes.
+
+The cache key includes train number, operation date, planned departure and
+arrival, and both endpoints. Concurrent identical misses inside one isolate are
+coalesced into one upstream request. A first request routed to another
+Cloudflare data center can still perform one upstream lookup because Cache API
+entries are edge-local, but repeated same-region queries do not create a new
+LeFrecce session for the rest of the Italian calendar day.
 
 Cloudflare Pages should configure the dedicated proxy variables:
 
@@ -189,9 +201,13 @@ only by the Pages Function and must never use a `PUBLIC_*` variable.
 
 `src/client/lefrecce-onboard.ts` queries only `FR`, `FA`, `FB`, `IC`, `ICN`,
 `EC`, and `EN`. Italo, Trenord, and regional categories do not call the
-endpoint. The card is placed after SmartCaring and before Swiss formation.
-LeFrecce is labeled as scheduled information; Swiss remains an independent
-real-time formation source.
+endpoint. The card is placed after SmartCaring and before Swiss formation, and
+can be collapsed independently. Its header does not repeat the provider name,
+and the UI does not add a source footnote beneath the service details.
+
+The onboard icons use the Material Symbols glyph subset declared in
+`astro.config.ts`; every emitted icon name must be included there. Swiss
+formation remains an independent real-time source.
 
 The typed image manifest expects compressed WebP files at:
 
@@ -211,9 +227,11 @@ Adding a file at the documented path requires no code change.
 
 `tests/js/lefrecce.test.ts` covers FR 9303, FR 9607, FR 9703, FR 9757, EC 301,
 EC 141 without an inferred model, station-ID conversion, cookie extraction,
-authenticated VPS proxy routing, ambiguous matching, unknown notes, and
-upstream failure. `tests/python/test_rfi_proxy.py` verifies the restricted
-LeFrecce allowlist, POST forwarding, and sanitized session-cookie forwarding.
+authenticated VPS proxy routing, strict direct-versus-connection matching,
+ambiguous matching, unknown notes, and upstream failure.
+`tests/python/test_rfi_proxy.py` verifies the restricted LeFrecce allowlist,
+POST forwarding, and sanitized session-cookie forwarding, including opaque
+values containing a colon.
 
 Before publishing:
 

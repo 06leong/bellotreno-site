@@ -21,6 +21,10 @@ rollback must restore that database together with the previous image and will
 discard observations collected after the backup.
 On the VPS, deploy published changes by pulling the GHCR images and recreating the containers; the VPS does not build these images locally.
 
+The LeFrecce route forwards only the upstream `WSESSIONID` cookie. Its value is
+kept opaque (including punctuation such as `:`), while every other cookie and
+attribute is discarded before the stops request is proxied.
+
 ## Required files on the VPS
 
 Create a local `.env` file next to `docker-compose.yml`:

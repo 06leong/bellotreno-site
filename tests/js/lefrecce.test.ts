@@ -7,7 +7,11 @@ import {
     selectLeFrecceSolution,
     selectLeFrecceTrainDetail,
 } from "../../src/lib/normalizers/lefrecce.ts";
-import { requestIsAllowed } from "../../functions/api/trenitalia/_shared.ts";
+import {
+    cacheControl,
+    requestIsAllowed,
+    successfulCacheTtlMs,
+} from "../../functions/api/trenitalia/_shared.ts";
 import { onRequestGet } from "../../functions/api/trenitalia/onboard.ts";
 
 interface ServiceFixture {
@@ -180,9 +184,37 @@ test("converts ViaggiaTreno S station IDs to LeFrecce UIC IDs", () => {
 });
 
 test("extracts only WSESSIONID from combined Set-Cookie headers", () => {
-    const header = "foo=bar; Path=/, WSESSIONID=abc123_XYZ; Path=/; Secure; HttpOnly, other=value";
-    assert.equal(extractWSessionId(header), "abc123_XYZ");
+    const header = "foo=bar; Path=/, WSESSIONID=abc123:XYZ; Path=/; Secure; HttpOnly, other=value";
+    assert.equal(extractWSessionId(header), "abc123:XYZ");
     assert.equal(extractWSessionId("foo=bar"), null);
+});
+
+test("caches successful enrichment until the next Europe/Rome midnight", () => {
+    const noonInRome = Date.parse("2026-07-25T10:00:00.000Z");
+    assert.equal(successfulCacheTtlMs(noonInRome), 12 * 60 * 60 * 1000);
+    assert.match(
+        cacheControl({
+            available: true,
+            amenities: [],
+            classServices: [],
+            fetchedAt: "2026-07-25T10:00:00.000Z",
+            notes: [],
+            operationDate: "2026-07-25",
+            provider: "trenitalia-lefrecce",
+            rollingStock: null,
+            serviceLevels: [],
+            trainNumber: "9303",
+        }, noonInRome),
+        /s-maxage=43200/,
+    );
+    assert.equal(
+        cacheControl({
+            available: false,
+            provider: "trenitalia-lefrecce",
+            reason: "upstream_unavailable",
+        }, noonInRome),
+        "public, max-age=60, s-maxage=300",
+    );
 });
 
 function searchSolution(id: string, number = "9303") {
@@ -236,6 +268,50 @@ test("rejects ambiguous solution and train-segment matches", () => {
     );
 });
 
+test("uses planned arrival to select the direct 9559 solution over a connection", () => {
+    const connectedSolution = {
+        solution: {
+            id: "9559-connected",
+            departureTime: "2026-07-25T17:00:00+02:00",
+            arrivalTime: "2026-07-25T21:40:00+02:00",
+            departureLocationId: 830002191,
+            arrivalLocationId: 830008409,
+            trains: [
+                { description: "Frecciarossa 9559" },
+                { description: "Frecciarossa 9657" },
+            ],
+        },
+    };
+    const directSolution = {
+        solution: {
+            id: "9559-direct",
+            departureTime: "2026-07-25T17:00:00+02:00",
+            arrivalTime: "2026-07-25T21:54:00+02:00",
+            departureLocationId: 830002191,
+            arrivalLocationId: 830008409,
+            trains: [{ description: "Frecciarossa 9559" }],
+        },
+    };
+
+    const selected = selectLeFrecceSolution({
+        solutions: [connectedSolution, directSolution],
+    }, {
+        arrivalAt: "2026-07-25T19:54:00.000Z",
+        departureAt: "2026-07-25T15:00:00.000Z",
+        destinationId: 830008409,
+        destinationName: "Roma Termini",
+        operationDate: "2026-07-25",
+        originId: 830002191,
+        originName: "Torino Porta Nuova",
+        trainNumber: "9559",
+    });
+
+    assert.equal(selected.status, "matched");
+    if (selected.status === "matched") {
+        assert.equal(selected.match.id, "9559-direct");
+    }
+});
+
 test("preserves unknown official service descriptions as Italian notes", () => {
     const rawNote = "Informazione ufficiale non ancora classificata.";
     const payload = normalizeLeFrecceOnboardDetail({
@@ -282,7 +358,7 @@ test("orchestrates the LeFrecce session and exposes only normalized JSON", async
             }), {
                 headers: {
                     "content-type": "application/json",
-                    "set-cookie": "WSESSIONID=private-session; Path=/; Secure; HttpOnly",
+                    "set-cookie": "WSESSIONID=private:session; Path=/; Secure; HttpOnly",
                 },
             });
         }
@@ -291,7 +367,7 @@ test("orchestrates the LeFrecce session and exposes only normalized JSON", async
         assert.match(url, /cartId=private-cart/);
         assert.match(url, /solutionId=private-solution/);
         const headers = new Headers(init?.headers);
-        assert.equal(headers.get("cookie"), "WSESSIONID=private-session");
+        assert.equal(headers.get("cookie"), "WSESSIONID=private:session");
         return new Response(JSON.stringify([{
             summary: { trainInfo: { description: "Frecciarossa 9607" } },
             stops: [{ name: "private stop list" }],
@@ -324,7 +400,7 @@ test("orchestrates the LeFrecce session and exposes only normalized JSON", async
         for (const privateValue of [
             "private-cart",
             "private-solution",
-            "private-session",
+            "private:session",
             "private base64",
             "private stop list",
             "\"prices\"",

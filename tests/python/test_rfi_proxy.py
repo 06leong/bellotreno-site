@@ -18,8 +18,8 @@ class RfiProxyTests(unittest.TestCase):
 
     def test_cookie_sanitizer_forwards_only_the_lefrecce_session(self):
         self.assertEqual(
-            lefrecce_session_cookie("other=ignored; WSESSIONID=session_123; unsafe=ignored"),
-            "WSESSIONID=session_123",
+            lefrecce_session_cookie("other=ignored; WSESSIONID=session:123; unsafe=ignored"),
+            "WSESSIONID=session:123",
         )
         self.assertEqual(lefrecce_session_cookie("other=ignored"), "")
 

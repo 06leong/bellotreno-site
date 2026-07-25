@@ -35,6 +35,12 @@ interface OnboardQuery {
     originName: string;
 }
 
+interface CloudflareCacheStorage {
+    default?: Cache;
+}
+
+const inFlightPayloads = new Map<string, Promise<CachedLeFreccePayload>>();
+
 function cleanText(value: string | null): string {
     return (value || "").trim();
 }
@@ -103,6 +109,58 @@ function responseFor(
         ...headers,
         "cache-control": cacheControl(payload),
     });
+}
+
+function defaultEdgeCache(): Cache | null {
+    return (globalThis as typeof globalThis & { caches?: CloudflareCacheStorage })
+        .caches?.default || null;
+}
+
+function edgeCacheRequest(request: Request, cacheKey: string): Request {
+    const url = new URL(request.url);
+    url.search = "";
+    url.searchParams.set("onboardCacheKey", cacheKey);
+    return new Request(url.toString(), { method: "GET" });
+}
+
+function isCachedPayload(value: unknown): value is CachedLeFreccePayload {
+    if (!value || typeof value !== "object") return false;
+    const payload = value as Partial<CachedLeFreccePayload>;
+    return payload.provider === "trenitalia-lefrecce"
+        && typeof payload.available === "boolean";
+}
+
+async function getEdgeCachedPayload(
+    request: Request,
+    cacheKey: string,
+): Promise<CachedLeFreccePayload | null> {
+    const cache = defaultEdgeCache();
+    if (!cache) return null;
+    try {
+        const response = await cache.match(edgeCacheRequest(request, cacheKey));
+        if (!response?.ok) return null;
+        const payload: unknown = await response.json();
+        return isCachedPayload(payload) ? payload : null;
+    } catch {
+        return null;
+    }
+}
+
+async function putEdgeCachedPayload(
+    request: Request,
+    cacheKey: string,
+    payload: CachedLeFreccePayload,
+): Promise<void> {
+    const cache = defaultEdgeCache();
+    if (!cache) return;
+    try {
+        await cache.put(
+            edgeCacheRequest(request, cacheKey),
+            responseFor(payload, {}),
+        );
+    } catch {
+        // Edge caching is an optimization; upstream enrichment remains fail-open.
+    }
 }
 
 function isDisabled(env: PagesEnv): boolean {
@@ -227,13 +285,32 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
     const cached = getCachedPayload(cacheKey);
     if (cached) return responseFor(cached, headers);
 
+    const edgeCached = await getEdgeCachedPayload(context.request, cacheKey);
+    if (edgeCached) {
+        cachePayload(cacheKey, edgeCached);
+        return responseFor(edgeCached, headers);
+    }
+
     try {
-        const payload = await fetchOnboardPayload(query, leFrecceProxyConfig(context.env));
+        let pending = inFlightPayloads.get(cacheKey);
+        if (!pending) {
+            pending = fetchOnboardPayload(query, leFrecceProxyConfig(context.env));
+            inFlightPayloads.set(cacheKey, pending);
+        }
+        const payload = await pending;
+        inFlightPayloads.delete(cacheKey);
         cachePayload(cacheKey, payload);
+        const edgeWrite = putEdgeCachedPayload(context.request, cacheKey, payload);
+        if (context.waitUntil) context.waitUntil(edgeWrite);
+        else await edgeWrite;
         return responseFor(payload, headers);
     } catch {
+        inFlightPayloads.delete(cacheKey);
         const payload = unavailable("upstream_unavailable");
         cachePayload(cacheKey, payload);
+        const edgeWrite = putEdgeCachedPayload(context.request, cacheKey, payload);
+        if (context.waitUntil) context.waitUntil(edgeWrite);
+        else await edgeWrite;
         return responseFor(payload, headers);
     }
 }
