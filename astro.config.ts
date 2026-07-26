@@ -23,6 +23,7 @@ const MATERIAL_SYMBOL_NAMES = [
   'close',
   'contrast',
   'construction',
+  'cookie',
   'dark_mode',
   'delete_sweep',
   'departure_board',

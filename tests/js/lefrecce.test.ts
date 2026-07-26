@@ -4,6 +4,7 @@ import {
     extractWSessionId,
     normalizeLeFrecceOnboardDetail,
     rfiStationIdToLeFrecceId,
+    rollingStockSeriesLabel,
     selectLeFrecceSolution,
     selectLeFrecceTrainDetail,
 } from "../../src/lib/normalizers/lefrecce.ts";
@@ -25,6 +26,11 @@ interface ServiceFixture {
 
 const commonWheelchair = "Treno con carrozza dotata di posto attrezzato e bagno accessibile per passeggeri su sedia a ruote.";
 const commonBar = "Treno con servizio bar.";
+
+test("suppresses rolling-stock series already present in the model label", () => {
+    assert.equal(rollingStockSeriesLabel("ETR 1000", "1000"), null);
+    assert.equal(rollingStockSeriesLabel("Giruno", "RABe 501"), "RABe 501");
+});
 
 test("allows same-origin API calls after a Cloudflare Access redirect", () => {
     const request = new Request("https://preview.bellotreno-site.pages.dev/api/trenitalia/onboard", {

@@ -23,6 +23,13 @@ export interface LeFrecceRollingStock {
     series: string | null;
 }
 
+export function rollingStockSeriesLabel(label: string, series: string | null): string | null {
+    const normalizedLabel = label.replaceAll(/[^a-z0-9]/gi, '').toLowerCase();
+    const normalizedSeries = String(series || '').replaceAll(/[^a-z0-9]/gi, '').toLowerCase();
+    if (!normalizedSeries || normalizedLabel.includes(normalizedSeries)) return null;
+    return series;
+}
+
 export interface LeFrecceOnboardItem<TCode extends string = string> {
     code: TCode;
     rawDescription: string;
