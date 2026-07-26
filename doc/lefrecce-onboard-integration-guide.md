@@ -212,16 +212,17 @@ formation remains an independent real-time source.
 The typed image manifest expects compressed WebP files at:
 
 ```text
-public/images/rolling-stock/etr-1000.webp
-public/images/rolling-stock/etr-500.webp
-public/images/rolling-stock/etr-700.webp
-public/images/rolling-stock/etr-600.webp
-public/images/rolling-stock/giruno-rabe-501.webp
+public/pic/ETR1000.webp
+public/pic/ETR500.webp
+public/pic/ETR700.webp
+public/pic/ETR600.webp
+public/pic/Giruno.webp
 ```
 
 Until a file exists, the local train icon remains visible. Images have explicit
-intrinsic dimensions, `object-fit: cover`, lazy loading, and async decoding.
-Adding a file at the documented path requires no code change.
+intrinsic dimensions, `object-fit: contain`, lazy loading, and async decoding.
+The 3:2 image stage preserves the complete photo without cropping, and the
+rolling-stock caption is rendered below it instead of covering the image.
 
 ## Validation
 

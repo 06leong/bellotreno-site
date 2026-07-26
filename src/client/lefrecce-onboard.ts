@@ -1,3 +1,5 @@
+import { rollingStockSeriesLabel } from '../lib/normalizers/lefrecce.ts';
+
 type TranslationMap = Record<string, string>;
 
 interface TrainStopLike {
@@ -62,33 +64,33 @@ const SUPPORTED_CATEGORIES = new Set(['FR', 'FA', 'FB', 'IC', 'ICN', 'EC', 'EN']
 export const ROLLING_STOCK_IMAGES: Readonly<Record<string, RollingStockImage>> = Object.freeze({
     'etr-1000': {
         alt: 'Frecciarossa ETR 1000',
-        height: 720,
-        src: '/images/rolling-stock/etr-1000.webp',
-        width: 1280
+        height: 1599,
+        src: '/pic/ETR1000.webp',
+        width: 2400
     },
     'etr-500': {
         alt: 'Frecciarossa ETR 500',
-        height: 720,
-        src: '/images/rolling-stock/etr-500.webp',
-        width: 1280
+        height: 1600,
+        src: '/pic/ETR500.webp',
+        width: 2400
     },
     'etr-700': {
         alt: 'Frecciarossa ETR 700',
-        height: 720,
-        src: '/images/rolling-stock/etr-700.webp',
-        width: 1280
+        height: 1600,
+        src: '/pic/ETR700.webp',
+        width: 2400
     },
     'etr-600': {
         alt: 'Frecciarossa ETR 600',
-        height: 720,
-        src: '/images/rolling-stock/etr-600.webp',
-        width: 1280
+        height: 1599,
+        src: '/pic/ETR600.webp',
+        width: 2400
     },
     'giruno-rabe-501': {
         alt: 'Giruno RABe 501',
-        height: 720,
-        src: '/images/rolling-stock/giruno-rabe-501.webp',
-        width: 1280
+        height: 1600,
+        src: '/pic/Giruno.webp',
+        width: 2400
     }
 });
 
@@ -105,7 +107,7 @@ const CLASS_SERVICE_ICONS: Readonly<Record<string, string>> = Object.freeze({
     'executive-meal': 'restaurant',
     'business-welcome': 'room_service',
     'business-catering': 'restaurant',
-    'premium-catering': 'restaurant'
+    'premium-catering': 'cookie'
 });
 
 function t(): TranslationMap {
@@ -229,9 +231,10 @@ export function renderLeFrecceOnboardLoading(): void {
 
 function createMedia(payload: LeFrecceOnboardPayload): HTMLElement {
     const media = createNode('div', 'onboard-media');
+    const imageStage = createNode('div', 'onboard-image-stage');
     const fallback = createNode('div', 'onboard-media-fallback');
     fallback.append(icon('train', 'material-symbols-outlined onboard-media-icon'));
-    media.append(fallback);
+    imageStage.append(fallback);
 
     const imageSpec = payload.rollingStock
         ? ROLLING_STOCK_IMAGES[payload.rollingStock.code]
@@ -245,7 +248,7 @@ function createMedia(payload: LeFrecceOnboardPayload): HTMLElement {
         image.loading = 'lazy';
         image.decoding = 'async';
         image.addEventListener('error', () => image.remove(), { once: true });
-        media.append(image);
+        imageStage.append(image);
     }
 
     const caption = createNode('div', 'onboard-stock-caption');
@@ -260,10 +263,14 @@ function createMedia(payload: LeFrecceOnboardPayload): HTMLElement {
         payload.rollingStock?.label || t().onboard_stock_unavailable || 'Not specified'
     );
     caption.append(planned, model);
-    if (payload.rollingStock?.series && payload.rollingStock.series !== payload.rollingStock.label) {
-        caption.append(createNode('span', 'onboard-stock-series', payload.rollingStock.series));
+    const series = rollingStockSeriesLabel(
+        payload.rollingStock?.label || '',
+        payload.rollingStock?.series || null
+    );
+    if (series) {
+        caption.append(createNode('span', 'onboard-stock-series', series));
     }
-    media.append(caption);
+    media.append(imageStage, caption);
     return media;
 }
 
