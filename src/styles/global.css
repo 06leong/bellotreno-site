@@ -3920,6 +3920,8 @@ button.swiss-section-title {
     align-items: center;
     justify-self: end;
     gap: 7px;
+    width: fit-content;
+    max-width: 100%;
     margin-top: -7px;
     padding: 2px 3px;
     border: 0;
@@ -3927,6 +3929,7 @@ button.swiss-section-title {
     color: var(--statistics-blue);
     font-size: 0.72rem;
     font-weight: 740;
+    text-align: left;
     cursor: pointer;
 }
 
@@ -5042,9 +5045,10 @@ button.swiss-section-title {
     }
 
     .statistics-latest-complete {
-        justify-self: start;
+        justify-self: center;
         margin-top: -3px;
         font-size: 0.76rem;
+        text-align: center;
     }
 
     .statistics-date-field {
@@ -5087,10 +5091,14 @@ button.swiss-section-title {
 
     .statistics-meta-item {
         display: grid;
-        grid-template-columns: auto 1fr;
+        grid-template-columns: auto auto;
         align-content: center;
+        align-items: center;
+        justify-content: center;
+        justify-items: center;
         min-height: 66px;
         padding: 8px 9px;
+        text-align: center;
         white-space: normal;
     }
 
@@ -5101,8 +5109,10 @@ button.swiss-section-title {
 
     .statistics-meta-item strong {
         grid-column: 1 / -1;
+        width: 100%;
         overflow: visible;
         font-size: 0.7rem;
+        text-align: center;
         text-overflow: clip;
         white-space: normal;
     }
