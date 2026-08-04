@@ -348,7 +348,7 @@ import {
         return new Intl.DateTimeFormat(window.currentLang === "zh" ? "zh-CN" : window.currentLang === "it" ? "it-IT" : "en-GB", {
             timeZone: "Europe/Rome",
             dateStyle: "medium",
-            timeStyle: "medium"
+            timeStyle: "short"
         }).format(date);
     }
 
@@ -450,6 +450,12 @@ import {
             .sort((left, right) => right.date.localeCompare(left.date));
     }
 
+    function latestCompleteDay(): StatisticsCoverageDay | null {
+        return state.days
+            .filter((day) => day.comparisonEligible && day.v2Available && day.coverageStatus === "complete")
+            .sort((left, right) => right.date.localeCompare(left.date))[0] || null;
+    }
+
     function syncComparisonDate(): void {
         const candidates = comparisonCandidates();
         if (state.compareDate && candidates.some((day) => day.date === state.compareDate)) {
@@ -470,9 +476,14 @@ import {
     function fillComparisonSelect(): void {
         const select = $<HTMLSelectElement>("statisticsCompareDate");
         if (!select) return;
+        const selected = state.days.find((day) => day.date === state.date);
         const placeholder = document.createElement("option");
         placeholder.value = "";
-        placeholder.textContent = tr("statistics_no_comparable_day", "No complete comparison day yet");
+        placeholder.textContent = selected?.coverageStatus === "live"
+            ? tr("statistics_compare_live_day", "Live dates cannot be compared directly")
+            : selected && selected.coverageStatus !== "complete"
+                ? tr("statistics_compare_ineligible_day", "The selected date is not eligible for comparison")
+                : tr("statistics_no_earlier_complete_day", "No earlier complete comparison day");
         const options = comparisonCandidates().map((day) => {
             const option = document.createElement("option");
             option.value = day.date;
@@ -483,6 +494,22 @@ import {
         replaceChildrenSafe(select, [placeholder, ...options]);
         select.value = state.compareDate;
         select.disabled = options.length === 0;
+
+        const latestCompleteButton = $<HTMLButtonElement>("statisticsLatestComplete");
+        if (latestCompleteButton) {
+            const latest = latestCompleteDay();
+            const shouldShow = Boolean(latest && selected && selected.coverageStatus !== "complete");
+            latestCompleteButton.hidden = !shouldShow;
+            latestCompleteButton.title = latest
+                ? `${tr("statistics_view_latest_complete", "View latest complete day")}: ${formatDate(latest.date)}`
+                : "";
+            const label = latestCompleteButton.querySelector<HTMLElement>("span:last-child");
+            if (label) {
+                label.textContent = latest
+                    ? `${tr("statistics_view_latest_complete", "View latest complete day")} · ${formatDate(latest.date)}`
+                    : tr("statistics_view_latest_complete", "View latest complete day");
+            }
+        }
     }
 
     function fillCategorySelect(): void {
@@ -699,16 +726,19 @@ import {
                 : tr("statistics_comparison_ready", "Metric changes use the same daily definitions and a complete baseline.");
         } else {
             icon.textContent = "info";
-            title.textContent = tr("statistics_comparison_pending", "Not enough complete data for a daily comparison");
             if (selected?.coverageStatus === "live") {
+                title.textContent = tr("statistics_comparison_live_title", "Viewing live observations");
                 detail.textContent = tr("statistics_comparison_live_day", "A live partial day is not compared with a completed day.");
             } else if (selected?.coverageStatus === "partial") {
+                title.textContent = tr("statistics_comparison_ineligible_title", "This date is not used for daily comparison");
                 detail.textContent = selected.reason === "incomplete_collection_day"
                     ? tr("statistics_comparison_incomplete_day", "This day has incomplete collection evidence and cannot be used for comparison.")
                     : tr("statistics_comparison_partial_day", "The rollout day is partial and cannot be used for comparison.");
             } else if (!selected?.v2Available) {
+                title.textContent = tr("statistics_comparison_ineligible_title", "This date is not used for daily comparison");
                 detail.textContent = tr("statistics_comparison_before_coverage", "This date predates detailed v2 observations.");
             } else {
+                title.textContent = tr("statistics_comparison_pending", "Not enough complete data for a daily comparison");
                 detail.textContent = tr("statistics_comparison_accumulating", "Comparison becomes available after two complete eligible days exist.");
             }
         }
@@ -815,7 +845,7 @@ import {
             metricCardElement("monitored", "train", tr("statistics_monitored", "Monitored trains"), formatNumber(values.monitored), monitoredNote.text, monitoredNote.tone),
             metricCardElement("regularity", "check_circle", tr("statistics_regularity_rate", "Regularity rate"), pct(regularity), regularityNote.text, regularityNote.tone),
             metricCardElement("cancellation", "cancel", tr("statistics_cancellation_rate", "Cancellation rate"), pct(cancellationRate), cancellationNote.text, cancellationNote.tone),
-            metricCardElement("avg_delay", "schedule", tr("statistics_avg_delay", "Average delay"), formatMinutes(values.avgDelay), delayNote.text, delayNote.tone)
+            metricCardElement("avg_delay", "schedule", tr("statistics_avg_observed_delay", "Avg observed max delay"), formatMinutes(values.avgDelay), delayNote.text, delayNote.tone)
         ]);
     }
 
@@ -925,7 +955,7 @@ import {
             const labelEl = document.createElement("span");
             labelEl.textContent = label;
             replaceChildrenSafe(tooltip, [valueEl, labelEl]);
-            tooltip.style.left = `${(asNumber(point.dataset.x, 0) / 680) * 100}%`;
+            tooltip.style.left = `clamp(48px, ${(asNumber(point.dataset.x, 0) / 680) * 100}%, calc(100% - 48px))`;
             tooltip.style.top = `${(asNumber(point.dataset.y, 0) / 260) * 100}%`;
             tooltip.hidden = false;
         };
@@ -1344,6 +1374,7 @@ import {
 
     function buildTableMessageRow(message: string, colspan: number): HTMLTableRowElement {
         const row = document.createElement("tr");
+        row.className = "statistics-table-message";
         const cell = document.createElement("td");
         cell.colSpan = colspan;
         cell.textContent = message;
@@ -1382,8 +1413,10 @@ import {
         } else {
             const rows = state.tableItems.map((item, index) => {
                 const row = document.createElement("tr");
-                columns.forEach(([column]) => {
+                columns.forEach(([column, label]) => {
                     const cell = document.createElement("td");
+                    cell.dataset.column = column;
+                    cell.dataset.label = label;
                     appendItemCellContent(cell, item, column, index);
                     row.appendChild(cell);
                 });
@@ -1516,6 +1549,16 @@ import {
             state.compareDate = (event.currentTarget as HTMLSelectElement).value;
             state.comparisonSummary = null;
             syncComparisonDate();
+            loadCore();
+        });
+        $<HTMLButtonElement>("statisticsLatestComplete")?.addEventListener("click", () => {
+            const latest = latestCompleteDay();
+            if (!latest) return;
+            state.date = latest.date;
+            state.compareDate = "";
+            state.comparisonBaseline = null;
+            state.comparisonSummary = null;
+            state.page = 1;
             loadCore();
         });
         document.querySelectorAll<HTMLElement>(".statistics-tab").forEach((tab) => {
