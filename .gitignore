@@ -16,6 +16,10 @@ pnpm-debug.log*
 __pycache__/
 *.py[cod]
 
+# local statistics archive output
+rfi-proxy/statistics-data/
+rfi-proxy/statistics-archive/
+
 # environment variables
 .env*
 !.env.example

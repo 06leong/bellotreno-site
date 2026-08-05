@@ -1,0 +1,15 @@
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+COPY archive-requirements.txt .
+RUN pip install --no-cache-dir -r archive-requirements.txt \
+    && python -c "import duckdb; connection=duckdb.connect(); connection.execute('INSTALL sqlite'); connection.execute('LOAD sqlite'); connection.close()"
+
+COPY archive_statistics.py .
+
+ENTRYPOINT ["python", "-u", "archive_statistics.py"]
+CMD ["plan"]

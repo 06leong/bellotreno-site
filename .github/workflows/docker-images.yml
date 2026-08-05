@@ -32,6 +32,10 @@ jobs:
             image: ghcr.io/06leong/bellotreno-statistics
             context: ./rfi-proxy/statistics
             file: ./rfi-proxy/statistics/Dockerfile
+          - name: bellotreno-statistics-archive
+            image: ghcr.io/06leong/bellotreno-statistics-archive
+            context: ./rfi-proxy/statistics
+            file: ./rfi-proxy/statistics/Dockerfile.archive
 
     steps:
       - name: Checkout

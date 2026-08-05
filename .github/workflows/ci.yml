@@ -12,6 +12,7 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  STATISTICS_ARCHIVE_TESTS_REQUIRED: "true"
 
 jobs:
   baseline:
@@ -41,6 +42,26 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install statistics archive test dependency
+        run: |
+          python -m pip install --disable-pip-version-check -r rfi-proxy/statistics/archive-requirements.txt
+          python -c "import duckdb; connection=duckdb.connect(); connection.execute('INSTALL sqlite'); connection.execute('LOAD sqlite'); connection.close()"
+
+      - name: Build statistics archive image
+        run: >-
+          docker build
+          --file rfi-proxy/statistics/Dockerfile.archive
+          --tag bellotreno-statistics-archive:ci
+          rfi-proxy/statistics
+
+      - name: Smoke test offline archive image
+        run: |
+          docker run --rm --network none --read-only --tmpfs /tmp:size=16m \
+            --entrypoint python bellotreno-statistics-archive:ci \
+            -c 'import sqlite3,duckdb; from zoneinfo import ZoneInfo; assert ZoneInfo("Europe/Rome").key == "Europe/Rome"; source=sqlite3.connect("/tmp/smoke.db"); source.execute("CREATE TABLE sample(value INTEGER)"); source.execute("INSERT INTO sample VALUES (42)"); source.commit(); source.close(); target=duckdb.connect(); target.execute("LOAD sqlite"); target.execute("ATTACH '\''/tmp/smoke.db'\'' AS source (TYPE sqlite, READ_ONLY)"); assert target.execute("SELECT value FROM source.sample").fetchone()[0] == 42; target.close()'
+          docker run --rm --network none --read-only \
+            bellotreno-statistics-archive:ci --help
+
       - name: Build frontend
         run: npm run build
 
@@ -52,4 +73,4 @@ jobs:
         env:
           RFI_PROXY_SECURITY_TOKEN: ci-rfi-proxy-token
           STATISTICS_SECURITY_TOKEN: ci-statistics-token
-        run: docker compose config
+        run: docker compose --profile archive config

@@ -52,6 +52,9 @@ typed guards, local interfaces, normalizers, or explicit fallback behavior.
 - Node scripts live in `scripts/**/*.ts`.
 - VPS Python services live in `rfi-proxy/` and are intentionally outside the
   TypeScript migration.
+- `rfi-proxy/statistics/archive_statistics.py` is the offline, one-shot
+  SQLite-to-Parquet archive tool. Its Compose profile mounts the production
+  data directory read-only and must never delete or compact the live database.
 
 Do not add new browser source under `public/scripts/`. Runtime code must be
 authored in TypeScript and bundled by Astro/Vite into hashed `/_astro/*` assets.
@@ -218,6 +221,8 @@ Current risk tracking lives in `doc/innerhtml-audit.md`.
 - The frontend calls only `/api/statistics/*`.
 - The browser must not know `STATISTICS_API_TOKEN`.
 - The VPS collector stores SQLite data in the `statistics-data` volume.
+- Long-term Parquet export runs through the separate `archive` Compose profile;
+  do not add DuckDB or archive credentials to the always-on statistics image.
 - `STATISTICS_BOARD_TYPES=partenze,arrivi` means both board types are fetched.
   Keep each station board type as a separate concurrent task.
 - Statistics are observable operational data, not an official full-network
@@ -245,7 +250,7 @@ If `rfi-proxy/` or Docker deployment config changes:
 
 ```bash
 cd rfi-proxy
-docker compose config
+docker compose --profile archive config
 ```
 
 For frontend changes, smoke test:

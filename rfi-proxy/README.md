@@ -4,14 +4,20 @@ This folder contains the VPS-side services used by BelloTreno:
 
 - `rfi-proxy`: the ViaggiaTreno/RFI/Italo/Trenord/LeFrecce proxy on port `8080`.
 - `bellotreno-statistics`: the statistics collector/API on port `8081`.
+- `bellotreno-statistics-archive`: an offline, one-shot local Parquet archive
+  job enabled only through the `archive` Compose profile.
 
-Both Python services target Python 3.11, matching the repository CI runtime.
+The two always-on Python services and the one-shot archive image target Python
+3.11, matching the repository CI runtime.
 
-Both services are started by the same `docker-compose.yml` and share the external Docker network `bellotreno-network`.
+The two always-on services are started by the same `docker-compose.yml` and
+share the external Docker network `bellotreno-network`; the archive job is
+defined in that file but starts only when its profile is requested.
 The production compose file pulls prebuilt GHCR images:
 
 - `ghcr.io/06leong/bellotreno-rfi-proxy:latest`
 - `ghcr.io/06leong/bellotreno-statistics:latest`
+- `ghcr.io/06leong/bellotreno-statistics-archive:latest`
 
 Each image is also published with a `sha-<commit>` tag. After the normalized
 storage release starts writing compressed legacy raw payloads, an image-only
@@ -63,10 +69,147 @@ STATISTICS_STATION_CSV_PATH=/data/stations.csv
 STATISTICS_SCHEDULE_OFFSET_MINUTES=5
 STATISTICS_FINALIZE_TIME=23:55
 STATISTICS_CATCHUP_GRACE_MINUTES=20
+
+# Optional local archive tuning
+STATISTICS_ARCHIVE_SAFETY_GIB=5
+STATISTICS_ARCHIVE_ENDED_DAY_READY_HOUR=2
+STATISTICS_ARCHIVE_DUCKDB_MEMORY_LIMIT=256MB
+STATISTICS_ARCHIVE_DUCKDB_THREADS=1
+STATISTICS_ARCHIVE_DUCKDB_MAX_TEMP_DIRECTORY_SIZE=4GB
 ```
 
 Do not commit `.env`. Use `.env.example` as the template.
 The statistics collector reads the `STATISTICS_*` values inside the Flask app. Changing these values on the VPS only requires `docker compose up -d` after the updated image has been pulled.
+
+## Local statistics archive (phase 1)
+
+The `bellotreno-statistics-archive` image is a separate one-shot tool. It is
+not started by normal `docker compose up -d` because it belongs to the
+`archive` profile. Its source mount is read-only at
+`/source/statistics.db`; the only persistent writable mount is the local
+`./statistics-archive` directory at `/archive`. The container also has no
+network and runs with a read-only root filesystem, all Linux capabilities
+dropped, and `no-new-privileges` enabled.
+
+Phase 1 is deliberately local-only:
+
+- it does not connect to R2 or any other remote service;
+- it does not delete or compact the live SQLite database;
+- it does not automatically delete earlier local archives or work owned by the
+  operator;
+- a successful archive therefore does not reduce VPS disk usage by itself.
+
+The archive keeps the service-day and observation-day grains separate:
+
+- `train_observations`, collector runs, snapshots, and station/relation daily
+  aggregates are published only after their collection day has ended (D+1);
+- `train_services` and `train_stop_events` are published only after the active
+  service window has elapsed (D+8 with the default seven-day TTL), so an
+  overnight or severely delayed train can finish updating first;
+- `station_registry` is saved as a dated dimension snapshot;
+- legacy `trains`/`train_stops` and short-lived raw payload BLOBs are not copied
+  into the long-term dataset.
+
+Files are written as ZSTD-compressed Parquet under Hive-style partition paths.
+A `.complete.json` manifest records row counts, primary keys, date bounds,
+schema fingerprints, file sizes, and SHA-256 checksums. A partition is treated
+as published only after that manifest is atomically committed, which also makes
+repeated runs idempotent.
+
+Published partitions are immutable. If a still-retained live partition later
+has a different row count, `plan` and `run` fail instead of silently ignoring
+the late rows. The normal collector contract does not backfill ended collection
+days or services after the D+8 stability boundary; an intentional historical
+repair therefore requires an explicit future archive-revision workflow rather
+than overwriting a schema-v1 file.
+
+When no explicit `--as-of-date` is supplied, a run before
+`STATISTICS_ARCHIVE_ENDED_DAY_READY_HOUR` (02:00 Europe/Rome by default)
+uses the preceding day as its cutoff. This prevents a just-ended calendar day
+from being frozen while its final collector slot may still be finishing. The
+archive also holds an exclusive process lock, so a timer and a manual run cannot
+publish the same partition concurrently.
+
+The ready hour is only a post-midnight safety delay; it does not claim that the
+previous collection day is complete. The archive inherits the collector's
+cadence, schedule offset, finalization time, and relevant retention
+windows from the same `STATISTICS_*` settings. The effective service retention
+also follows the collector's maximum of service, observation, raw-payload, and
+active-service windows. Each ended date is labelled
+`complete`, `partial`, or `unavailable` in the manifest using the same
+collector-run and snapshot-slot rules as the statistics API. Recoverable
+zero-observation dates receive an explicit zero-row Parquet partition, while
+older dates already lost outside the live retention window are reported as
+historical gaps and are never fabricated as empty data.
+
+Run every archive command from the Compose directory so the relative bind
+mounts and `.env` resolve consistently on Linux, Windows, and Docker Desktop:
+
+Before the first run, update the VPS copy of `docker-compose.yml` from the
+merged repository version. An older Compose file does not know the archive
+service; pulling its image alone is not sufficient.
+
+```bash
+cd /home/docker_apps/rfi-proxy
+mkdir -p statistics-archive
+
+docker compose --profile archive pull bellotreno-statistics-archive
+docker compose --profile archive run --rm bellotreno-statistics-archive plan
+```
+
+`plan` is the preflight: review its source dates, selected partitions, disk
+estimate, and free-space decision before continuing. The default safety reserve
+is 5 GiB; the capacity gate also reserves room for the configured DuckDB spill
+limit in addition to the SQLite snapshot and conservative Parquet allowance.
+The safety reserve can be adjusted with `STATISTICS_ARCHIVE_SAFETY_GIB`; do not
+lower it merely to make a full disk pass.
+
+`continuityOk: false` or a non-zero `historicalPartitionGapCount` does not make
+`run` exit non-zero: the job still preserves every currently recoverable
+partition, but the resulting dataset has an explicitly recorded historical
+gap and must not be described as complete. Run the archive daily where
+possible, and always at an interval comfortably shorter than the shortest
+30-day live retention window.
+
+The SQLite Backup API phase prints progress in ten-percent steps. Dataset names,
+partition dates, and row counts are also printed while exporting, so a first
+multi-gigabyte run should not look stalled.
+
+Create the local archive only after the plan succeeds:
+
+```bash
+docker compose --profile archive run --rm bellotreno-statistics-archive run
+```
+
+The first run creates a consistent copy of the multi-gigabyte SQLite database
+and can compete with the collector for disk I/O. Start it during a quieter
+period after checking that the latest collector run succeeded; after it
+finishes, check the next collector duration and detail-failure count before
+scheduling recurring runs.
+
+Then run the independent local verifier and inspect the retained output size:
+
+```bash
+docker compose --profile archive run --rm bellotreno-statistics-archive verify
+du -sh statistics-archive
+```
+
+`verify` checks the newest complete manifest. Use `verify --all` for a deeper
+periodic pass over every published manifest. If `run` fails, it leaves its
+diagnostic directory under `statistics-archive/work/`; inspect the error before
+manually removing only that failed run directory.
+
+The container currently writes archive files as root, matching the documented
+VPS commands. If a non-root operator will manage the output directly, set an
+intentional ownership policy for `statistics-archive` before scheduling the
+job rather than recursively changing ownership after every run.
+
+Treat a non-zero `plan`, `run`, or `verify` exit code as a failed operation.
+Do not remove `statistics-archive`, an old SQLite rollback copy, or any source
+row on the strength of `run` alone. Deletion requires a successful `verify`
+and, in a later remote-archive phase, an independently downloaded and verified
+off-VPS copy. Until then, monitor `df -h` before each run and clean up only by
+an explicit operator decision.
 
 ## Statistics collection model
 
