@@ -327,6 +327,23 @@ def list_prepared_snapshots(
     max_age_hours: int = DEFAULT_MAX_AGE_HOURS,
     now: datetime | None = None,
 ) -> list[PreparedSnapshot]:
+    handoff_root = Path(root)
+    _require_directory(handoff_root, label="snapshot handoff root")
+    snapshots_candidate = handoff_root / "snapshots"
+    receipts_candidate = handoff_root / "receipts"
+    if (
+        not snapshots_candidate.exists()
+        and not snapshots_candidate.is_symlink()
+        and not receipts_candidate.exists()
+        and not receipts_candidate.is_symlink()
+    ):
+        unexpected = sorted(item.name for item in handoff_root.iterdir())
+        if unexpected:
+            raise RuntimeError(
+                "snapshot handoff root has unexpected artifacts before initialization: "
+                + ", ".join(unexpected)
+            )
+        return []
     handoff_root, _, receipts_root = _existing_handoff_directories(root)
     identifiers: list[str] = []
     for receipt_path in receipts_root.iterdir():

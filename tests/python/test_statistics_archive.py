@@ -105,6 +105,15 @@ def create_source_database(path: Path) -> None:
                 arrival_expected_date TEXT,
                 PRIMARY KEY (service_date, train_key, stop_number)
             ) WITHOUT ROWID;
+            CREATE TABLE train_raw_payloads (
+                service_date TEXT NOT NULL,
+                train_key TEXT NOT NULL,
+                observed_at TEXT NOT NULL,
+                payload BLOB NOT NULL,
+                payload_format TEXT NOT NULL DEFAULT 'zlib-json-v1',
+                payload_quality INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (service_date, train_key)
+            ) WITHOUT ROWID;
 
             CREATE TABLE collector_runs (
                 slot_at TEXT PRIMARY KEY,
@@ -155,6 +164,9 @@ def create_source_database(path: Path) -> None:
                 ('2026-07-20', '100-S001-1784502000000', 1, 'S004', '2026-07-21'),
                 ('2026-07-20', '100-S002-1784505600000', 0, 'S002', '2026-07-21'),
                 ('2026-08-02', '200-S003-1785711600000', 0, 'S003', '2026-08-02');
+            INSERT INTO train_raw_payloads VALUES
+                ('2026-07-20', '100-S001-1784502000000', '2026-07-21T01:05:00Z', X'789C0102', 'zlib-json-v1', 10),
+                ('2026-08-02', '200-S003-1785711600000', '2026-08-04T08:05:00Z', X'789C0304', 'zlib-json-v1', 20);
 
             INSERT INTO collector_runs VALUES ('2026-08-03T22:05:00Z', '2026-08-03', 'success');
             INSERT INTO snapshots VALUES (1, '2026-08-03', '2026-08-03T22:05:00Z', 'success');
@@ -230,10 +242,46 @@ class StatisticsArchiveTest(unittest.TestCase):
         self.assertEqual(datasets["train_services"]["pending"], 1)
         self.assertEqual(datasets["train_services"]["newestPending"], "2026-07-20")
         self.assertEqual(datasets["train_stop_events"]["pending"], 1)
+        self.assertNotIn("train_raw_payloads", datasets)
+        self.assertFalse(plan["includeRawPayloads"])
+        self.assertEqual(plan["rawPayloadPendingBytes"], 0)
         self.assertEqual(datasets["station_registry"]["pending"], 1)
         self.assertTrue(plan["continuityOk"])
         self.assertEqual(plan["collectionDayQuality"]["unavailable"], 2)
         self.assertEqual(plan["collectionDayQuality"]["partial"], 1)
+
+    def test_optional_raw_payload_plan_uses_its_own_retention_and_capacity(self):
+        config = replace(
+            self.config,
+            include_raw_payloads=True,
+            raw_payload_retention_days=30,
+        )
+
+        plan = build_plan(config)
+        datasets = {item["dataset"]: item for item in plan["datasets"]}
+        raw = datasets["train_raw_payloads"]
+
+        self.assertTrue(plan["includeRawPayloads"])
+        self.assertEqual(raw["pending"], 1)
+        self.assertEqual(raw["oldestPending"], "2026-07-20")
+        self.assertEqual(plan["rawPayloadPendingBytes"], 4)
+        self.assertEqual(plan["rawPayloadCapacityReserveBytes"], 1024**2)
+        self.assertEqual(
+            plan["requiredFreeBytes"],
+            plan["databaseBytes"]
+            + plan["duckdbMaxTempBytes"]
+            + plan["rawPayloadCapacityReserveBytes"],
+        )
+
+    def test_optional_raw_payload_archive_requires_a_safe_retention_window(self):
+        with self.assertRaisesRegex(ValueError, "retention to exceed"):
+            build_plan(
+                replace(
+                    self.config,
+                    include_raw_payloads=True,
+                    raw_payload_retention_days=7,
+                )
+            )
 
     def test_future_as_of_date_is_rejected(self):
         args = types.SimpleNamespace(
@@ -537,6 +585,43 @@ class StatisticsArchiveTest(unittest.TestCase):
         }
         self.assertEqual(quality_by_date["2026-08-02"]["coverageStatus"], "unavailable")
         self.assertEqual(quality_by_date["2026-08-03"]["coverageStatus"], "partial")
+
+    @unittest.skipUnless(
+        DUCKDB_SQLITE_AVAILABLE,
+        "DuckDB with its preinstalled sqlite extension is required",
+    )
+    def test_optional_raw_payload_archive_preserves_the_compressed_blob(self):
+        import duckdb
+
+        config = replace(
+            self.config,
+            include_raw_payloads=True,
+            raw_payload_retention_days=30,
+        )
+        result = archive_run(config)
+
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["publishedPartitions"], 17)
+        manifest = json.loads(
+            (self.archive / result["manifest"]).read_text(encoding="utf-8")
+        )
+        raw_item = next(
+            item
+            for item in manifest["datasets"]
+            if item["dataset"] == "train_raw_payloads"
+        )
+        self.assertEqual(raw_item["rows"], 1)
+        self.assertEqual(raw_item["primaryKey"], ["service_date", "train_key"])
+        raw_path = self.archive / raw_item["path"]
+        with duckdb.connect() as connection:
+            payload, payload_format, payload_quality = connection.execute(
+                "SELECT payload, payload_format, payload_quality FROM read_parquet(?)",
+                [str(raw_path)],
+            ).fetchone()
+        self.assertEqual(payload, b"\x78\x9c\x01\x02")
+        self.assertEqual(payload_format, "zlib-json-v1")
+        self.assertEqual(payload_quality, 10)
+        self.assertEqual(verify_archives(config)["verifiedPartitions"], 17)
 
     @unittest.skipUnless(
         DUCKDB_SQLITE_AVAILABLE,

@@ -83,6 +83,7 @@ STATISTICS_ARCHIVE_ENDED_DAY_READY_HOUR=2
 STATISTICS_ARCHIVE_DUCKDB_MEMORY_LIMIT=256MB
 STATISTICS_ARCHIVE_DUCKDB_THREADS=1
 STATISTICS_ARCHIVE_DUCKDB_MAX_TEMP_DIRECTORY_SIZE=4GB
+STATISTICS_ARCHIVE_INCLUDE_RAW_PAYLOADS=false
 ```
 
 Do not commit `.env`. Use `.env.example` as the template.
@@ -106,8 +107,11 @@ or mounts the live WAL-mode database:
    missing, changed, invalid, or older-than-policy receipt rather than silently
    switching to a newer database.
 4. `snapshot_statistics.py release --snapshot-id EXACT` removes only that
-   handoff database and receipt. Run it only after local verification and an
-   independently verified off-VPS copy.
+   handoff database and receipt. In the current explicitly local-only phase,
+   run it after `verify --all` succeeds so the 9.5-GiB handoff does not consume
+   permanent disk space; this leaves the Parquet archive in the same failure
+   domain as production and is not a backup. Once an off-VPS target is enabled,
+   require an independently downloaded and verified copy before release.
 
 The archive container remains one-shot and is not started by ordinary
 `docker compose up -d`. It has a read-only root filesystem, all Linux
@@ -132,9 +136,28 @@ The archive keeps the service-day and observation-day grains separate:
 - `train_services` and `train_stop_events` are published only after the active
   service window has elapsed (D+8 with the default seven-day TTL), so an
   overnight or severely delayed train can finish updating first;
+- `train_raw_payloads` can optionally be published at the same stable-service
+  boundary. It preserves the latest accepted, already zlib-compressed
+  ViaggiaTreno detail payload for each service, not every response or every
+  observation;
 - `station_registry` is saved as a dated dimension snapshot;
-- legacy `trains`/`train_stops` and short-lived raw payload BLOBs are not copied
-  into the long-term dataset.
+- legacy `trains`/`train_stops` are not copied into the long-term dataset.
+
+Raw-payload export is deliberately disabled by default. Enable it with
+`STATISTICS_ARCHIVE_INCLUDE_RAW_PAYLOADS=true` only after increasing
+`STATISTICS_RAW_PAYLOAD_RETENTION_DAYS` beyond
+`STATISTICS_ACTIVE_SERVICE_TTL_DAYS`; otherwise a D+8 service can expire before
+it becomes eligible. `plan` fails closed on that unsafe combination. It reports
+the pending compressed payload bytes and adds the larger of 1 MiB or 110% of
+that value to the normal free-space requirement. This is an additional guard,
+not a storage forecast: immutable raw partitions keep accumulating until an
+operator deliberately changes the storage policy.
+
+Raw history already expired before this option is enabled is reported as a
+historical partition gap and is never recreated as an empty day. Because the
+source table stores one latest payload per service, this optional dataset is
+useful for later parser improvements and audits but is not a replay log of every
+ViaggiaTreno call.
 
 Files are written as ZSTD-compressed Parquet under Hive-style partition paths.
 A `.complete.json` manifest records row counts, primary keys, date bounds,
@@ -483,13 +506,15 @@ Retention is configured independently:
 | `STATISTICS_RETENTION_DAYS` | 30 | Legacy daily tables and aggregates |
 | `STATISTICS_V2_SERVICE_RETENTION_DAYS` | 90 | Nominal cutoff for normalized `train_services` and stop facts, keyed by `service_date`; a retained observation keeps its parent service |
 | `STATISTICS_V2_OBSERVATION_RETENTION_DAYS` | 30 | `train_observations`, keyed by `collection_date` |
-| `STATISTICS_RAW_PAYLOAD_RETENTION_DAYS` | 7 | `train_raw_payloads`, expired by payload `observed_at` |
+| `STATISTICS_RAW_PAYLOAD_RETENTION_DAYS` | 7 | `train_raw_payloads`, expired by payload `observed_at`; production may raise this before enabling optional raw Parquet export |
 
 Legacy `trains.raw_json` stores one compressed parent payload per collection-day
 train row and expires with the 30-day legacy row. New `train_stops` rows do not
 store another duplicate per-stop payload; the detail route reconstructs it from
 that date-specific parent and uses `'{}'` when no matching parent is available.
-The additional v2 service-level raw copy remains shorter-lived at seven days.
+The additional v2 service-level raw copy remains shorter-lived at seven days by
+default. Production can raise this window independently; doing so affects only
+future cleanup and cannot restore payloads that have already expired.
 This representation is forward-compatible with the new image but not readable
 by older statistics images, so keep the pre-deploy database backup until the
 new collector and API have completed their production verification window.

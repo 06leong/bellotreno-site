@@ -74,6 +74,14 @@ DATASETS: tuple[DatasetSpec, ...] = (
         "stable_service",
     ),
     DatasetSpec(
+        "train_raw_payloads",
+        "train_raw_payloads",
+        "service_date",
+        "service_date",
+        ("service_date", "train_key"),
+        "stable_service",
+    ),
+    DatasetSpec(
         "collector_runs",
         "collector_runs",
         "collection_date",
@@ -152,6 +160,7 @@ class ArchiveConfig:
     legacy_retention_days: int = 30
     service_retention_days: int = 90
     raw_payload_retention_days: int = 7
+    include_raw_payloads: bool = False
     retention_reference_date: date | None = None
     prepared_snapshot: PreparedSnapshot | None = None
 
@@ -299,6 +308,10 @@ class ArchiveConfig:
             minimum=1,
             maximum=3650,
         )
+        include_raw_payloads = _strict_bool(
+            os.environ.get("ARCHIVE_INCLUDE_RAW_PAYLOADS", "false"),
+            name="ARCHIVE_INCLUDE_RAW_PAYLOADS",
+        )
         service_retention_days = (
             configured_service_retention_days
             if snapshot_policy
@@ -338,6 +351,7 @@ class ArchiveConfig:
             legacy_retention_days=legacy_retention_days,
             service_retention_days=service_retention_days,
             raw_payload_retention_days=raw_payload_retention_days,
+            include_raw_payloads=include_raw_payloads,
             retention_reference_date=(
                 snapshot_policy.retention_reference_date
                 if snapshot_policy
@@ -383,6 +397,26 @@ def _bounded_float(value: Any, *, name: str, minimum: float, maximum: float) -> 
     if parsed < minimum or parsed > maximum:
         raise ValueError(f"{name} must be between {minimum:g} and {maximum:g}")
     return parsed
+
+
+def _strict_bool(value: Any, *, name: str) -> bool:
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{name} must be true or false")
+
+
+def configured_datasets(config: ArchiveConfig) -> tuple[DatasetSpec, ...]:
+    if not config.include_raw_payloads:
+        return tuple(spec for spec in DATASETS if spec.name != "train_raw_payloads")
+    if config.raw_payload_retention_days <= config.active_service_ttl_days:
+        raise ValueError(
+            "ARCHIVE_INCLUDE_RAW_PAYLOADS requires raw payload retention to exceed "
+            "the active service TTL so D+8 partitions remain recoverable"
+        )
+    return DATASETS
 
 
 def utc_now_iso() -> str:
@@ -681,7 +715,11 @@ def recoverable_calendar(
     if rollout_date is None:
         return []
     if spec.policy == "stable_service":
-        retention_days = config.service_retention_days
+        retention_days = (
+            config.raw_payload_retention_days
+            if spec.name == "train_raw_payloads"
+            else config.service_retention_days
+        )
         end_exclusive = config.as_of_date - timedelta(
             days=config.active_service_ttl_days
         )
@@ -1118,10 +1156,11 @@ def build_plan(config: ArchiveConfig) -> dict[str, Any]:
 
 def _build_plan_unlocked(config: ArchiveConfig) -> dict[str, Any]:
     assert_config_matches_prepared_snapshot(config)
+    selected_datasets = configured_datasets(config)
     sizes = source_sizes(config.source_db)
     config.archive_root.mkdir(parents=True, exist_ok=True)
     disk_free = shutil.disk_usage(config.archive_root).free
-    required_free = required_free_bytes(config, sizes["databaseBytes"])
+    base_required_free = required_free_bytes(config, sizes["databaseBytes"])
     with open_archive_source(config) as conn:
         migrations = validate_source_schema(conn)
         published_state = load_published_state(config.archive_root)
@@ -1129,8 +1168,9 @@ def _build_plan_unlocked(config: ArchiveConfig) -> dict[str, Any]:
         datasets: list[dict[str, Any]] = []
         total_pending = 0
         total_historical_gaps = 0
+        raw_payload_pending_bytes = 0
         pending_collection_quality: list[dict[str, Any]] = []
-        for spec in DATASETS:
+        for spec in selected_datasets:
             candidates = candidate_partitions(conn, config, spec)
             assert_published_row_counts_unchanged(
                 conn,
@@ -1162,6 +1202,15 @@ def _build_plan_unlocked(config: ArchiveConfig) -> dict[str, Any]:
                 pending_collection_quality = [
                     collection_day_quality(conn, config, value) for value in pending
                 ]
+            if spec.name == "train_raw_payloads" and pending:
+                placeholders = ",".join("?" for _ in pending)
+                raw_payload_pending_bytes = int(
+                    conn.execute(
+                        "SELECT COALESCE(SUM(length(payload)), 0) "
+                        f"FROM train_raw_payloads WHERE service_date IN ({placeholders})",
+                        pending,
+                    ).fetchone()[0]
+                )
             datasets.append(
                 {
                     "dataset": spec.name,
@@ -1193,6 +1242,12 @@ def _build_plan_unlocked(config: ArchiveConfig) -> dict[str, Any]:
             }
             for item in pending_collection_quality
         ]
+    raw_payload_capacity_reserve = (
+        max(1024**2, (raw_payload_pending_bytes * 11 + 9) // 10)
+        if raw_payload_pending_bytes
+        else 0
+    )
+    required_free = base_required_free + raw_payload_capacity_reserve
     return {
         "mode": "plan",
         "formatVersion": ARCHIVE_FORMAT_VERSION,
@@ -1207,6 +1262,9 @@ def _build_plan_unlocked(config: ArchiveConfig) -> dict[str, Any]:
         "observationRetentionDays": config.observation_retention_days,
         "serviceRetentionDays": config.service_retention_days,
         "rawPayloadRetentionDays": config.raw_payload_retention_days,
+        "includeRawPayloads": config.include_raw_payloads,
+        "rawPayloadPendingBytes": raw_payload_pending_bytes,
+        "rawPayloadCapacityReserveBytes": raw_payload_capacity_reserve,
         "coverageRolloutDate": rollout_date.isoformat() if rollout_date else None,
         "coverageRolloutSource": rollout_source,
         "dimensionSnapshotDate": (
@@ -1533,6 +1591,7 @@ def _archive_run_locked(config: ArchiveConfig) -> dict[str, Any]:
         create_snapshot(config.source_db, snapshot_path)
 
     published_state = load_published_state(config.archive_root)
+    selected_datasets = configured_datasets(config)
     duckdb, connection = open_duckdb(config, work_root)
     outputs: list[tuple[Path, dict[str, Any]]] = []
     snapshot_candidates: dict[str, list[str]] = {}
@@ -1548,7 +1607,7 @@ def _archive_run_locked(config: ArchiveConfig) -> dict[str, Any]:
                 uri=True,
             )
         ) as snapshot:
-            for spec in DATASETS:
+            for spec in selected_datasets:
                 candidates = candidate_partitions(snapshot, config, spec)
                 assert_published_row_counts_unchanged(
                     snapshot,
@@ -1574,7 +1633,7 @@ def _archive_run_locked(config: ArchiveConfig) -> dict[str, Any]:
                             raise RuntimeError(
                                 f"{spec.name} {partition_value}: found {orphans} orphan rows"
                             )
-                    elif spec.name == "train_stop_events":
+                    elif spec.name in {"train_stop_events", "train_raw_payloads"}:
                         orphans = orphan_count(
                             connection, spec.table, "service_date", partition_value
                         )
@@ -1611,7 +1670,7 @@ def _archive_run_locked(config: ArchiveConfig) -> dict[str, Any]:
             for value in observation_dates
         ]
         historical_gap_items: list[dict[str, Any]] = []
-        for spec in DATASETS:
+        for spec in selected_datasets:
             historical_gaps = historical_partition_gaps(
                 snapshot,
                 config,
@@ -1673,6 +1732,7 @@ def _archive_run_locked(config: ArchiveConfig) -> dict[str, Any]:
             "observationRetentionDays": config.observation_retention_days,
             "serviceRetentionDays": config.service_retention_days,
             "rawPayloadRetentionDays": config.raw_payload_retention_days,
+            "includeRawPayloads": config.include_raw_payloads,
             "timezone": config.timezone_name,
             "cadenceMinutes": config.cadence_minutes,
             "scheduleOffsetMinutes": config.schedule_offset_minutes,

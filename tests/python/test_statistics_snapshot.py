@@ -60,6 +60,23 @@ class StatisticsSnapshotTests(unittest.TestCase):
             **kwargs,
         )
 
+    def test_list_accepts_a_fresh_empty_handoff_root(self):
+        self.handoff.mkdir()
+
+        self.assertEqual(
+            list_prepared_snapshots(self.handoff, now=self.created_at),
+            [],
+        )
+        self.assertFalse((self.handoff / "snapshots").exists())
+        self.assertFalse((self.handoff / "receipts").exists())
+
+    def test_list_rejects_an_uninitialized_root_with_unexpected_artifacts(self):
+        self.handoff.mkdir()
+        (self.handoff / "unexpected.txt").write_text("unexpected", encoding="utf-8")
+
+        with self.assertRaisesRegex(RuntimeError, "unexpected artifacts"):
+            list_prepared_snapshots(self.handoff, now=self.created_at)
+
     def test_pinned_wal_view_excludes_later_commit_without_blocking_writer(self):
         writer = sqlite3.connect(self.database, timeout=1)
         try:
