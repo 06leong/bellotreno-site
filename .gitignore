@@ -18,6 +18,7 @@ __pycache__/
 
 # local statistics archive output
 rfi-proxy/statistics-data/
+rfi-proxy/statistics-snapshot-handoff/
 rfi-proxy/statistics-archive/
 
 # environment variables

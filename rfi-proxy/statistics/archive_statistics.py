@@ -8,6 +8,7 @@ import re
 import shutil
 import sqlite3
 import sys
+import tempfile
 import uuid
 from contextlib import closing, contextmanager
 from dataclasses import dataclass
@@ -16,15 +17,24 @@ from pathlib import Path
 from typing import Any, Iterable, Sequence
 from zoneinfo import ZoneInfo
 
+from statistics_snapshot import (
+    PreparedSnapshot,
+    assert_prepared_snapshot_unchanged,
+    load_prepared_snapshot,
+    snapshot_consumer_lock,
+)
+
 
 ARCHIVE_FORMAT_VERSION = 1
 DATASET_SCHEMA_VERSION = 1
 DEFAULT_SOURCE_DB = "/source/statistics.db"
 DEFAULT_ARCHIVE_ROOT = "/archive"
+DEFAULT_SNAPSHOT_HANDOFF_ROOT = "/snapshot-handoff"
 DEFAULT_TIMEZONE = "Europe/Rome"
 V2_ROLLOUT_DATE_STATE = "v2_collection_rollout_date"
 GIB = 1024**3
 ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+UTC_TIMESTAMP = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 DUCKDB_MEMORY = re.compile(r"^\d+(?:\.\d+)?(?:KB|MB|GB|TB)$", re.IGNORECASE)
 
 
@@ -143,38 +153,69 @@ class ArchiveConfig:
     service_retention_days: int = 90
     raw_payload_retention_days: int = 7
     retention_reference_date: date | None = None
+    prepared_snapshot: PreparedSnapshot | None = None
 
     @classmethod
-    def from_args(cls, args: argparse.Namespace) -> "ArchiveConfig":
-        timezone_name = os.environ.get("ARCHIVE_TIMEZONE", DEFAULT_TIMEZONE)
-        if timezone_name != DEFAULT_TIMEZONE:
+    def from_args(
+        cls,
+        args: argparse.Namespace,
+        *,
+        prepared_snapshot: PreparedSnapshot | None = None,
+    ) -> "ArchiveConfig":
+        snapshot_policy = prepared_snapshot.policy if prepared_snapshot else None
+        timezone_name = (
+            snapshot_policy.timezone_name
+            if snapshot_policy
+            else os.environ.get("ARCHIVE_TIMEZONE", DEFAULT_TIMEZONE)
+        )
+        if timezone_name != DEFAULT_TIMEZONE and prepared_snapshot is None:
             raise ValueError(
                 f"ARCHIVE_TIMEZONE must be {DEFAULT_TIMEZONE!r} to match the collector"
             )
-        try:
-            local_now = datetime.now(ZoneInfo(timezone_name))
-        except Exception as exc:
-            raise ValueError(
-                f"invalid archive timezone {timezone_name!r}: {exc}"
-            ) from exc
+        local_now: datetime | None = None
+        if prepared_snapshot is None:
+            try:
+                local_now = datetime.now(ZoneInfo(timezone_name))
+            except Exception as exc:
+                raise ValueError(
+                    f"invalid archive timezone {timezone_name!r}: {exc}"
+                ) from exc
         ready_hour = _bounded_int(
-            os.environ.get("ARCHIVE_ENDED_DAY_READY_HOUR", "2"),
+            snapshot_policy.ended_day_ready_hour
+            if snapshot_policy
+            else os.environ.get("ARCHIVE_ENDED_DAY_READY_HOUR", "2"),
             name="ARCHIVE_ENDED_DAY_READY_HOUR",
             minimum=0,
             maximum=23,
         )
-        as_of_text = args.as_of_date or os.environ.get("ARCHIVE_AS_OF_DATE")
-        maximum_as_of_date = local_now.date()
-        if local_now.hour < ready_hour:
-            maximum_as_of_date -= timedelta(days=1)
-        as_of_date = _parse_date(as_of_text) if as_of_text else maximum_as_of_date
-        if as_of_date > maximum_as_of_date:
-            raise ValueError(
-                f"archive as-of date {as_of_date} is not ready; latest safe date is "
-                f"{maximum_as_of_date}"
-            )
+        explicit_as_of_text = args.as_of_date
+        as_of_text = (
+            explicit_as_of_text
+            if snapshot_policy
+            else explicit_as_of_text or os.environ.get("ARCHIVE_AS_OF_DATE")
+        )
+        if snapshot_policy:
+            as_of_date = snapshot_policy.as_of_date
+            if explicit_as_of_text and _parse_date(explicit_as_of_text) != as_of_date:
+                raise ValueError(
+                    "archive as-of date differs from the prepared snapshot receipt: "
+                    f"{explicit_as_of_text!r} != {as_of_date.isoformat()!r}"
+                )
+        else:
+            assert local_now is not None
+            maximum_as_of_date = local_now.date()
+            if local_now.hour < ready_hour:
+                maximum_as_of_date -= timedelta(days=1)
+            as_of_date = _parse_date(as_of_text) if as_of_text else maximum_as_of_date
+            if as_of_date > maximum_as_of_date:
+                raise ValueError(
+                    f"archive as-of date {as_of_date} is not ready; latest safe date is "
+                    f"{maximum_as_of_date}"
+                )
         ttl_days = _bounded_int(
-            os.environ.get("ARCHIVE_ACTIVE_SERVICE_TTL_DAYS", "7"),
+            snapshot_policy.active_service_ttl_days
+            if snapshot_policy
+            else os.environ.get("ARCHIVE_ACTIVE_SERVICE_TTL_DAYS", "7"),
             name="ARCHIVE_ACTIVE_SERVICE_TTL_DAYS",
             minimum=1,
             maximum=31,
@@ -205,53 +246,75 @@ class ArchiveConfig:
                 "size such as 4GB"
             )
         cadence_minutes = _bounded_int(
-            os.environ.get("ARCHIVE_CADENCE_MINUTES", "30"),
+            snapshot_policy.cadence_minutes
+            if snapshot_policy
+            else os.environ.get("ARCHIVE_CADENCE_MINUTES", "30"),
             name="ARCHIVE_CADENCE_MINUTES",
             minimum=1,
             maximum=1440,
         )
         schedule_offset = _bounded_int(
-            os.environ.get("ARCHIVE_SCHEDULE_OFFSET_MINUTES", "5"),
+            snapshot_policy.schedule_offset_minutes
+            if snapshot_policy
+            else os.environ.get("ARCHIVE_SCHEDULE_OFFSET_MINUTES", "5"),
             name="ARCHIVE_SCHEDULE_OFFSET_MINUTES",
             minimum=0,
             maximum=59,
         )
         finalize_time = _parse_time(
-            os.environ.get("ARCHIVE_FINALIZE_TIME", "23:55"),
+            snapshot_policy.finalize_time
+            if snapshot_policy
+            else os.environ.get("ARCHIVE_FINALIZE_TIME", "23:55"),
             name="ARCHIVE_FINALIZE_TIME",
         )
         observation_retention_days = _bounded_int(
-            os.environ.get("ARCHIVE_OBSERVATION_RETENTION_DAYS", "30"),
+            snapshot_policy.observation_retention_days
+            if snapshot_policy
+            else os.environ.get("ARCHIVE_OBSERVATION_RETENTION_DAYS", "30"),
             name="ARCHIVE_OBSERVATION_RETENTION_DAYS",
             minimum=1,
             maximum=3650,
         )
         legacy_retention_days = _bounded_int(
-            os.environ.get("ARCHIVE_LEGACY_RETENTION_DAYS", "30"),
+            snapshot_policy.legacy_retention_days
+            if snapshot_policy
+            else os.environ.get("ARCHIVE_LEGACY_RETENTION_DAYS", "30"),
             name="ARCHIVE_LEGACY_RETENTION_DAYS",
             minimum=1,
             maximum=3650,
         )
         configured_service_retention_days = _bounded_int(
-            os.environ.get("ARCHIVE_SERVICE_RETENTION_DAYS", "90"),
+            snapshot_policy.service_retention_days
+            if snapshot_policy
+            else os.environ.get("ARCHIVE_SERVICE_RETENTION_DAYS", "90"),
             name="ARCHIVE_SERVICE_RETENTION_DAYS",
             minimum=1,
             maximum=3650,
         )
         raw_payload_retention_days = _bounded_int(
-            os.environ.get("ARCHIVE_RAW_PAYLOAD_RETENTION_DAYS", "7"),
+            snapshot_policy.raw_payload_retention_days
+            if snapshot_policy
+            else os.environ.get("ARCHIVE_RAW_PAYLOAD_RETENTION_DAYS", "7"),
             name="ARCHIVE_RAW_PAYLOAD_RETENTION_DAYS",
             minimum=1,
             maximum=3650,
         )
-        service_retention_days = max(
-            configured_service_retention_days,
-            observation_retention_days,
-            raw_payload_retention_days,
-            ttl_days,
+        service_retention_days = (
+            configured_service_retention_days
+            if snapshot_policy
+            else max(
+                configured_service_retention_days,
+                observation_retention_days,
+                raw_payload_retention_days,
+                ttl_days,
+            )
         )
         return cls(
-            source_db=Path(args.source_db or os.environ.get("SQLITE_PATH", DEFAULT_SOURCE_DB)),
+            source_db=(
+                prepared_snapshot.database_path
+                if prepared_snapshot
+                else Path(args.source_db or os.environ.get("SQLITE_PATH", DEFAULT_SOURCE_DB))
+            ),
             archive_root=Path(
                 args.archive_root or os.environ.get("ARCHIVE_ROOT", DEFAULT_ARCHIVE_ROOT)
             ),
@@ -261,7 +324,11 @@ class ArchiveConfig:
             duckdb_memory_limit=memory_limit,
             duckdb_threads=threads,
             ended_day_ready_hour=ready_hour,
-            dimension_snapshot_date=local_now.date(),
+            dimension_snapshot_date=(
+                snapshot_policy.dimension_snapshot_date
+                if snapshot_policy
+                else local_now.date() if local_now else as_of_date
+            ),
             duckdb_max_temp_directory_size=max_temp_size,
             timezone_name=timezone_name,
             cadence_minutes=cadence_minutes,
@@ -271,7 +338,12 @@ class ArchiveConfig:
             legacy_retention_days=legacy_retention_days,
             service_retention_days=service_retention_days,
             raw_payload_retention_days=raw_payload_retention_days,
-            retention_reference_date=local_now.date(),
+            retention_reference_date=(
+                snapshot_policy.retention_reference_date
+                if snapshot_policy
+                else local_now.date() if local_now else as_of_date
+            ),
+            prepared_snapshot=prepared_snapshot,
         )
 
 
@@ -373,15 +445,45 @@ def quote_literal(value: str | Path) -> str:
     return "'" + text.replace("'", "''") + "'"
 
 
-def open_source(path: Path) -> sqlite3.Connection:
+def open_source(path: Path, *, immutable: bool = False) -> sqlite3.Connection:
     if not path.is_file():
         raise FileNotFoundError(f"statistics database does not exist: {path}")
-    uri = f"file:{path.resolve().as_posix()}?mode=ro"
+    immutable_query = "&immutable=1" if immutable else ""
+    uri = f"file:{path.resolve().as_posix()}?mode=ro{immutable_query}"
     conn = sqlite3.connect(uri, uri=True, timeout=60)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA query_only=ON")
     conn.execute("PRAGMA busy_timeout=60000")
     return conn
+
+
+@contextmanager
+def open_archive_source(config: ArchiveConfig):
+    prepared = config.prepared_snapshot
+    if prepared is not None:
+        assert_prepared_snapshot_unchanged(prepared)
+    try:
+        with closing(
+            open_source(config.source_db, immutable=prepared is not None)
+        ) as connection:
+            yield connection
+    finally:
+        if prepared is not None:
+            assert_prepared_snapshot_unchanged(prepared)
+
+
+@contextmanager
+def prepared_snapshot_consumer(snapshot: PreparedSnapshot | None):
+    if snapshot is None:
+        yield
+        return
+    handoff_root = snapshot.database_path.parent.parent
+    with snapshot_consumer_lock(handoff_root):
+        assert_prepared_snapshot_unchanged(snapshot)
+        try:
+            yield
+        finally:
+            assert_prepared_snapshot_unchanged(snapshot)
 
 
 def table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
@@ -456,6 +558,56 @@ def source_sizes(path: Path) -> dict[str, int]:
     }
 
 
+def snapshot_provenance(snapshot: PreparedSnapshot | None) -> dict[str, Any]:
+    if snapshot is None:
+        return {}
+    return {
+        "snapshotId": snapshot.snapshot_id,
+        "snapshotReceipt": {
+            "receiptFile": snapshot.receipt_path.name,
+            "receiptSha256": snapshot.receipt_sha256,
+            "createdAt": snapshot.created_at,
+            "databaseBytes": snapshot.database_bytes,
+            "pageSize": snapshot.page_size,
+            "pageCount": snapshot.page_count,
+            "device": snapshot.device,
+            "inode": snapshot.inode,
+            "mtimeNs": snapshot.mtime_ns,
+        },
+    }
+
+
+def assert_config_matches_prepared_snapshot(config: ArchiveConfig) -> None:
+    snapshot = config.prepared_snapshot
+    if snapshot is None:
+        return
+    policy = snapshot.policy
+    expected = {
+        "source_db": snapshot.database_path,
+        "as_of_date": policy.as_of_date,
+        "dimension_snapshot_date": policy.dimension_snapshot_date,
+        "retention_reference_date": policy.retention_reference_date,
+        "timezone_name": policy.timezone_name,
+        "ended_day_ready_hour": policy.ended_day_ready_hour,
+        "active_service_ttl_days": policy.active_service_ttl_days,
+        "cadence_minutes": policy.cadence_minutes,
+        "schedule_offset_minutes": policy.schedule_offset_minutes,
+        "finalize_time": policy.finalize_time,
+        "observation_retention_days": policy.observation_retention_days,
+        "legacy_retention_days": policy.legacy_retention_days,
+        "service_retention_days": policy.service_retention_days,
+        "raw_payload_retention_days": policy.raw_payload_retention_days,
+    }
+    mismatches = [
+        name for name, value in expected.items() if getattr(config, name) != value
+    ]
+    if mismatches:
+        raise RuntimeError(
+            "archive configuration differs from the prepared snapshot receipt: "
+            + ", ".join(mismatches)
+        )
+
+
 def duckdb_size_bytes(value: str) -> int:
     match = DUCKDB_MEMORY.fullmatch(value)
     if match is None:
@@ -475,7 +627,7 @@ def duckdb_size_bytes(value: str) -> int:
 
 def required_free_bytes(config: ArchiveConfig, database_bytes: int) -> int:
     return int(
-        2 * database_bytes
+        database_bytes
         + duckdb_size_bytes(config.duckdb_max_temp_directory_size)
         + config.safety_gib * GIB
     )
@@ -960,11 +1112,17 @@ def assert_published_row_counts_unchanged(
 
 
 def build_plan(config: ArchiveConfig) -> dict[str, Any]:
+    with prepared_snapshot_consumer(config.prepared_snapshot):
+        return _build_plan_unlocked(config)
+
+
+def _build_plan_unlocked(config: ArchiveConfig) -> dict[str, Any]:
+    assert_config_matches_prepared_snapshot(config)
     sizes = source_sizes(config.source_db)
     config.archive_root.mkdir(parents=True, exist_ok=True)
     disk_free = shutil.disk_usage(config.archive_root).free
     required_free = required_free_bytes(config, sizes["databaseBytes"])
-    with closing(open_source(config.source_db)) as conn:
+    with open_archive_source(config) as conn:
         migrations = validate_source_schema(conn)
         published_state = load_published_state(config.archive_root)
         rollout_date, rollout_source = coverage_rollout(conn)
@@ -1054,6 +1212,7 @@ def build_plan(config: ArchiveConfig) -> dict[str, Any]:
         "dimensionSnapshotDate": (
             config.dimension_snapshot_date or config.as_of_date
         ).isoformat(),
+        **snapshot_provenance(config.prepared_snapshot),
         **sizes,
         "diskFreeBytes": disk_free,
         "duckdbMaxTempBytes": duckdb_size_bytes(
@@ -1347,12 +1506,13 @@ def validate_output_schemas(
 
 
 def archive_run(config: ArchiveConfig) -> dict[str, Any]:
-    with archive_lock(config.archive_root):
-        return _archive_run_locked(config)
+    with prepared_snapshot_consumer(config.prepared_snapshot):
+        with archive_lock(config.archive_root):
+            return _archive_run_locked(config)
 
 
 def _archive_run_locked(config: ArchiveConfig) -> dict[str, Any]:
-    plan = build_plan(config)
+    plan = _build_plan_unlocked(config)
     if not plan["capacityOk"]:
         raise RuntimeError(
             "insufficient free space: "
@@ -1363,9 +1523,14 @@ def _archive_run_locked(config: ArchiveConfig) -> dict[str, Any]:
 
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8]
     work_root = config.archive_root / "work" / run_id
-    snapshot_path = work_root / "source.db"
     work_root.mkdir(parents=True, exist_ok=False)
-    create_snapshot(config.source_db, snapshot_path)
+    prepared = config.prepared_snapshot
+    if prepared is not None:
+        assert_prepared_snapshot_unchanged(prepared)
+        snapshot_path = prepared.database_path
+    else:
+        snapshot_path = work_root / "source.db"
+        create_snapshot(config.source_db, snapshot_path)
 
     published_state = load_published_state(config.archive_root)
     duckdb, connection = open_duckdb(config, work_root)
@@ -1375,13 +1540,15 @@ def _archive_run_locked(config: ArchiveConfig) -> dict[str, Any]:
         connection.execute(
             f"ATTACH {quote_literal(snapshot_path.resolve())} AS source (TYPE sqlite, READ_ONLY)"
         )
-        for spec in DATASETS:
-            with closing(
-                sqlite3.connect(
-                    f"file:{snapshot_path.resolve().as_posix()}?mode=ro&immutable=1",
-                    uri=True,
-                )
-            ) as snapshot:
+        if prepared is not None:
+            assert_prepared_snapshot_unchanged(prepared)
+        with closing(
+            sqlite3.connect(
+                f"file:{snapshot_path.resolve().as_posix()}?mode=ro&immutable=1",
+                uri=True,
+            )
+        ) as snapshot:
+            for spec in DATASETS:
                 candidates = candidate_partitions(snapshot, config, spec)
                 assert_published_row_counts_unchanged(
                     snapshot,
@@ -1390,34 +1557,38 @@ def _archive_run_locked(config: ArchiveConfig) -> dict[str, Any]:
                     published_state,
                 )
                 snapshot_candidates[spec.name] = candidates
-            for partition_value in candidates:
-                identity = (
-                    DATASET_SCHEMA_VERSION,
-                    spec.name,
-                    spec.partition_key,
-                    partition_value,
-                )
-                if identity in published_state.partitions:
-                    continue
-                if spec.name == "train_observations":
-                    orphans = orphan_count(
-                        connection, spec.table, "collection_date", partition_value
+                for partition_value in candidates:
+                    identity = (
+                        DATASET_SCHEMA_VERSION,
+                        spec.name,
+                        spec.partition_key,
+                        partition_value,
                     )
-                    if orphans:
-                        raise RuntimeError(
-                            f"{spec.name} {partition_value}: found {orphans} orphan rows"
+                    if identity in published_state.partitions:
+                        continue
+                    if spec.name == "train_observations":
+                        orphans = orphan_count(
+                            connection, spec.table, "collection_date", partition_value
                         )
-                elif spec.name == "train_stop_events":
-                    orphans = orphan_count(connection, spec.table, "service_date", partition_value)
-                    if orphans:
-                        raise RuntimeError(
-                            f"{spec.name} {partition_value}: found {orphans} orphan rows"
+                        if orphans:
+                            raise RuntimeError(
+                                f"{spec.name} {partition_value}: found {orphans} orphan rows"
+                            )
+                    elif spec.name == "train_stop_events":
+                        orphans = orphan_count(
+                            connection, spec.table, "service_date", partition_value
                         )
-                outputs.append(
-                    export_partition(connection, work_root, spec, partition_value)
-                )
+                        if orphans:
+                            raise RuntimeError(
+                                f"{spec.name} {partition_value}: found {orphans} orphan rows"
+                            )
+                    outputs.append(
+                        export_partition(connection, work_root, spec, partition_value)
+                    )
     finally:
         connection.close()
+        if prepared is not None:
+            assert_prepared_snapshot_unchanged(prepared)
 
     if not outputs:
         raise RuntimeError(
@@ -1457,6 +1628,8 @@ def _archive_run_locked(config: ArchiveConfig) -> dict[str, Any]:
                         "ranges": compact_date_ranges(historical_gaps),
                     }
                 )
+    if prepared is not None:
+        assert_prepared_snapshot_unchanged(prepared)
 
     validate_output_schemas(outputs, published_state)
     manifest_items: list[dict[str, Any]] = []
@@ -1469,12 +1642,15 @@ def _archive_run_locked(config: ArchiveConfig) -> dict[str, Any]:
         manifest_items.append(metadata)
 
     source_metadata = source_sizes(config.source_db)
+    if prepared is not None:
+        assert_prepared_snapshot_unchanged(prepared)
     manifest = {
         "formatVersion": ARCHIVE_FORMAT_VERSION,
         "datasetSchemaVersion": DATASET_SCHEMA_VERSION,
         "runId": run_id,
         "createdAt": utc_now_iso(),
         "asOfDate": config.as_of_date.isoformat(),
+        **snapshot_provenance(prepared),
         "sourceSchemaVersion": 2,
         "source": {
             **source_metadata,
@@ -1520,6 +1696,8 @@ def _archive_run_locked(config: ArchiveConfig) -> dict[str, Any]:
         "duckdbVersion": duckdb.__version__,
         "datasets": manifest_items,
     }
+    if prepared is not None:
+        assert_prepared_snapshot_unchanged(prepared)
     manifest_path = config.archive_root / "manifests" / f"{run_id}.complete.json"
     atomic_json(manifest_path, manifest)
     shutil.rmtree(work_root)
@@ -1542,6 +1720,7 @@ def _archive_run_locked(config: ArchiveConfig) -> dict[str, Any]:
         "historicalPartitionGapCount": sum(
             int(item["count"]) for item in historical_gap_items
         ),
+        **snapshot_provenance(prepared),
     }
 
 
@@ -1555,75 +1734,124 @@ def safe_archive_path(root: Path, relative: str) -> Path:
     return candidate
 
 
+def manifest_snapshot_provenance(
+    payload: dict[str, Any], manifest_path: Path
+) -> dict[str, Any]:
+    snapshot_id = payload.get("snapshotId")
+    receipt = payload.get("snapshotReceipt")
+    if snapshot_id is None and receipt is None:
+        # Format-v1 manifests published before prepared snapshots remain valid.
+        return {}
+    if not isinstance(snapshot_id, str) or not snapshot_id:
+        raise RuntimeError(f"invalid snapshot ID in {manifest_path}")
+    if not isinstance(receipt, dict):
+        raise RuntimeError(f"invalid snapshot receipt metadata in {manifest_path}")
+    receipt_file = receipt.get("receiptFile")
+    if (
+        not isinstance(receipt_file, str)
+        or receipt_file != f"{snapshot_id}.ready.json"
+    ):
+        raise RuntimeError(f"invalid snapshot receipt file in {manifest_path}")
+    if re.fullmatch(r"[0-9a-f]{64}", str(receipt.get("receiptSha256", ""))) is None:
+        raise RuntimeError(f"invalid snapshot receipt checksum in {manifest_path}")
+    if not isinstance(receipt.get("createdAt"), str) or not UTC_TIMESTAMP.fullmatch(
+        receipt["createdAt"]
+    ):
+        raise RuntimeError(f"invalid snapshot receipt creation time in {manifest_path}")
+    for field in ("databaseBytes", "pageSize", "pageCount"):
+        if not isinstance(receipt.get(field), int) or int(receipt[field]) <= 0:
+            raise RuntimeError(
+                f"invalid snapshot receipt {field} metadata in {manifest_path}"
+            )
+    for field in ("device", "inode", "mtimeNs"):
+        if not isinstance(receipt.get(field), int) or int(receipt[field]) < 0:
+            raise RuntimeError(
+                f"invalid snapshot receipt {field} metadata in {manifest_path}"
+            )
+    if receipt["databaseBytes"] != receipt["pageSize"] * receipt["pageCount"]:
+        raise RuntimeError(f"inconsistent snapshot receipt metadata in {manifest_path}")
+    return {"snapshotId": snapshot_id, "snapshotReceipt": receipt}
+
+
 def verify_manifest(config: ArchiveConfig, manifest_path: Path) -> dict[str, Any]:
     try:
         payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise RuntimeError(f"cannot read published manifest {manifest_path}: {exc}") from exc
+    provenance = manifest_snapshot_provenance(payload, manifest_path)
     parsed_items = validated_manifest_items(
         config.archive_root,
         manifest_path,
         payload,
     )
-    work_root = config.archive_root / "work" / f"verify-{uuid.uuid4().hex[:8]}"
-    _, connection = open_duckdb(config, work_root)
     checked = 0
     checked_bytes = 0
-    try:
-        for item, spec, _, path, _ in parsed_items:
-            if sha256_file(path) != item["sha256"]:
-                raise RuntimeError(f"archive checksum differs from manifest: {path}")
-            rows = int(
-                connection.execute(
-                    f"SELECT COUNT(*) FROM {parquet_scan(path)}"
-                ).fetchone()[0]
-            )
-            if rows != int(item["rows"]):
-                raise RuntimeError(f"archive row count differs from manifest: {path}")
-            duplicates = duplicate_group_count(connection, path, item["primaryKey"])
-            if duplicates:
-                raise RuntimeError(f"archive contains duplicate primary keys: {path}")
-            partition = item.get("partition") or {}
-            if len(partition) != 1:
-                raise RuntimeError(f"invalid partition metadata in {manifest_path}")
-            key, expected = next(iter(partition.items()))
-            minimum, maximum = connection.execute(
-                f"SELECT MIN({quote_identifier(key)}), MAX({quote_identifier(key)}) "
-                f"FROM {parquet_scan(path)}"
-            ).fetchone()
-            if rows == 0:
-                if minimum is not None or maximum is not None:
-                    raise RuntimeError(
-                        f"empty archive partition contains partition values: {path}"
-                    )
-                if item.get("partitionMin") is not None or item.get("partitionMax") is not None:
-                    raise RuntimeError(
-                        f"empty archive partition metadata differs from manifest: {path}"
-                    )
-            else:
-                if str(minimum) != str(expected) or str(maximum) != str(expected):
-                    raise RuntimeError(f"archive partition value differs from manifest: {path}")
-                if str(item.get("partitionMin")) != str(expected) or str(
-                    item.get("partitionMax")
-                ) != str(expected):
-                    raise RuntimeError(
-                        f"archive partition bounds differ from manifest: {path}"
-                    )
-            description = connection.execute(
-                f"DESCRIBE SELECT * FROM {parquet_scan(path)}"
-            ).fetchall()
-            if schema_fingerprint(description, spec) != item.get("schemaFingerprint"):
-                raise RuntimeError(f"archive schema differs from manifest: {path}")
-            checked += 1
-            checked_bytes += path.stat().st_size
-    finally:
-        connection.close()
-        shutil.rmtree(work_root, ignore_errors=True)
+    # Verification must never mutate the archive it is proving. Keep DuckDB
+    # spill outside archive_root so a restored copy can be mounted read-only.
+    with tempfile.TemporaryDirectory(prefix="statistics-archive-verify-") as temporary:
+        _, connection = open_duckdb(config, Path(temporary))
+        try:
+            for item, spec, _, path, _ in parsed_items:
+                if sha256_file(path) != item["sha256"]:
+                    raise RuntimeError(f"archive checksum differs from manifest: {path}")
+                rows = int(
+                    connection.execute(
+                        f"SELECT COUNT(*) FROM {parquet_scan(path)}"
+                    ).fetchone()[0]
+                )
+                if rows != int(item["rows"]):
+                    raise RuntimeError(f"archive row count differs from manifest: {path}")
+                duplicates = duplicate_group_count(connection, path, item["primaryKey"])
+                if duplicates:
+                    raise RuntimeError(f"archive contains duplicate primary keys: {path}")
+                partition = item.get("partition") or {}
+                if len(partition) != 1:
+                    raise RuntimeError(f"invalid partition metadata in {manifest_path}")
+                key, expected = next(iter(partition.items()))
+                minimum, maximum = connection.execute(
+                    f"SELECT MIN({quote_identifier(key)}), MAX({quote_identifier(key)}) "
+                    f"FROM {parquet_scan(path)}"
+                ).fetchone()
+                if rows == 0:
+                    if minimum is not None or maximum is not None:
+                        raise RuntimeError(
+                            f"empty archive partition contains partition values: {path}"
+                        )
+                    if (
+                        item.get("partitionMin") is not None
+                        or item.get("partitionMax") is not None
+                    ):
+                        raise RuntimeError(
+                            f"empty archive partition metadata differs from manifest: {path}"
+                        )
+                else:
+                    if str(minimum) != str(expected) or str(maximum) != str(expected):
+                        raise RuntimeError(
+                            f"archive partition value differs from manifest: {path}"
+                        )
+                    if str(item.get("partitionMin")) != str(expected) or str(
+                        item.get("partitionMax")
+                    ) != str(expected):
+                        raise RuntimeError(
+                            f"archive partition bounds differ from manifest: {path}"
+                        )
+                description = connection.execute(
+                    f"DESCRIBE SELECT * FROM {parquet_scan(path)}"
+                ).fetchall()
+                if schema_fingerprint(description, spec) != item.get(
+                    "schemaFingerprint"
+                ):
+                    raise RuntimeError(f"archive schema differs from manifest: {path}")
+                checked += 1
+                checked_bytes += path.stat().st_size
+        finally:
+            connection.close()
     return {
         "manifest": manifest_path.relative_to(config.archive_root).as_posix(),
         "runId": payload.get("runId"),
         "partitions": checked,
         "bytes": checked_bytes,
+        **provenance,
     }
 
 
@@ -1656,8 +1884,10 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--archive-root", help="archive output directory")
     result.add_argument("--as-of-date", help="policy date in YYYY-MM-DD")
     subparsers = result.add_subparsers(dest="command", required=True)
-    subparsers.add_parser("plan", help="show eligible and pending partitions")
-    subparsers.add_parser("run", help="snapshot, export, validate, and publish")
+    plan = subparsers.add_parser("plan", help="show eligible and pending partitions")
+    plan.add_argument("--snapshot-id", help="prepared snapshot receipt ID")
+    run = subparsers.add_parser("run", help="export, validate, and publish a prepared snapshot")
+    run.add_argument("--snapshot-id", help="prepared snapshot receipt ID")
     verify = subparsers.add_parser("verify", help="verify the latest completed manifest")
     verify.add_argument("--all", action="store_true", help="verify every completed manifest")
     return result
@@ -1666,7 +1896,33 @@ def parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
-        config = ArchiveConfig.from_args(args)
+        prepared_snapshot: PreparedSnapshot | None = None
+        if args.command in {"plan", "run"}:
+            snapshot_id = args.snapshot_id or os.environ.get("ARCHIVE_SNAPSHOT_ID")
+            if not snapshot_id:
+                raise ValueError(
+                    "plan and run require --snapshot-id or ARCHIVE_SNAPSHOT_ID"
+                )
+            handoff_root = Path(
+                os.environ.get(
+                    "SNAPSHOT_HANDOFF_ROOT", DEFAULT_SNAPSHOT_HANDOFF_ROOT
+                )
+            )
+            max_age_hours = _bounded_int(
+                os.environ.get("ARCHIVE_SNAPSHOT_MAX_AGE_HOURS", "48"),
+                name="ARCHIVE_SNAPSHOT_MAX_AGE_HOURS",
+                minimum=1,
+                maximum=8760,
+            )
+            prepared_snapshot = load_prepared_snapshot(
+                handoff_root,
+                snapshot_id,
+                max_age_hours=max_age_hours,
+            )
+        config = ArchiveConfig.from_args(
+            args,
+            prepared_snapshot=prepared_snapshot,
+        )
         if args.command == "plan":
             result = build_plan(config)
         elif args.command == "run":

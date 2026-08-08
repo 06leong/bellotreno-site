@@ -10,6 +10,7 @@ RUN pip install --no-cache-dir -r archive-requirements.txt \
     && python -c "import duckdb; connection=duckdb.connect(); connection.execute('INSTALL sqlite'); connection.execute('LOAD sqlite'); connection.close()"
 
 COPY archive_statistics.py .
+COPY statistics_snapshot.py .
 
 ENTRYPOINT ["python", "-u", "archive_statistics.py"]
 CMD ["plan"]

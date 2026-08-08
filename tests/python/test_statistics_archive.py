@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import sqlite3
 import sys
 import tempfile
@@ -7,7 +8,7 @@ import types
 import unittest
 from contextlib import closing
 from dataclasses import replace
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -27,6 +28,12 @@ from archive_statistics import (  # noqa: E402
     scheduled_minutes,
     slot_utc_iso,
     verify_archives,
+)
+from statistics_snapshot import (  # noqa: E402
+    PreparedSnapshot,
+    SnapshotPolicy,
+    create_prepared_snapshot,
+    release_prepared_snapshot,
 )
 
 
@@ -183,11 +190,40 @@ class StatisticsArchiveTest(unittest.TestCase):
     def tearDown(self):
         self.temporary.cleanup()
 
+    def create_prepared_snapshot(self) -> PreparedSnapshot:
+        created_at = datetime(2026, 8, 5, 12, 0, tzinfo=timezone.utc)
+        policy = SnapshotPolicy(
+            as_of_date=date(2026, 8, 4),
+            dimension_snapshot_date=date(2026, 8, 5),
+            retention_reference_date=date(2026, 8, 5),
+            timezone_name="Europe/Rome",
+            ended_day_ready_hour=2,
+            active_service_ttl_days=7,
+            cadence_minutes=30,
+            schedule_offset_minutes=5,
+            finalize_time="23:55",
+            observation_retention_days=2,
+            legacy_retention_days=2,
+            service_retention_days=90,
+            raw_payload_retention_days=7,
+        )
+        return create_prepared_snapshot(
+            self.database,
+            self.root / "handoff",
+            policy,
+            snapshot_id="20260805T120000Z-0123456789ab",
+            created_at=created_at,
+        )
+
     def test_plan_separates_ended_days_from_stable_services(self):
         plan = build_plan(self.config)
         datasets = {item["dataset"]: item for item in plan["datasets"]}
 
         self.assertTrue(plan["capacityOk"])
+        self.assertEqual(
+            plan["requiredFreeBytes"],
+            plan["databaseBytes"] + plan["duckdbMaxTempBytes"],
+        )
         self.assertEqual(datasets["train_observations"]["pending"], 3)
         self.assertEqual(datasets["train_observations"]["newestPending"], "2026-08-03")
         self.assertEqual(datasets["train_observations"]["historicalGapCount"], 0)
@@ -344,6 +380,124 @@ class StatisticsArchiveTest(unittest.TestCase):
         finally:
             writer.close()
 
+    def test_prepared_snapshot_policy_and_identity_are_stable(self):
+        prepared = self.create_prepared_snapshot()
+        args = types.SimpleNamespace(
+            as_of_date=None,
+            source_db=str(self.database),
+            archive_root=str(self.archive),
+        )
+        conflicting_environment = {
+            "ARCHIVE_AS_OF_DATE": "2026-07-01",
+            "ARCHIVE_TIMEZONE": "Invalid/Timezone",
+            "ARCHIVE_ENDED_DAY_READY_HOUR": "23",
+            "ARCHIVE_ACTIVE_SERVICE_TTL_DAYS": "1",
+            "ARCHIVE_CADENCE_MINUTES": "1440",
+            "ARCHIVE_SCHEDULE_OFFSET_MINUTES": "59",
+            "ARCHIVE_FINALIZE_TIME": "00:00",
+            "ARCHIVE_OBSERVATION_RETENTION_DAYS": "3650",
+            "ARCHIVE_LEGACY_RETENTION_DAYS": "3650",
+            "ARCHIVE_SERVICE_RETENTION_DAYS": "3650",
+            "ARCHIVE_RAW_PAYLOAD_RETENTION_DAYS": "3650",
+        }
+        with patch.dict(os.environ, conflicting_environment):
+            with patch("archive_statistics.datetime") as clock:
+                config = ArchiveConfig.from_args(
+                    args,
+                    prepared_snapshot=prepared,
+                )
+                clock.now.assert_not_called()
+
+        with patch("archive_statistics.ZoneInfo", return_value=timezone.utc):
+            first = build_plan(config)
+            second = build_plan(config)
+        self.assertEqual(first["snapshotId"], prepared.snapshot_id)
+        self.assertEqual(first["snapshotReceipt"], second["snapshotReceipt"])
+        self.assertEqual(first["asOfDate"], "2026-08-04")
+        self.assertEqual(first["dimensionSnapshotDate"], "2026-08-05")
+        self.assertEqual(config.retention_reference_date, date(2026, 8, 5))
+        self.assertEqual(config.timezone_name, "Europe/Rome")
+        self.assertEqual(config.cadence_minutes, 30)
+        self.assertEqual(config.source_db, prepared.database_path)
+
+        args.as_of_date = "2026-08-03"
+        with self.assertRaisesRegex(ValueError, "differs from the prepared snapshot"):
+            ArchiveConfig.from_args(args, prepared_snapshot=prepared)
+
+    def test_prepared_run_blocks_concurrent_snapshot_release(self):
+        prepared = self.create_prepared_snapshot()
+        config = replace(
+            self.config,
+            source_db=prepared.database_path,
+            as_of_date=prepared.policy.as_of_date,
+            dimension_snapshot_date=prepared.policy.dimension_snapshot_date,
+            retention_reference_date=prepared.policy.retention_reference_date,
+            timezone_name=prepared.policy.timezone_name,
+            prepared_snapshot=prepared,
+        )
+
+        def attempt_release(_config):
+            with self.assertRaisesRegex(
+                RuntimeError, "another statistics snapshot is active"
+            ):
+                release_prepared_snapshot(
+                    prepared.database_path.parent.parent,
+                    prepared.snapshot_id,
+                )
+            self.assertTrue(prepared.receipt_path.exists())
+            self.assertTrue(prepared.database_path.exists())
+            return {"status": "protected"}
+
+        with patch(
+            "archive_statistics._archive_run_locked",
+            side_effect=attempt_release,
+        ):
+            self.assertEqual(archive_run(config), {"status": "protected"})
+
+        released = release_prepared_snapshot(
+            prepared.database_path.parent.parent,
+            prepared.snapshot_id,
+        )
+        self.assertEqual(released.snapshot_id, prepared.snapshot_id)
+
+    @unittest.skipUnless(
+        DUCKDB_SQLITE_AVAILABLE,
+        "DuckDB with its preinstalled sqlite extension is required",
+    )
+    def test_prepared_run_does_not_create_a_second_snapshot(self):
+        prepared = self.create_prepared_snapshot()
+        config = replace(
+            self.config,
+            source_db=prepared.database_path,
+            as_of_date=prepared.policy.as_of_date,
+            dimension_snapshot_date=prepared.policy.dimension_snapshot_date,
+            retention_reference_date=prepared.policy.retention_reference_date,
+            timezone_name=prepared.policy.timezone_name,
+            prepared_snapshot=prepared,
+        )
+
+        with patch(
+            "archive_statistics.create_snapshot",
+            side_effect=AssertionError("prepared runs must not copy the database"),
+        ):
+            result = archive_run(config)
+
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["snapshotId"], prepared.snapshot_id)
+        manifest_path = self.archive / result["manifest"]
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        self.assertEqual(manifest["snapshotId"], prepared.snapshot_id)
+        self.assertEqual(
+            manifest["snapshotReceipt"]["receiptSha256"],
+            prepared.receipt_sha256,
+        )
+        verification = verify_archives(config)
+        verified = verification["manifests"][0]
+        self.assertEqual(verified["snapshotId"], prepared.snapshot_id)
+        self.assertEqual(
+            verified["snapshotReceipt"], manifest["snapshotReceipt"]
+        )
+
     @unittest.skipUnless(
         DUCKDB_SQLITE_AVAILABLE,
         "DuckDB with its preinstalled sqlite extension is required",
@@ -398,6 +552,20 @@ class StatisticsArchiveTest(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "size differs"):
             verify_archives(self.config)
+
+    @unittest.skipUnless(
+        DUCKDB_SQLITE_AVAILABLE,
+        "DuckDB with its preinstalled sqlite extension is required",
+    )
+    def test_verify_keeps_temporary_work_outside_archive_root(self):
+        archive_run(self.config)
+        archive_work = self.archive / "work"
+        shutil.rmtree(archive_work, ignore_errors=True)
+
+        verification = verify_archives(self.config, verify_all=True)
+
+        self.assertEqual(verification["status"], "success")
+        self.assertFalse(archive_work.exists())
 
     @unittest.skipUnless(
         DUCKDB_SQLITE_AVAILABLE,
