@@ -168,6 +168,12 @@ Never expose tokens through `PUBLIC_*`. `PUBLIC_*` variables are visible in the
 browser and are only acceptable for public analytics/config values such as
 Umami settings.
 
+When a deployment value is managed through Cloudflare Pages variables, keep it
+configurable in source instead of hardcoding the production value. This also
+applies to public script URLs such as Umami analytics and recorder endpoints.
+Add a matching `PUBLIC_*` variable for browser-visible configuration and update
+the Cloudflare Pages variable table in `doc/PROJECT_GUIDE.md`.
+
 For Cloudflare Pages preview validation, include the preview domain pattern in
 analytics allowlists when needed, for example:
 

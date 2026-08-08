@@ -67,6 +67,8 @@ bellotreno.org,real.bellotreno.org,*.bellotreno-site.pages.dev
 ```
 
 The script is configured with `data-do-not-track` and `data-exclude-search`.
+Umami replay and heatmaps are enabled separately when
+`PUBLIC_UMAMI_RECORDER_SCRIPT_URL` and `PUBLIC_UMAMI_WEBSITE_ID` are configured.
 
 ## 2. Overall Architecture
 
@@ -633,6 +635,7 @@ Cloudflare Pages variables:
 | `STATISTICS_API_TOKEN` | Secret | token injected into statistics API requests |
 | `TRENORD_BFF_SECRET` | Secret | decrypts Trenord train BFF payload server-side |
 | `PUBLIC_UMAMI_SCRIPT_URL` | Plain text | optional public Umami script URL |
+| `PUBLIC_UMAMI_RECORDER_SCRIPT_URL` | Plain text | optional public Umami replay and heatmap recorder URL |
 | `PUBLIC_UMAMI_WEBSITE_ID` | Plain text | optional public Umami site id |
 | `PUBLIC_UMAMI_DOMAINS` | Plain text | analytics domain allowlist, including Pages preview domains when needed |
 
