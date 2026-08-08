@@ -17,25 +17,42 @@ The foundation is now usable rather than hypothetical:
 - the first production Parquet run preserved 3,453,523 normalized rows in 205
   immutable partitions. It produced 34,367,647 bytes of ZSTD Parquet (about
   35 MiB on disk), and the archive verifier passed;
-- the repository now implements a producer/consumer handoff: the collector image
+- the repository now implements and has deployed a producer/consumer handoff: the collector image
   creates an atomic SQLite Backup API snapshot and ready receipt, while the
   offline archive image consumes one exact snapshot ID through a read-only
   handoff. The archive container no longer mounts the live `statistics-data`
-  directory. Production activation still requires publishing and deploying both
-  updated images and Compose configuration;
+  directory;
 - snapshot publication normalizes the private copy from WAL to DELETE journal
   mode so DuckDB can read the read-only mount without sidecars. Creation also
   reserves the database size plus a free-space floor, permits only one ready
   snapshot, and fails visibly on interrupted artifacts;
-- the remaining deployment work is validating that exact-ID workflow on the VPS,
-  then scheduling manifest-scoped export and adding a verified off-VPS copy
-  before handoff snapshots are released.
+- the exact-ID workflow has been exercised in production. The second run used
+  snapshot `20260808T152105Z-9fe019f42bc3`, published 25 new partitions from
+  595,137 source rows, passed `verify --all`, and released the 9.5-GiB handoff;
+  the two manifests now cover 230 verified partitions and 40,581,635 bytes;
+- production raw-payload retention was raised from 7 to 30 days on 8 August.
+  A measurement of 64,853 retained payloads used 129,688,857 compressed bytes,
+  about 1,999.7 bytes per service. Full observed days were about 15.9 MiB/day,
+  implying roughly 476 MiB for 30 days, 1.39 GiB for 90 days, or 5.65 GiB/year
+  before SQLite/page and Parquet overhead;
+- optional raw-payload Parquet export now preserves the latest compressed
+  provider detail per service when explicitly enabled. It is not a complete
+  request log and remains disabled until local or off-VPS long-term capacity is
+  intentionally allocated.
 
 The first archive is evidence that normalized Parquet is compact, but it is not
 a fair 9.5-GiB-to-35-MiB compression comparison. The live SQLite file contains
 legacy duplication, raw JSON, indexes, WAL-era allocation, and free pages that
 the analytical dataset intentionally omits. Record at least several daily
 increments and one complete month before setting a storage-growth forecast.
+
+The normalized archive remains the default permanent dataset. It contains the
+service, observation, stop, collection-health, station/relation aggregate, and
+station-dimension tables needed for analytical marts. The optional raw dataset
+contains the exact compressed `train_raw_payloads` BLOB plus its format,
+quality, and observation metadata. It does not include legacy duplicated
+`trains.raw_json`, per-stop legacy JSON, station-board provider bodies, failed
+HTTP responses, or successive raw versions of the same service.
 
 ## Two surfaces
 
@@ -81,10 +98,13 @@ The handoff database is temporary; immutable Parquet partitions and their
 completion manifests are the long-term dataset.
 
 Snapshot lifetime must remain bounded. Release only the exact snapshot used by
-the successful run, and only after local `verify` plus a fresh off-VPS download
-and `verify --all`. Never implement age-based deletion of handoff files, archive
-partitions, or rollback backups. A stale snapshot is an operator-visible failure,
-not permission to select the newest file automatically.
+the successful run. During the explicitly local-only phase, release it after
+local `verify --all` and record that the archive is not protected against loss
+of the production VPS. Once remote storage is configured, require a fresh
+off-VPS download and `verify --all` before release. Never implement age-based
+deletion of handoff files, archive partitions, or rollback backups. A stale
+snapshot is an operator-visible failure, not permission to select the newest
+file automatically.
 
 ### Private BI workbench
 
@@ -331,15 +351,17 @@ the private BI workbench.
    complete-day comparison eligibility.
 2. **Completed:** establish immutable, verified, partitioned Parquet and record
    the first successful production archive.
-3. **In this change:** replace the live-database archive mount with atomic
+3. **Completed:** replace the live-database archive mount with atomic
    snapshot handoff and exact-ID `create -> plan/run -> local verify ->
-   manifest-scoped off-VPS copy -> fresh-download verify -> release`.
-4. **Next operations:** configure Cloudreve/rclone on the host, upload datasets
-   before manifests, verify a fresh download on the second VPS, and separately
-   copy/checksum the pre-v2 SQLite rollback file.
-5. **Next reliability:** schedule the workflow with a lock and alerts, but keep
-   release contingent on remote verification and never schedule archive/backup
-   deletion.
+   release`; two local manifests and 230 partitions now pass `verify --all`.
+4. **Optional later operations:** configure Cloudreve/rclone on the host,
+   upload datasets before manifests, verify a fresh download on the second VPS,
+   and separately copy/checksum the pre-v2 SQLite rollback file. This is
+   intentionally postponed, so a local-only archive is not yet a backup against
+   production-VPS loss.
+5. **Next reliability:** schedule the workflow with a lock and alerts. Once a
+   remote target is enabled, make release contingent on remote verification;
+   never schedule archive/backup deletion.
 6. **Next analytics:** build `quality_day`, `fact_service_outcome`, and
    `agg_network_day`, then add comparison/distribution APIs with sample sizes.
 7. **Next product:** deliver trust/coverage, comparable outcomes, distributions,
