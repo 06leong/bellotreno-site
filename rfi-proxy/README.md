@@ -13,13 +13,18 @@ The two always-on Python services and the one-shot archive image target Python
 The two always-on services are started by the same `docker-compose.yml` and
 share the external Docker network `bellotreno-network`; the archive job is
 defined in that file but starts only when its profile is requested.
-The production compose file pulls prebuilt GHCR images:
+The production Compose file pulls prebuilt GHCR images. The RFI proxy defaults
+to `latest`; the two statistics images use the shared `STATISTICS_IMAGE_TAG`
+and only fall back to `latest` when it is unset:
 
 - `ghcr.io/06leong/bellotreno-rfi-proxy:latest`
 - `ghcr.io/06leong/bellotreno-statistics:latest`
 - `ghcr.io/06leong/bellotreno-statistics-archive:latest`
 
-Each image is also published with a `sha-<commit>` tag. After the normalized
+Each image is also published with a `sha-<full-40-character-commit>` tag. The
+statistics collector and archive consumer share `STATISTICS_IMAGE_TAG` in
+Compose so production can pin both halves of the handoff protocol to the same
+commit. After the normalized
 storage release starts writing compressed legacy raw payloads, an image-only
 rollback to an older statistics image is unsafe because that image cannot
 decode the new BLOB values. Take a consistent pre-deploy SQLite backup; a full
@@ -71,6 +76,8 @@ STATISTICS_FINALIZE_TIME=23:55
 STATISTICS_CATCHUP_GRACE_MINUTES=20
 
 # Optional local archive tuning
+STATISTICS_ARCHIVE_SNAPSHOT_MAX_AGE_HOURS=48
+STATISTICS_ARCHIVE_SNAPSHOT_MIN_FREE_GIB=5
 STATISTICS_ARCHIVE_SAFETY_GIB=5
 STATISTICS_ARCHIVE_ENDED_DAY_READY_HOUR=2
 STATISTICS_ARCHIVE_DUCKDB_MEMORY_LIMIT=256MB
@@ -81,23 +88,42 @@ STATISTICS_ARCHIVE_DUCKDB_MAX_TEMP_DIRECTORY_SIZE=4GB
 Do not commit `.env`. Use `.env.example` as the template.
 The statistics collector reads the `STATISTICS_*` values inside the Flask app. Changing these values on the VPS only requires `docker compose up -d` after the updated image has been pulled.
 
-## Local statistics archive (phase 1)
+## Long-term statistics archive
 
-The `bellotreno-statistics-archive` image is a separate one-shot tool. It is
-not started by normal `docker compose up -d` because it belongs to the
-`archive` profile. Its source mount is read-only at
-`/source/statistics.db`; the only persistent writable mount is the local
-`./statistics-archive` directory at `/archive`. The container also has no
-network and runs with a read-only root filesystem, all Linux capabilities
-dropped, and `no-new-privileges` enabled.
+The archive uses a producer/consumer handoff so the offline image never opens
+or mounts the live WAL-mode database:
 
-Phase 1 is deliberately local-only:
+1. `snapshot_statistics.py create` runs inside the always-on statistics image,
+   where `/data` and `/snapshot-handoff` are writable. It opens the live database
+   read-only, uses the SQLite Backup API, writes a `.partial` file, validates and
+   fsyncs it, atomically renames it to `snapshots/<snapshot-id>.db`, and finally
+   publishes `receipts/<snapshot-id>.ready.json`.
+2. `bellotreno-statistics-archive` mounts only
+   `./statistics-snapshot-handoff:/snapshot-handoff:ro` plus its writable
+   `./statistics-archive:/archive`. It consumes one exact ready snapshot ID as
+   an immutable database; it has no `statistics-data` mount and no network.
+3. `plan` and `run` must receive the same snapshot ID. The consumer rejects a
+   missing, changed, invalid, or older-than-policy receipt rather than silently
+   switching to a newer database.
+4. `snapshot_statistics.py release --snapshot-id EXACT` removes only that
+   handoff database and receipt. Run it only after local verification and an
+   independently verified off-VPS copy.
 
-- it does not connect to R2 or any other remote service;
-- it does not delete or compact the live SQLite database;
-- it does not automatically delete earlier local archives or work owned by the
-  operator;
-- a successful archive therefore does not reduce VPS disk usage by itself.
+The archive container remains one-shot and is not started by ordinary
+`docker compose up -d`. It has a read-only root filesystem, all Linux
+capabilities dropped, `no-new-privileges`, and no network. DuckDB and archive
+credentials stay out of the always-on service; rclone and remote credentials
+stay out of both images.
+
+Neither image deletes or compacts the live SQLite database. Archive runs also
+never prune Parquet, rollback backups, or operator-owned files automatically.
+The handoff snapshot is approximately the size of the allocated live database,
+so check free space before `create`; the Parquet consumer no longer creates a
+second multi-gigabyte SQLite working copy. The producer itself refuses to start
+unless the handoff filesystem can hold the source database and still retain the
+`STATISTICS_ARCHIVE_SNAPSHOT_MIN_FREE_GIB` reserve (5 GiB by default). It also
+allows only one ready snapshot at a time and fails visibly on leftover partial
+or orphan files instead of accumulating hidden multi-gigabyte copies.
 
 The archive keeps the service-day and observation-day grains separate:
 
@@ -123,12 +149,13 @@ days or services after the D+8 stability boundary; an intentional historical
 repair therefore requires an explicit future archive-revision workflow rather
 than overwriting a schema-v1 file.
 
-When no explicit `--as-of-date` is supplied, a run before
+When no explicit `--as-of-date` is supplied, snapshot creation before
 `STATISTICS_ARCHIVE_ENDED_DAY_READY_HOUR` (02:00 Europe/Rome by default)
 uses the preceding day as its cutoff. This prevents a just-ended calendar day
 from being frozen while its final collector slot may still be finishing. The
-archive also holds an exclusive process lock, so a timer and a manual run cannot
-publish the same partition concurrently.
+chosen cutoff is recorded in the ready receipt and cannot be changed by
+`plan`/`run`. The archive also holds an exclusive process lock, so a timer and a
+manual run cannot publish the same partition concurrently.
 
 The ready hour is only a post-midnight safety delay; it does not claim that the
 previous collection day is complete. The archive inherits the collector's
@@ -142,27 +169,68 @@ zero-observation dates receive an explicit zero-row Parquet partition, while
 older dates already lost outside the live retention window are reported as
 historical gaps and are never fabricated as empty data.
 
-Run every archive command from the Compose directory so the relative bind
-mounts and `.env` resolve consistently on Linux, Windows, and Docker Desktop:
+Run every command from the Compose directory so relative bind mounts and
+`.env` resolve consistently. Before the first run, deploy the merged Compose
+file and recreate `bellotreno-statistics`; pulling only the archive image is not
+enough because the old service has no handoff mount.
 
-Before the first run, update the VPS copy of `docker-compose.yml` from the
-merged repository version. An older Compose file does not know the archive
-service; pulling its image alone is not sufficient.
+Wait for every job in the GitHub `Docker Images` workflow to succeed. Then put
+the exact merged commit in the VPS `.env`, for example
+`STATISTICS_IMAGE_TAG=sha-0123456789abcdef0123456789abcdef01234567`.
+Do not use different tags for the producer and consumer, and do not begin the
+snapshot workflow while either image is still on a moving `latest` tag.
 
 ```bash
 cd /home/docker_apps/rfi-proxy
-mkdir -p statistics-archive
+mkdir -p statistics-snapshot-handoff statistics-archive
 
-docker compose --profile archive pull bellotreno-statistics-archive
-docker compose --profile archive run --rm bellotreno-statistics-archive plan
+docker compose pull bellotreno-statistics bellotreno-statistics-archive
+
+STATISTICS_IMAGE=$(docker compose --profile archive config --images | \
+  grep -E '^ghcr.io/06leong/bellotreno-statistics:sha-[0-9a-f]{40}$')
+ARCHIVE_IMAGE=$(docker compose --profile archive config --images | \
+  grep -E '^ghcr.io/06leong/bellotreno-statistics-archive:sha-[0-9a-f]{40}$')
+STATISTICS_REVISION=$(docker image inspect \
+  "$STATISTICS_IMAGE" \
+  --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')
+ARCHIVE_REVISION=$(docker image inspect \
+  "$ARCHIVE_IMAGE" \
+  --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')
+test -n "$STATISTICS_REVISION"
+test "$STATISTICS_REVISION" = "$ARCHIVE_REVISION"
+test "$STATISTICS_IMAGE" = \
+  "ghcr.io/06leong/bellotreno-statistics:sha-$STATISTICS_REVISION"
+test "$ARCHIVE_IMAGE" = \
+  "ghcr.io/06leong/bellotreno-statistics-archive:sha-$STATISTICS_REVISION"
+
+docker compose up -d --no-deps --force-recreate bellotreno-statistics
+
+SNAPSHOT_JSON=$(docker compose exec -T bellotreno-statistics \
+  python snapshot_statistics.py create)
+printf '%s\n' "$SNAPSHOT_JSON" | tee snapshot-create-latest.json
+SNAPSHOT_ID=$(printf '%s' "$SNAPSHOT_JSON" | \
+  python3 -c 'import json,sys; print(json.load(sys.stdin)["snapshotId"])')
+printf 'snapshot_id=%s\n' "$SNAPSHOT_ID"
+
+docker compose exec -T bellotreno-statistics \
+  python snapshot_statistics.py list
+
+docker compose --profile archive run --rm \
+  bellotreno-statistics-archive plan --snapshot-id "$SNAPSHOT_ID"
 ```
 
-`plan` is the preflight: review its source dates, selected partitions, disk
-estimate, and free-space decision before continuing. The default safety reserve
-is 5 GiB; the capacity gate also reserves room for the configured DuckDB spill
-limit in addition to the SQLite snapshot and conservative Parquet allowance.
-The safety reserve can be adjusted with `STATISTICS_ARCHIVE_SAFETY_GIB`; do not
-lower it merely to make a full disk pass.
+`create` emits progress only on stderr and one machine-readable JSON document on
+stdout. Preserve its `snapshotId`; do not run another `create` between `plan`
+and `run` as a substitute. A receipt is accepted for 48 hours by default through
+`STATISTICS_ARCHIVE_SNAPSHOT_MAX_AGE_HOURS`. This window permits a slow first
+export but is not a retention policy.
+
+`plan` is the read-only preflight. Review its source dates, selected partitions,
+snapshot provenance, disk estimate, and free-space decision. The default safety
+reserve is 5 GiB; the capacity gate also reserves room for configured DuckDB
+spill and conservative Parquet growth. Adjust
+`STATISTICS_ARCHIVE_SAFETY_GIB` only from measured capacity, not merely to make
+a full disk pass.
 
 `continuityOk: false` or a non-zero `historicalPartitionGapCount` does not make
 `run` exit non-zero: the job still preserves every currently recoverable
@@ -171,21 +239,19 @@ gap and must not be described as complete. Run the archive daily where
 possible, and always at an interval comfortably shorter than the shortest
 30-day live retention window.
 
-The SQLite Backup API phase prints progress in ten-percent steps. Dataset names,
-partition dates, and row counts are also printed while exporting, so a first
-multi-gigabyte run should not look stalled.
-
-Create the local archive only after the plan succeeds:
+Export from that same snapshot only after `plan` succeeds:
 
 ```bash
-docker compose --profile archive run --rm bellotreno-statistics-archive run
+docker compose --profile archive run --rm \
+  bellotreno-statistics-archive run --snapshot-id "$SNAPSHOT_ID"
 ```
 
-The first run creates a consistent copy of the multi-gigabyte SQLite database
-and can compete with the collector for disk I/O. Start it during a quieter
-period after checking that the latest collector run succeeded; after it
-finishes, check the next collector duration and detail-failure count before
-scheduling recurring runs.
+Dataset names, partition dates, and row counts are printed while exporting. The
+initial snapshot creation and first export can compete with collection for disk
+I/O, so start them in a quieter period after confirming collector health. After
+the run, inspect the next collector duration and detail-failure count. Ordinary
+intermittent ViaggiaTreno empty payloads remain governed by the persisted retry
+backoff and are not, by themselves, archive corruption.
 
 Then run the independent local verifier and inspect the retained output size:
 
@@ -199,17 +265,139 @@ periodic pass over every published manifest. If `run` fails, it leaves its
 diagnostic directory under `statistics-archive/work/`; inspect the error before
 manually removing only that failed run directory.
 
+The first production archive on 5 August 2026 preserved 3,453,523 normalized
+rows in 205 immutable partitions. Its ZSTD Parquet payload was 34,367,647 bytes
+and `verify` passed. The on-disk archive directory was about 35 MiB. This is an
+encouraging compression result, but it must not be presented as a direct
+9.5-GiB-to-35-MiB compression ratio: the long-term dataset intentionally omits
+legacy duplicates and raw JSON, and the live SQLite file also contained free
+pages. Measure several incremental runs before forecasting monthly growth.
+
 The container currently writes archive files as root, matching the documented
 VPS commands. If a non-root operator will manage the output directly, set an
 intentional ownership policy for `statistics-archive` before scheduling the
 job rather than recursively changing ownership after every run.
 
-Treat a non-zero `plan`, `run`, or `verify` exit code as a failed operation.
-Do not remove `statistics-archive`, an old SQLite rollback copy, or any source
-row on the strength of `run` alone. Deletion requires a successful `verify`
-and, in a later remote-archive phase, an independently downloaded and verified
-off-VPS copy. Until then, monitor `df -h` before each run and clean up only by
-an explicit operator decision.
+Treat a non-zero `create`, `plan`, `run`, or `verify` exit code as a failed
+operation. Do not release the snapshot or remove any local archive or rollback
+backup on the strength of `run` alone.
+
+### Off-VPS copy through Cloudreve
+
+The preferred second copy is the separate 512-GB VPS, reached either directly
+or through Cloudreve's WebDAV endpoint. Keep rclone on the host, outside Docker,
+and keep its configuration readable only by the dedicated backup account. Do
+not add WebDAV URLs, usernames, passwords, or rclone configuration to `.env`,
+Compose, an image, Git, or a manifest.
+
+Before exposing a Cloudreve WebDAV endpoint, run Cloudreve 4.16.1 or newer and
+confirm that the instance includes the fix described in
+<https://github.com/cloudreve/cloudreve/security/advisories/GHSA-w5fv-7x5q-g8qp>.
+Use a dedicated least-privilege account restricted to the archive prefix.
+
+Use `rclone copy`, never `rclone sync`: immutable remote history must not be
+deleted merely because a local file is absent. Upload only files committed by a
+completed manifest; a failed run can leave uncommitted diagnostics or payloads
+that must never be published. Process payloads before their exact manifest so a
+remote `.complete.json` is never visible early. The following fail-fast
+bootstrap processes every local manifest in chronological order. Configure the
+`cloudreve` WebDAV remote interactively with `vendor = other` (Cloudreve is not
+Nextcloud or ownCloud) and replace the destination as needed. Ordinary WebDAV
+does not expose a portable server-side content hash, so the `check --download`
+steps intentionally download and hash the remote objects. Scheduled incremental
+runs should process only the manifest returned by that run. Before scheduling,
+the feature check below must report a server-side `Move`; otherwise use direct
+SFTP or another target that can rename a fully uploaded marker instead of
+publishing completion through WebDAV:
+
+```bash
+set -euo pipefail
+REMOTE='cloudreve:bellotreno/statistics-archive'
+FILES_FROM=$(mktemp)
+trap 'rm -f "$FILES_FROM"' EXIT
+
+rclone backend features cloudreve: --json | \
+  python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["Features"]["Move"], "remote lacks server-side Move"'
+
+while IFS= read -r MANIFEST_FILE; do
+  MANIFEST_NAME=$(basename "$MANIFEST_FILE")
+  python3 -c 'import json,sys; d=json.load(open(sys.argv[1], encoding="utf-8")); [print(item["path"]) for item in d["datasets"]]' \
+    "$MANIFEST_FILE" > "$FILES_FROM"
+  test -s "$FILES_FROM"
+
+  # Copy and content-check only payloads committed by this exact manifest.
+  rclone copy statistics-archive "$REMOTE" \
+    --files-from "$FILES_FROM" --checksum --immutable --transfers 2
+  rclone check statistics-archive "$REMOTE" \
+    --files-from "$FILES_FROM" --download --one-way
+
+  # Stage and content-check the marker under a non-complete path. Plain WebDAV
+  # uploads are not partial-name uploads, so never PUT the final marker directly.
+  rclone copyto "$MANIFEST_FILE" "$REMOTE/.incoming/$MANIFEST_NAME" \
+    --checksum --immutable
+  rclone check "$MANIFEST_FILE" "$REMOTE/.incoming" --download --one-way
+
+  # Publish through one same-backend server-side rename, then re-check final.
+  rclone moveto "$REMOTE/.incoming/$MANIFEST_NAME" \
+    "$REMOTE/manifests/$MANIFEST_NAME" --immutable
+  rclone check "$MANIFEST_FILE" "$REMOTE/manifests" --download --one-way
+done < <(find statistics-archive/manifests -maxdepth 1 -type f \
+  -name '*.complete.json' -print | sort)
+```
+
+An rclone comparison is necessary but not the independent dataset verification.
+On the second VPS, download the remote prefix into a fresh directory and run the
+same archive image's `verify --all` against that downloaded copy:
+
+```bash
+set -euo pipefail
+REMOTE='cloudreve:bellotreno/statistics-archive'
+RESTORE_ROOT="$PWD/statistics-archive-restore-$(date -u +%Y%m%dT%H%M%SZ)"
+ARCHIVE_IMAGE='ghcr.io/06leong/bellotreno-statistics-archive:sha-<full-40-character-commit>'
+mkdir -p "$RESTORE_ROOT"
+rclone copy "$REMOTE" "$RESTORE_ROOT" --immutable --transfers 2
+docker pull "$ARCHIVE_IMAGE"
+
+docker run --rm --network none --read-only --tmpfs /tmp:size=64m,mode=1777 \
+  -e ARCHIVE_ROOT=/archive \
+  -v "$RESTORE_ROOT:/archive:ro" \
+  "$ARCHIVE_IMAGE" \
+  verify --all
+```
+
+Use the same `sha-<full-40-character-commit>` archive image tag that created the
+local manifest; do not substitute the moving `latest` tag at this recovery gate.
+
+Only after this fresh-download verification passes may the exact handoff
+snapshot be released on the collector VPS:
+
+```bash
+docker compose exec -T bellotreno-statistics \
+  python snapshot_statistics.py release --snapshot-id "$SNAPSHOT_ID"
+```
+
+Release deletes only `snapshots/<id>.db` and its matching ready receipt; it does
+not delete Parquet or the old SQLite backup. Cloudreve, Gitea, and a direct SFTP
+directory on the same second VPS are one failure domain, not independent copies.
+
+Do not commit Parquet or SQLite databases as ordinary Git objects. GitHub blocks
+regular Git objects above 100 MiB and recommends a file-sharing/storage service
+for database files; see
+<https://docs.github.com/en/repositories/working-with-files/managing-large-files/about-large-files-on-github>.
+A Gitea Generic Package registry can be an optional publication channel, but it
+adds a dependency on the Gitea instance and its own backup policy. GitHub or
+Gitea should hold small manifests, schemas, data dictionaries, and restore
+records—not the primary data copy.
+Private repository visibility does not change Git's object model or file limits.
+Git LFS can technically store large snapshots, but quota, bandwidth, history,
+and restore coupling make it unsuitable as BelloTreno's primary archive; see
+<https://docs.github.com/en/repositories/working-with-files/managing-large-files/about-git-large-file-storage>.
+
+For the existing 9.5-GiB pre-v2 SQLite rollback database, prefer a one-time SFTP
+or rsync transfer directly to the second VPS. Record SHA-256 before transfer,
+verify the checksum on the destination, and retain a restore note. Do not delete
+the source backup until that verification and an intentional operator approval;
+the archive workflow never deletes it automatically.
 
 ## Statistics collection model
 

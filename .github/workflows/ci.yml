@@ -54,6 +54,13 @@ jobs:
           --tag bellotreno-statistics-archive:ci
           rfi-proxy/statistics
 
+      - name: Build statistics producer image
+        run: >-
+          docker build
+          --file rfi-proxy/statistics/Dockerfile
+          --tag bellotreno-statistics:ci
+          rfi-proxy/statistics
+
       - name: Smoke test offline archive image
         run: |
           docker run --rm --network none --read-only --tmpfs /tmp:size=16m \
@@ -61,6 +68,34 @@ jobs:
             -c 'import sqlite3,duckdb; from zoneinfo import ZoneInfo; assert ZoneInfo("Europe/Rome").key == "Europe/Rome"; source=sqlite3.connect("/tmp/smoke.db"); source.execute("CREATE TABLE sample(value INTEGER)"); source.execute("INSERT INTO sample VALUES (42)"); source.commit(); source.close(); target=duckdb.connect(); target.execute("LOAD sqlite"); target.execute("ATTACH '\''/tmp/smoke.db'\'' AS source (TYPE sqlite, READ_ONLY)"); assert target.execute("SELECT value FROM source.sample").fetchone()[0] == 42; target.close()'
           docker run --rm --network none --read-only \
             bellotreno-statistics-archive:ci --help
+
+      - name: Smoke test cross-container snapshot handoff
+        shell: bash
+        run: |
+          set -euo pipefail
+          DATA_ROOT="$RUNNER_TEMP/bellotreno-statistics-data"
+          HANDOFF_ROOT="$RUNNER_TEMP/bellotreno-snapshot-handoff"
+          mkdir -p "$DATA_ROOT" "$HANDOFF_ROOT"
+
+          docker run --rm --network none \
+            -v "$DATA_ROOT:/data" \
+            --entrypoint python bellotreno-statistics:ci \
+            -c 'import sqlite3; c=sqlite3.connect("/data/statistics.db"); c.execute("PRAGMA journal_mode=WAL"); c.execute("CREATE TABLE sample(value INTEGER)"); c.execute("INSERT INTO sample VALUES (42)"); c.commit(); c.close()'
+
+          SNAPSHOT_JSON=$(docker run --rm --network none \
+            -e SNAPSHOT_MIN_FREE_GIB=1 \
+            -v "$DATA_ROOT:/data" \
+            -v "$HANDOFF_ROOT:/snapshot-handoff" \
+            --entrypoint python bellotreno-statistics:ci \
+            snapshot_statistics.py create)
+          SNAPSHOT_ID=$(python -c 'import json,sys; print(json.load(sys.stdin)["snapshotId"])' \
+            <<<"$SNAPSHOT_JSON")
+
+          docker run --rm --network none --read-only --tmpfs /tmp:size=16m \
+            -e SNAPSHOT_ID="$SNAPSHOT_ID" \
+            -v "$HANDOFF_ROOT:/snapshot-handoff:ro" \
+            --entrypoint python bellotreno-statistics-archive:ci \
+            -c 'import duckdb,os; from statistics_snapshot import assert_prepared_snapshot_unchanged,load_prepared_snapshot,snapshot_consumer_lock; lock=snapshot_consumer_lock("/snapshot-handoff"); lock.__enter__(); s=load_prepared_snapshot("/snapshot-handoff",os.environ["SNAPSHOT_ID"]); p=s.database_path.as_posix(); c=duckdb.connect(); c.execute("LOAD sqlite"); c.execute("ATTACH '\''"+p+"'\'' AS source (TYPE sqlite, READ_ONLY)"); assert c.execute("SELECT value FROM source.sample").fetchone()[0] == 42; c.execute("DETACH source"); c.close(); assert_prepared_snapshot_unchanged(s); lock.__exit__(None,None,None); print("cross_container_snapshot_ok",s.snapshot_id)'
 
       - name: Build frontend
         run: npm run build

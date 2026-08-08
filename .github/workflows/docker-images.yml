@@ -58,7 +58,7 @@ jobs:
           images: ${{ matrix.image }}
           tags: |
             type=raw,value=latest
-            type=sha,prefix=sha-
+            type=sha,prefix=sha-,format=long
 
       - name: Build and push
         uses: docker/build-push-action@v7

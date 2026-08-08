@@ -7,6 +7,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app.py .
 COPY statistics_storage.py .
+COPY statistics_snapshot.py .
+COPY snapshot_statistics.py .
 COPY migrate_statistics_v2.py .
 COPY statistics_core ./statistics_core
 

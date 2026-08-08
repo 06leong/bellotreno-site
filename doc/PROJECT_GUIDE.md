@@ -184,6 +184,7 @@ compose project but has a different role from the main proxy.
 | External domain | `https://stats-api.bellotreno.org/v1` |
 | Storage | SQLite + WAL; additive statistics schema v2 alongside legacy tables |
 | Data volume | `./statistics-data:/data` |
+| Snapshot handoff | `./statistics-snapshot-handoff:/snapshot-handoff` (writable only in the statistics service) |
 | Auth | `X-Bello-Stats-Token`, injected by Pages Functions |
 
 Collector behavior:
@@ -291,6 +292,33 @@ retained observations keep their referenced parent service. Sampled observation
 history remains for 30 days. The v2 latest-service raw layer remains for seven
 days, while the compressed collection-date parent in the legacy API row follows
 that row's independent 30-day window.
+
+### Long-term Parquet archive
+
+Long-term normalized history is exported by the separate, offline
+`bellotreno-statistics-archive` Compose profile. It never mounts
+`statistics-data`, even read-only. Instead:
+
+1. `snapshot_statistics.py create` runs in `bellotreno-statistics`, uses the
+   SQLite Backup API against the live WAL database, and atomically publishes
+   `snapshots/<id>.db` in DELETE journal mode followed by
+   `receipts/<id>.ready.json` in the handoff. It keeps a free-space reserve and
+   refuses concurrent ready or interrupted handoff artifacts;
+2. archive `plan --snapshot-id <id>` and `run --snapshot-id <id>` mount that
+   handoff read-only and must consume the same exact, fresh, unchanged receipt;
+3. archive `verify` checks immutable Parquet and completion-manifest checksums;
+4. `snapshot_statistics.py release --snapshot-id <id>` removes only the exact
+   handoff pair after local verification and an independently downloaded and
+   verified off-VPS copy.
+
+The archive image has no network and never contains remote-storage credentials.
+Host-side rclone/SFTP copies only paths committed by each exact manifest to the
+separate storage VPS, verifies those files, and publishes that completion
+manifest last. It uses `copy`, not destructive `sync`. SQLite and Parquet are
+not Git artifacts; GitHub/Gitea retain only small manifests, schemas, data
+dictionaries, and recovery records. See `rfi-proxy/README.md` for the production
+runbook and `doc/statistics-analytics-roadmap.md` for analytical marts and UI
+priorities.
 
 If a future capacity-reviewed decision calls for historical v2 data, legacy
 history can be backfilled through the resumable `migrate_statistics_v2.py`
