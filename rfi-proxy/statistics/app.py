@@ -16,6 +16,12 @@ from zoneinfo import ZoneInfo
 import requests
 from flask import Flask, Response, jsonify, request
 
+from analytics_read_model import (
+    AnalyticsReadModel,
+    AnalyticsUnavailable,
+    default_analytics_path,
+)
+
 from statistics_core.normalizers import (
     as_int as core_as_int,
     is_collectable_service as core_is_collectable_service,
@@ -107,10 +113,12 @@ BOARD_TYPES = [
     if item.strip() in {"partenze", "arrivi"}
 ]
 OPTIONAL_STATION_CSV = os.getenv("STATION_CSV_PATH", "/data/stations.csv")
+ANALYTICS_SQLITE_PATH = default_analytics_path()
 
 app = Flask(__name__)
 collector_lock = threading.Lock()
 thread_local = threading.local()
+analytics_read_model = AnalyticsReadModel(ANALYTICS_SQLITE_PATH)
 
 
 class ClosingConnection(sqlite3.Connection):
@@ -1971,6 +1979,13 @@ def day_v2_coverage(
 
 @app.get("/health")
 def health() -> Response:
+    try:
+        analytics = analytics_read_model.metadata()
+    except (AnalyticsUnavailable, sqlite3.Error, ValueError, json.JSONDecodeError) as exc:
+        analytics = {
+            "available": False,
+            "reason": "analytics_not_built" if isinstance(exc, AnalyticsUnavailable) else "analytics_unreadable",
+        }
     return jsonify({
         "ok": True,
         "collectorEnabled": COLLECTOR_ENABLED,
@@ -1997,6 +2012,7 @@ def health() -> Response:
         },
         "nextScheduledAt": to_utc_iso(next_scheduled_slot()),
         "lastCollectorRun": collector_run_row(),
+        "analytics": analytics,
     })
 
 
@@ -2260,6 +2276,170 @@ def ranking_endpoint() -> Response:
             (date, limit),
         ).fetchall()
     return jsonify({"items": [dict(row) for row in rows], "total": len(rows)})
+
+
+def analytics_error_response(exc: Exception) -> tuple[Response, int]:
+    if isinstance(exc, AnalyticsUnavailable):
+        return jsonify({"available": False, "reason": "analytics_not_built"}), 503
+    if isinstance(exc, ValueError):
+        return jsonify({"available": False, "reason": "invalid_request", "error": str(exc)}), 400
+    app.logger.exception("analytics request failed: %s", exc)
+    return jsonify({"available": False, "reason": "analytics_unreadable"}), 503
+
+
+@app.get("/v1/analytics/meta")
+def analytics_meta_endpoint() -> Response:
+    try:
+        return jsonify(analytics_read_model.metadata())
+    except (AnalyticsUnavailable, sqlite3.Error, ValueError, json.JSONDecodeError) as exc:
+        return analytics_error_response(exc)
+
+
+@app.get("/v1/analytics/overview")
+def analytics_overview_endpoint() -> Response:
+    try:
+        return jsonify(
+            analytics_read_model.overview(
+                as_of=request.args.get("asOf") or request.args.get("date"),
+                window=as_int(request.args.get("window"), 28),
+                operator=request.args.get("operator", "").strip(),
+                category=request.args.get("category", "").strip().upper(),
+            )
+        )
+    except (AnalyticsUnavailable, sqlite3.Error, ValueError, json.JSONDecodeError) as exc:
+        return analytics_error_response(exc)
+
+
+@app.get("/v1/analytics/rankings")
+def analytics_rankings_endpoint() -> Response:
+    try:
+        return jsonify(
+            analytics_read_model.rankings(
+                dimension=request.args.get("dimension", "operator").strip().lower(),
+                as_of=request.args.get("asOf") or request.args.get("date"),
+                window=as_int(request.args.get("window"), 28),
+                sort=request.args.get("sort", "punctuality").strip().lower(),
+                direction=request.args.get("direction", "desc").strip().lower(),
+                minimum_sample=as_int(request.args.get("minimumSample"), 100),
+                limit=as_int(request.args.get("limit"), 25),
+                offset=as_int(request.args.get("offset"), 0),
+                query=request.args.get("q", "").strip(),
+            )
+        )
+    except (AnalyticsUnavailable, sqlite3.Error, ValueError, json.JSONDecodeError) as exc:
+        return analytics_error_response(exc)
+
+
+@app.get("/v1/analytics/outliers")
+def analytics_outliers_endpoint() -> Response:
+    try:
+        return jsonify(
+            analytics_read_model.outliers(
+                as_of=request.args.get("asOf") or request.args.get("date"),
+                window=as_int(request.args.get("window"), 28),
+                operator=request.args.get("operator", "").strip(),
+                category=request.args.get("category", "").strip().upper(),
+                query=request.args.get("q", "").strip(),
+                limit=as_int(request.args.get("limit"), 25),
+                offset=as_int(request.args.get("offset"), 0),
+            )
+        )
+    except (AnalyticsUnavailable, sqlite3.Error, ValueError, json.JSONDecodeError) as exc:
+        return analytics_error_response(exc)
+
+
+def analytics_csv_cell(value: Any) -> Any:
+    if isinstance(value, str) and value.startswith(("=", "+", "-", "@", "\t", "\r")):
+        return "'" + value
+    return value
+
+
+def analytics_export_rows(payload: dict[str, Any], view: str) -> tuple[list[str], list[list[Any]]]:
+    if view == "outliers":
+        items = payload.get("items") or []
+        columns = [
+            "service_date", "train_key", "train_number", "operator", "category",
+            "origin", "destination", "origin_code", "destination_code",
+            "relation_key", "status", "cancelled", "completed",
+            "final_arrival_delay", "final_departure_delay", "scheduled_departure",
+            "scheduled_arrival", "first_observed_at", "last_observed_at",
+            "observation_count", "latest_state_quality", "detail_quality",
+            "observation_quality",
+        ]
+        return columns, [
+            [analytics_csv_cell(item.get(column)) for column in columns]
+            for item in items
+        ]
+    items = payload.get("items") or []
+    columns = [
+        "key", "label", "observedServices", "outcomeEligibleServices",
+        "excludedServices", "arrivalSample", "within5Percent",
+        "within15Percent", "cancellationPercent", "delayP50", "delayP90",
+        "delayP95", "over60Percent",
+    ]
+    rows = []
+    for item in items:
+        rows.append([analytics_csv_cell(value) for value in [
+            item.get("key"),
+            item.get("label"),
+            item.get("observedServices"),
+            item.get("outcomeEligibleServices"),
+            item.get("excludedServices"),
+            item.get("arrivalSample"),
+            ((item.get("punctuality") or {}).get("within5") or {}).get("percent"),
+            ((item.get("punctuality") or {}).get("within15") or {}).get("percent"),
+            (item.get("cancellation") or {}).get("percent"),
+            (item.get("delayMinutes") or {}).get("p50"),
+            (item.get("delayMinutes") or {}).get("p90"),
+            (item.get("delayMinutes") or {}).get("p95"),
+            ((item.get("severeDelay") or {}).get("over60") or {}).get("percent"),
+        ]])
+    return columns, rows
+
+
+@app.get("/v1/analytics/export.csv")
+def analytics_export_endpoint() -> Response:
+    view = request.args.get("view", "rankings").strip().lower()
+    try:
+        if view == "outliers":
+            payload = analytics_read_model.outliers(
+                as_of=request.args.get("asOf") or request.args.get("date"),
+                window=as_int(request.args.get("window"), 28),
+                operator=request.args.get("operator", "").strip(),
+                category=request.args.get("category", "").strip().upper(),
+                query=request.args.get("q", "").strip(),
+                limit=100,
+                offset=0,
+            )
+        else:
+            payload = analytics_read_model.rankings(
+                dimension=request.args.get("dimension", "operator").strip().lower(),
+                as_of=request.args.get("asOf") or request.args.get("date"),
+                window=as_int(request.args.get("window"), 28),
+                sort=request.args.get("sort", "punctuality").strip().lower(),
+                direction=request.args.get("direction", "desc").strip().lower(),
+                minimum_sample=as_int(request.args.get("minimumSample"), 100),
+                limit=100,
+                offset=0,
+                query=request.args.get("q", "").strip(),
+            )
+        columns, rows = analytics_export_rows(payload, view)
+    except (AnalyticsUnavailable, sqlite3.Error, ValueError, json.JSONDecodeError) as exc:
+        return analytics_error_response(exc)
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    if columns:
+        writer.writerow(columns)
+        writer.writerows(rows)
+    as_of = request.args.get("asOf") or payload.get("asOfDate") or "latest"
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f"attachment; filename=bellotreno-analytics-{view}-{as_of}.csv"
+        },
+    )
 
 
 @app.get("/v1/export.csv")

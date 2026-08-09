@@ -211,6 +211,12 @@ class StatisticsAppIntegrationTest(unittest.TestCase):
         APP.today_rome = self.original_today_rome
         APP.request.args = self.original_request_args
 
+    def test_analytics_csv_cells_neutralize_spreadsheet_formulas(self):
+        self.assertEqual(APP.analytics_csv_cell("=HYPERLINK('bad')"), "'=HYPERLINK('bad')")
+        self.assertEqual(APP.analytics_csv_cell("@SUM(1,1)"), "'@SUM(1,1)")
+        self.assertEqual(APP.analytics_csv_cell("MILANO CENTRALE"), "MILANO CENTRALE")
+        self.assertEqual(APP.analytics_csv_cell(42), 42)
+
     def write_snapshot(self, date: str, *, trains: int = 0, running: int = 0) -> None:
         captured_at = f"{date}T10:05:00Z"
         conn = APP.db()
