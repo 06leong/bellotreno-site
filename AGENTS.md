@@ -3,7 +3,7 @@
 Repository-wide developer and agent notes for BelloTreno. This file lives at
 the repository root so these instructions apply to every project subtree.
 
-BelloTreno is a real-time Italian railway information site built with Astro 6,
+BelloTreno is a real-time Italian railway information site built with Astro 7,
 TypeScript, Tailwind CSS v4, DaisyUI v5, Cloudflare Pages, and Cloudflare Pages
 Functions.
 
@@ -58,6 +58,12 @@ typed guards, local interfaces, normalizers, or explicit fallback behavior.
   SQLite-to-Parquet archive tool. Its Compose profile mounts only that completed
   handoff read-only, never the production data directory, and must never delete
   or compact the live database.
+- `rfi-proxy/statistics/analytics_statistics.py` is the offline Parquet-to-
+  SQLite semantic builder. It reads only completed archive manifests and
+  atomically publishes a disposable analytics read model.
+- `rfi-proxy/statistics/analytics_read_model.py` is the read-only API repository
+  used by the always-on service. It must not import DuckDB or query Parquet in a
+  request.
 
 Do not add new browser source under `public/scripts/`. Runtime code must be
 authored in TypeScript and bundled by Astro/Vite into hashed `/_astro/*` assets.
@@ -97,6 +103,11 @@ Important modules:
   dedicated infomobility page UI.
 - `statistics.ts`: statistics dashboard, charts, tables, pagination, and CSV
   links.
+- `statistics-analytics.ts`: live/performance mode state, professional analytics
+  API normalization, KPI/table rendering, URL state, and lazy chart loading.
+- `statistics-echarts.ts`: tree-shaken Apache ECharts renderers loaded only when
+  historical-performance mode is opened. Keep metric calculation out of chart
+  options.
 - `swiss.ts`: Swiss formation fetch/cache, timeline merge, coach strip, and
   vehicle detail rendering.
 - `about.ts`: localized About-page content rendered from typed, in-repo static
@@ -236,6 +247,10 @@ Current risk tracking lives in `doc/innerhtml-audit.md`.
 - Long-term Parquet export runs through the separate `archive` Compose profile;
   do not add DuckDB to the always-on statistics image, and do not add rclone,
   WebDAV, or archive credentials to either image.
+- Professional analytics builds run through the separate `analytics` Compose
+  profile. The dashboard must preserve numerator, denominator, exclusions,
+  actual service-day coverage, source-manifest metadata, and nulls. Missing
+  evidence must never become zero, on-time, or cancellation.
 - `STATISTICS_BOARD_TYPES=partenze,arrivi` means both board types are fetched.
   Keep each station board type as a separate concurrent task.
 - Statistics are observable operational data, not an official full-network
@@ -263,7 +278,7 @@ If `rfi-proxy/` or Docker deployment config changes:
 
 ```bash
 cd rfi-proxy
-docker compose --profile archive config
+docker compose --profile archive --profile analytics config
 ```
 
 For frontend changes, smoke test:

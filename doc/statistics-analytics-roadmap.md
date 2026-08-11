@@ -14,6 +14,11 @@ The foundation is now usable rather than hypothetical:
 - the public Statistics page has a responsive dashboard shell, date comparison,
   trends, station/relation exploration, rankings, CSV export, and mobile-specific
   layout work;
+- the current professional-dashboard iteration adds topic-based exploration for
+  service composition, weekday/hour rhythm, station activity, route recovery,
+  cross-midnight services, long journeys, disruption concentration, and an
+  exact-service stop lifecycle. Desktop and mobile use the same API payloads,
+  metric definitions, filters, denominators, and data-table alternatives;
 - the first production Parquet run preserved 3,453,523 normalized rows in 205
   immutable partitions. It produced 34,367,647 bytes of ZSTD Parquet (about
   35 MiB on disk), and the archive verifier passed;
@@ -53,6 +58,84 @@ contains the exact compressed `train_raw_payloads` BLOB plus its format,
 quality, and observation metadata. It does not include legacy duplicated
 `trains.raw_json`, per-stop legacy JSON, station-board provider bodies, failed
 HTTP responses, or successive raw versions of the same service.
+
+## Delivery tracker
+
+This table is the implementation source of truth for analytics work. Update the
+status and acceptance evidence in the same pull request that changes a stage.
+
+| Stage | Status | Acceptance condition |
+| --- | --- | --- |
+| Operational storage v2 | Completed | Service/collection dates, canonical identity, stop events, retry state, and compressed payloads are deployed and covered by tests. |
+| Consistent snapshot handoff | Completed | The collector publishes one exact ready snapshot; the archive consumes it read-only and release is lock-safe. |
+| Immutable Parquet archive | Completed | Completed manifests are additive, `verify --all` passes, and normalized grains remain distinct. |
+| Professional semantic layer | Completed | `quality_day`, stabilized service/stop facts, daily metrics, and exact 7/28/90-day windows are built from completed manifests into an atomic derived SQLite model. |
+| Analytics query API | Completed | Versioned metadata, overview, ranking, outlier, and formula-safe CSV endpoints read only the derived analytics database and preserve the last good model when a rebuild fails. |
+| Public professional dashboard | Completed | Live remains the default; historical performance is lazy-loaded, mobile-first, multilingual, accessible, source-backed, and visibly qualified. |
+| Professional dashboard explorer | In progress | The v2 read model and `/v1/analytics/explore` power service-mix, rhythm, station, route, and exact-service views with the same evidence rules on desktop and mobile. |
+| Private analyst workbench | Deferred | A dedicated read model and authenticated workbench are deployed without access to the live collector database. |
+| Off-VPS archive copy | Deferred | A completed manifest and its exact files are verified from a fresh second-VPS download before being called a backup. |
+
+### Current milestone: reliability and long-tail performance
+
+The current implementation sequence is deliberately narrow enough to reconcile
+before adding more visual surfaces:
+
+1. build the semantic facts and `quality_day` from completed Parquet manifests;
+2. materialize network/operator/category/station/relation daily and rolling
+   metrics into a small atomic SQLite read model;
+3. expose metric metadata, exact denominators, coverage, comparable windows,
+   rankings, outliers, and CSV through `/v1/analytics/*`;
+4. add a separate historical-performance mode to `/statistics/`, while keeping
+   today's live operations as the default;
+5. validate the Cloudflare preview on narrow mobile, desktop, all three
+   languages, and light/dark themes before merging.
+
+The first public analytical view prioritizes arrival punctuality at 5 and 15
+minutes, full observable cancellation, p50/p75/p90/p95 arrival delay, severe
+delay above 30/60/120 minutes, delay buckets, sample size, and source quality.
+It does not publish a composite reliability score or prediction.
+
+The second public iteration keeps those headline outcomes and adds explanatory
+views rather than another score:
+
+- operator and category shares count distinct observable train services. They
+  are not passenger, seat-capacity, revenue, or market-share estimates;
+- the operator × category matrix exposes how the observed service mix is
+  composed instead of treating an operator or category as a homogeneous block;
+- weekday × departure-hour and category-hour views use planned local operating
+  time and retain an accessible table for the same values;
+- station volume deduplicates repeated 30-minute observations by exact service
+  identity. Arrivals, departures, and transit calls are shown separately, and
+  the ranking must never be described as footfall;
+- route recovery is final eligible arrival delay minus final eligible departure
+  delay. Negative values mean delay was recovered; positive values mean it grew;
+- cross-midnight services are detected from scheduled local departure and
+  arrival dates, so ICN/EN and late regional or high-speed services remain on
+  their original `service_date` rather than being split at midnight;
+- disruption concentration is a Pareto view of eligible route-level arrivals
+  above 60 minutes, with the event denominator retained;
+- the service spotlight uses the exact `service_date + train_key` identity and
+  stop order. Equal train numbers on RFI/FNM or different departures are never
+  merged.
+
+Implemented constraints are deliberate and visible in the product:
+
+- stabilized service outcomes trail live operations by the configured active
+  service TTL, currently seven days, so the UI labels the latest archived
+  service date separately from the read-model build time;
+- a selected 28/90-day window may initially contain fewer actual service days;
+  `serviceDays / windowDays` is displayed and the previous-window delta remains
+  unavailable until both windows are complete;
+- operator/category rolling windows are available through the retained history;
+  station/relation ranking windows are materialized for the latest archive date
+  to keep the public read model compact;
+- the outlier mart keeps the network-wide extreme tail plus per-operator,
+  per-category, and operator-category tails so a smaller segment is not erased
+  by a global top-N cutoff;
+- exact trip identity and extreme delays are retained, while provider failures,
+  unresolved identity and incomplete outcomes remain exclusions rather than
+  invented zeroes or cancellations.
 
 ## Two surfaces
 
@@ -125,6 +208,50 @@ If concurrent analysts, multi-year retention, or API latency later exceeds the
 snapshot approach, move the analytical layer—not necessarily the collector—to
 PostgreSQL or ClickHouse. Make that decision from query latency, refresh time,
 storage growth, and operational burden rather than database fashion.
+
+### Public chart renderer
+
+Use a custom BelloTreno dashboard with tree-shaken Apache ECharts loaded only
+when the historical-performance mode is opened. Ordinary daily trends,
+distribution bars, and the 90-day calendar use SVG; switch an individual view
+to Canvas only when measured mark count or mobile performance justifies it.
+Every chart needs an equivalent data table or textual summary, non-colour state
+encoding, reduced-motion behavior, and touch/focus interaction. Metric
+calculation remains in the semantic layer rather than ECharts transforms.
+
+Reference products contribute principles rather than layouts:
+
+- Zugfinder: exact-service history and an outlier explorer;
+- chuuchuu: future journey/corridor reliability framed around a passenger
+  decision;
+- ORR Data Portal: explicit definitions, denominators, provisional status,
+  operator/route/station breakdowns, and downloads;
+- Eurostat railway transport: metadata, methodology, quality, frequency, and
+  revision context.
+
+BelloTreno must not borrow official-sounding completeness or metric names when
+its observable source cannot support the same denominator.
+
+### Approved dashboard interaction contract (11 August 2026)
+
+The public dashboard combines the information density of the overview and
+network-explorer concepts. On desktop the reading order is overview, service
+mix, network rhythm, stations, routes, train services, then methodology. On
+mobile the same topics become a horizontally scrollable tab rail; the data and
+definitions do not change merely because fewer marks fit on screen.
+
+The renderer remains tree-shaken Apache ECharts with the SVG renderer loaded
+only in historical-performance mode. Charts are not calculation engines. Each
+chart receives materialized semantic values and supplies a table or exact-value
+list. Touch replaces hover, controls remain at least 44 CSS pixels high, and
+dense matrices scroll within their own panel instead of widening the page.
+
+The initial v2 explorer is materialized for the latest analytical `asOfDate`.
+The original overview, rankings, outliers, and CSV remain available for older
+dates. Until a v2 model is published, operator/category shares and station/route
+leaderboards fall back to the existing ranking contract; genuinely new rhythm,
+recovery, cross-midnight, and lifecycle fields display as unavailable rather
+than being invented from incomplete evidence.
 
 ## Storage and recovery policy
 
@@ -362,12 +489,34 @@ the private BI workbench.
 5. **Next reliability:** schedule the workflow with a lock and alerts. Once a
    remote target is enabled, make release contingent on remote verification;
    never schedule archive/backup deletion.
-6. **Next analytics:** build `quality_day`, `fact_service_outcome`, and
-   `agg_network_day`, then add comparison/distribution APIs with sample sizes.
-7. **Next product:** deliver trust/coverage, comparable outcomes, distributions,
-   and operator/category/station/corridor drill-down in mobile-first stages.
-8. **Later:** deploy a private workbench against a dedicated analytical read
-   model and promote only stable, reconciled metrics into the public API/UI.
+6. **Completed — semantic analytics:** build stabilized service/stop facts,
+   `quality_day`, network/dimension daily aggregates, and exact 7/28/90-day
+   rolling windows from completed Parquet manifests. Publish the derived SQLite
+   read model atomically and keep the previous model on failure.
+7. **Completed — query contracts:** deliver `/v1/analytics/meta`, `overview`,
+   `rankings`, `outliers`, and filtered CSV. Preserve nulls, numerators,
+   denominators, exclusions, samples, coverage state, source manifests, and the
+   metric-definition version.
+8. **Completed — public product:** add live/performance modes, ECharts trend,
+   distribution, percentile, calendar, long-tail, dimension ranking, and
+   outlier views. Keep live as the default and use Cloudflare Preview for final
+   responsive visual approval.
+9. **In progress — dimension drill-down:** the current v2 explorer adds
+   operator/category composition, station and relation context, weekday/hour
+   baselines, route recovery, cross-midnight and long-journey metrics,
+   disruption concentration, shareable topic/filter/station URL state, and an
+   exact-service stop lifecycle. The next increment should add stable
+   service-instance links, richer station detail, and same-weekday comparison.
+10. **Later — journey decisions:** define a separately versioned recurring
+    service-pattern identity, obtain a trustworthy timetable/transfer model,
+    then evaluate corridor choice and connection reliability. Never infer a
+    recurring service from train number alone.
+11. **Later — advanced analysis:** after at least 90 stable days, evaluate
+    seasonal baselines, robust anomaly detection, incident windows, and only
+    then prediction with an explicit backtest and calibration report.
+12. **Later — spatial and private analysis:** add a station/route map only after
+    coordinate and topology coverage pass QA; deploy a private DuckDB notebook
+    or BI workbench against a dedicated read model, never the live SQLite file.
 
 Every promoted metric needs a definition, numerator, denominator, grain, time
 basis, coverage requirement, refresh cadence, and known limitation.

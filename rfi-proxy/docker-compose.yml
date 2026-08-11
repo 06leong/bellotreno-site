@@ -52,10 +52,12 @@ services:
       - SNAPSHOT_ENDED_DAY_READY_HOUR=${STATISTICS_ARCHIVE_ENDED_DAY_READY_HOUR:-2}
       - SNAPSHOT_MAX_AGE_HOURS=${STATISTICS_ARCHIVE_SNAPSHOT_MAX_AGE_HOURS:-48}
       - SNAPSHOT_MIN_FREE_GIB=${STATISTICS_ARCHIVE_SNAPSHOT_MIN_FREE_GIB:-5}
+      - ANALYTICS_SQLITE_PATH=/analytics/analytics.db
       - TZ=Europe/Rome
     volumes:
       - ./statistics-data:/data
       - ./statistics-snapshot-handoff:/snapshot-handoff
+      - ./statistics-analytics:/analytics:ro
     depends_on:
       - rfi-proxy
     mem_limit: 680m
@@ -81,6 +83,40 @@ services:
     volumes:
       - ./statistics-snapshot-handoff:/snapshot-handoff:ro
       - ./statistics-archive:/archive
+    network_mode: none
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
+    restart: "no"
+
+  bellotreno-statistics-analytics:
+    image: ghcr.io/06leong/bellotreno-statistics-archive:${STATISTICS_IMAGE_TAG:-latest}
+    profiles:
+      - analytics
+    entrypoint:
+      - python
+      - -u
+      - analytics_statistics.py
+    command:
+      - build
+    environment:
+      - ARCHIVE_ROOT=/archive
+      - ANALYTICS_ROOT=/analytics
+      - ANALYTICS_DUCKDB_MEMORY_LIMIT=${STATISTICS_ANALYTICS_DUCKDB_MEMORY_LIMIT:-384MB}
+      - ANALYTICS_DUCKDB_THREADS=${STATISTICS_ANALYTICS_DUCKDB_THREADS:-1}
+      - ANALYTICS_HISTORY_DAYS=${STATISTICS_ANALYTICS_HISTORY_DAYS:-730}
+      - ANALYTICS_MIN_RANKING_SAMPLE=${STATISTICS_ANALYTICS_MIN_RANKING_SAMPLE:-100}
+      - TZ=Europe/Rome
+    volumes:
+      - ./statistics-archive:/archive:ro
+      - ./statistics-analytics:/analytics
     network_mode: none
     read_only: true
     cap_drop:

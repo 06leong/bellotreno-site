@@ -108,4 +108,4 @@ jobs:
         env:
           RFI_PROXY_SECURITY_TOKEN: ci-rfi-proxy-token
           STATISTICS_SECURITY_TOKEN: ci-statistics-token
-        run: docker compose --profile archive config
+        run: docker compose --profile archive --profile analytics config

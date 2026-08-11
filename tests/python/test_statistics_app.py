@@ -211,6 +211,45 @@ class StatisticsAppIntegrationTest(unittest.TestCase):
         APP.today_rome = self.original_today_rome
         APP.request.args = self.original_request_args
 
+    def test_analytics_csv_cells_neutralize_spreadsheet_formulas(self):
+        self.assertEqual(APP.analytics_csv_cell("=HYPERLINK('bad')"), "'=HYPERLINK('bad')")
+        self.assertEqual(APP.analytics_csv_cell("@SUM(1,1)"), "'@SUM(1,1)")
+        self.assertEqual(APP.analytics_csv_cell("MILANO CENTRALE"), "MILANO CENTRALE")
+        self.assertEqual(APP.analytics_csv_cell(42), 42)
+
+    def test_analytics_explore_endpoint_forwards_typed_filters(self):
+        class StubAnalytics:
+            def explore(self, **kwargs):
+                return {"available": True, "received": kwargs}
+
+        original_model = APP.analytics_read_model
+        original_args = APP.request.args
+        APP.analytics_read_model = StubAnalytics()
+        APP.request.args = {
+            "asOf": "2026-08-08",
+            "window": "28",
+            "operator": "10",
+            "category": "",
+            "station": "S01700",
+        }
+        try:
+            payload = APP.analytics_explore_endpoint()
+        finally:
+            APP.analytics_read_model = original_model
+            APP.request.args = original_args
+
+        self.assertTrue(payload["available"])
+        self.assertEqual(
+            payload["received"],
+            {
+                "as_of": "2026-08-08",
+                "window": 28,
+                "operator": "10",
+                "category": "",
+                "station": "S01700",
+            },
+        )
+
     def write_snapshot(self, date: str, *, trains: int = 0, running: int = 0) -> None:
         captured_at = f"{date}T10:05:00Z"
         conn = APP.db()

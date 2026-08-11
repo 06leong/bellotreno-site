@@ -9,6 +9,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     <Fragment slot="scripts">
         <script>
             import '../client/statistics.ts';
+            import '../client/statistics-analytics.ts';
         </script>
     </Fragment>
 
@@ -18,9 +19,19 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                 <p class="statistics-kicker" data-i18n="statistics_kicker">ViaggiaTreno observable data</p>
                 <h1 data-i18n="statistics_title">Railway Statistics</h1>
                 <p data-i18n="statistics_subtitle">Daily operational statistics based on trains visible through ViaggiaTreno.</p>
+                <div class="statistics-mode-switch" role="tablist" aria-label="Statistics mode">
+                    <button id="statisticsModeLive" class="statistics-mode-button active" type="button" role="tab" aria-selected="true" data-statistics-mode="live">
+                        <span class="material-symbols-outlined" aria-hidden="true">sensors</span>
+                        <span data-i18n="statistics_mode_live">Live operations</span>
+                    </button>
+                    <button id="statisticsModePerformance" class="statistics-mode-button" type="button" role="tab" aria-selected="false" data-statistics-mode="performance">
+                        <span class="material-symbols-outlined" aria-hidden="true">analytics</span>
+                        <span data-i18n="statistics_mode_performance">Historical performance</span>
+                    </button>
+                </div>
             </div>
 
-            <div class="statistics-controls" aria-label="Statistics date controls">
+            <div id="statisticsLiveControls" class="statistics-controls" aria-label="Statistics date controls">
                 <label class="statistics-date-field">
                     <span data-i18n="statistics_date">Date</span>
                     <span class="statistics-select-shell">
@@ -44,6 +55,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             </div>
         </header>
 
+        <div id="statisticsLiveView">
         <section id="statisticsStatus" class="statistics-status" aria-live="polite" hidden></section>
 
         <section class="statistics-context-rail" aria-label="Data freshness and coverage">
@@ -152,7 +164,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                     <span class="statistics-panel-kicker" data-i18n="statistics_filters_title">Filter and inspect</span>
                     <h2 data-i18n="statistics_query_title">Explore statistics</h2>
                 </div>
-                <button id="statisticsCsv" class="statistics-export-button" type="button">
+                <button id="statisticsCsv" class="statistics-export-button" type="button" hidden>
                     <span class="material-symbols-outlined" aria-hidden="true">download</span>
                     <span data-i18n="statistics_export_csv">Export CSV</span>
                 </button>
@@ -208,6 +220,388 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                     <span class="material-symbols-outlined" aria-hidden="true">chevron_right</span>
                 </button>
             </div>
+        </section>
+        </div>
+
+        <section id="statisticsPerformanceView" class="statistics-performance" aria-labelledby="statisticsPerformanceTitle" hidden>
+            <div class="statistics-performance-toolbar">
+                <div>
+                    <p class="statistics-panel-kicker" data-i18n="statistics_performance_kicker">Comparable service outcomes</p>
+                    <h2 id="statisticsPerformanceTitle" data-i18n="statistics_performance_title">Network performance</h2>
+                    <p data-i18n="statistics_performance_subtitle">Completed service days, explicit denominators and tail-delay indicators.</p>
+                </div>
+                <button id="statisticsAnalyticsExport" class="statistics-export-button" type="button" hidden>
+                    <span class="material-symbols-outlined" aria-hidden="true">download</span>
+                    <span data-i18n="statistics_export_analysis_csv">Export analysis CSV</span>
+                </button>
+            </div>
+
+            <div class="statistics-performance-filters" aria-label="Historical analysis filters">
+                <fieldset class="statistics-window-control">
+                    <legend data-i18n="statistics_window">Analysis window</legend>
+                    <div class="statistics-window-options">
+                        <button type="button" data-analytics-window="7">7 <span data-i18n="statistics_days_short">days</span></button>
+                        <button type="button" class="active" data-analytics-window="28">28 <span data-i18n="statistics_days_short">days</span></button>
+                        <button type="button" data-analytics-window="90">90 <span data-i18n="statistics_days_short">days</span></button>
+                    </div>
+                </fieldset>
+                <label class="statistics-performance-field">
+                    <span data-i18n="statistics_as_of_date">As of service date</span>
+                    <select id="statisticsAnalyticsAsOf" class="select select-bordered"></select>
+                </label>
+                <label class="statistics-performance-field">
+                    <span data-i18n="statistics_filter_operator">Operator</span>
+                    <select id="statisticsAnalyticsOperator" class="select select-bordered">
+                        <option value="" data-i18n="statistics_all_operators">All operators</option>
+                    </select>
+                </label>
+                <label class="statistics-performance-field">
+                    <span data-i18n="statistics_filter_category">Category</span>
+                    <select id="statisticsAnalyticsCategory" class="select select-bordered">
+                        <option value="" data-i18n="statistics_all_categories">All categories</option>
+                    </select>
+                </label>
+            </div>
+
+            <section id="statisticsAnalyticsStatus" class="statistics-status statistics-status-info" aria-live="polite">
+                <span data-i18n="statistics_analytics_loading">Preparing historical analysis...</span>
+            </section>
+
+            <section class="statistics-quality-rail" aria-label="Analytics freshness and quality">
+                <div class="statistics-quality-summary">
+                    <span class="material-symbols-outlined" aria-hidden="true">verified</span>
+                    <div>
+                        <strong id="statisticsAnalyticsCoverage" data-i18n="statistics_analytics_quality_pending">Checking comparable days</strong>
+                        <span id="statisticsAnalyticsCoverageDetail">--</span>
+                    </div>
+                </div>
+                <div class="statistics-quality-facts">
+                    <div><span data-i18n="statistics_data_as_of">Data as of</span><strong id="statisticsAnalyticsFreshness">--</strong></div>
+                    <div><span data-i18n="statistics_metric_version">Metric definition</span><strong id="statisticsAnalyticsMetricVersion">--</strong></div>
+                    <div><span data-i18n="statistics_observed_services">Observed services</span><strong id="statisticsAnalyticsObserved">--</strong></div>
+                </div>
+            </section>
+
+            <section id="statisticsAnalyticsMetrics" class="statistics-performance-metrics" aria-label="Historical performance indicators"></section>
+
+            <nav id="statisticsAnalyticsTopics" class="statistics-analytics-topics" aria-label="Historical analysis topics" role="tablist">
+                <button type="button" class="active" role="tab" aria-selected="true" data-analytics-topic="overview">
+                    <span class="material-symbols-outlined" aria-hidden="true">monitoring</span>
+                    <span data-i18n="statistics_topic_overview">Overview</span>
+                </button>
+                <button type="button" role="tab" aria-selected="false" data-analytics-topic="mix">
+                    <span class="material-symbols-outlined" aria-hidden="true">donut_large</span>
+                    <span data-i18n="statistics_topic_mix">Service mix</span>
+                </button>
+                <button type="button" role="tab" aria-selected="false" data-analytics-topic="rhythm">
+                    <span class="material-symbols-outlined" aria-hidden="true">date_range</span>
+                    <span data-i18n="statistics_topic_rhythm">Network rhythm</span>
+                </button>
+                <button type="button" role="tab" aria-selected="false" data-analytics-topic="stations">
+                    <span class="material-symbols-outlined" aria-hidden="true">location_on</span>
+                    <span data-i18n="statistics_topic_stations">Stations</span>
+                </button>
+                <button type="button" role="tab" aria-selected="false" data-analytics-topic="routes">
+                    <span class="material-symbols-outlined" aria-hidden="true">route</span>
+                    <span data-i18n="statistics_topic_routes">Routes</span>
+                </button>
+                <button type="button" role="tab" aria-selected="false" data-analytics-topic="services">
+                    <span class="material-symbols-outlined" aria-hidden="true">train</span>
+                    <span data-i18n="statistics_topic_services">Train services</span>
+                </button>
+                <button type="button" role="tab" aria-selected="false" data-analytics-topic="quality">
+                    <span class="material-symbols-outlined" aria-hidden="true">fact_check</span>
+                    <span data-i18n="statistics_topic_quality">Data quality</span>
+                </button>
+            </nav>
+
+            <section class="statistics-performance-grid statistics-performance-grid-wide" data-analytics-topic-panel="overview">
+                <article class="statistics-panel statistics-analytics-panel">
+                    <div class="statistics-panel-head">
+                        <div>
+                            <span class="statistics-panel-kicker" data-i18n="statistics_punctuality_standard">Punctuality standard</span>
+                            <h2 data-i18n="statistics_punctuality_trend">Arrival punctuality trend</h2>
+                        </div>
+                        <span class="statistics-chart-unit">%</span>
+                    </div>
+                    <div id="statisticsPunctualityTrendChart" class="statistics-echart" role="img" aria-label="Arrival punctuality trend"></div>
+                    <div id="statisticsPunctualityTrendTable" class="statistics-chart-data-table"></div>
+                </article>
+
+                <article class="statistics-panel statistics-analytics-panel">
+                    <div class="statistics-panel-head">
+                        <div>
+                            <span class="statistics-panel-kicker" data-i18n="statistics_delay_distribution">Distribution, not only averages</span>
+                            <h2 data-i18n="statistics_delay_percentiles">Arrival delay percentiles</h2>
+                        </div>
+                        <span class="statistics-chart-unit" data-i18n="statistics_minutes_short">min</span>
+                    </div>
+                    <div id="statisticsDelayPercentileChart" class="statistics-echart" role="img" aria-label="Arrival delay percentiles"></div>
+                    <div id="statisticsDelayPercentileTable" class="statistics-chart-data-table"></div>
+                </article>
+            </section>
+
+            <section class="statistics-performance-grid" data-analytics-topic-panel="overview">
+                <article class="statistics-panel statistics-analytics-panel">
+                    <div class="statistics-panel-head">
+                        <div>
+                            <span class="statistics-panel-kicker" data-i18n="statistics_current_window">Current window</span>
+                            <h2 data-i18n="statistics_delay_buckets">Arrival delay distribution</h2>
+                        </div>
+                    </div>
+                    <div id="statisticsDelayDistributionChart" class="statistics-echart statistics-echart-compact" role="img" aria-label="Arrival delay distribution"></div>
+                </article>
+                <article class="statistics-panel statistics-analytics-panel">
+                    <div class="statistics-panel-head">
+                        <div>
+                            <span class="statistics-panel-kicker" data-i18n="statistics_long_tail">Long-tail disruption</span>
+                            <h2 data-i18n="statistics_severe_delay_share">Severe arrival delay share</h2>
+                        </div>
+                    </div>
+                    <div id="statisticsSevereDelayChart" class="statistics-echart statistics-echart-compact" role="img" aria-label="Severe delay share"></div>
+                </article>
+                <article class="statistics-panel statistics-analytics-panel">
+                    <div class="statistics-panel-head">
+                        <div>
+                            <span class="statistics-panel-kicker" data-i18n="statistics_daily_consistency">Daily consistency</span>
+                            <h2 data-i18n="statistics_punctuality_calendar">Punctuality calendar</h2>
+                        </div>
+                    </div>
+                    <div id="statisticsPunctualityCalendarChart" class="statistics-echart statistics-echart-compact" role="img" aria-label="Daily punctuality calendar"></div>
+                </article>
+            </section>
+
+            <section class="statistics-dashboard-topic" data-analytics-topic-panel="mix" hidden>
+                <div class="statistics-performance-grid statistics-performance-grid-wide">
+                    <article class="statistics-panel statistics-analytics-panel">
+                        <div class="statistics-panel-head">
+                            <div>
+                                <span class="statistics-panel-kicker" data-i18n="statistics_observed_service_share">Observed service share</span>
+                                <h2 data-i18n="statistics_operator_mix">Operator mix</h2>
+                            </div>
+                            <span id="statisticsActiveOperators" class="statistics-chart-unit">--</span>
+                        </div>
+                        <div id="statisticsOperatorMixChart" class="statistics-echart" role="img" aria-label="Observed service share by operator"></div>
+                        <div id="statisticsOperatorMixTable" class="statistics-chart-data-table"></div>
+                    </article>
+                    <article class="statistics-panel statistics-analytics-panel">
+                        <div class="statistics-panel-head">
+                            <div>
+                                <span class="statistics-panel-kicker" data-i18n="statistics_observed_service_share">Observed service share</span>
+                                <h2 data-i18n="statistics_category_mix">Category mix</h2>
+                            </div>
+                        </div>
+                        <div id="statisticsCategoryMixChart" class="statistics-echart" role="img" aria-label="Observed service share by category"></div>
+                        <div id="statisticsCategoryMixTable" class="statistics-chart-data-table"></div>
+                    </article>
+                </div>
+                <article class="statistics-panel statistics-analytics-panel statistics-dashboard-full">
+                    <div class="statistics-panel-head">
+                        <div>
+                            <span class="statistics-panel-kicker" data-i18n="statistics_cross_dimension">Cross-dimension composition</span>
+                            <h2 data-i18n="statistics_operator_category_matrix">Operator × category matrix</h2>
+                        </div>
+                    </div>
+                    <p class="statistics-method-note" data-i18n="statistics_mix_scope_note">Shares describe distinct observable services, not passengers, seats or market share.</p>
+                    <div id="statisticsOperatorCategoryChart" class="statistics-echart statistics-echart-matrix" role="img" aria-label="Operator and category matrix"></div>
+                    <div id="statisticsOperatorCategoryTable" class="statistics-chart-data-table"></div>
+                </article>
+            </section>
+
+            <section class="statistics-dashboard-topic" data-analytics-topic-panel="rhythm" hidden>
+                <div class="statistics-performance-grid statistics-performance-grid-wide">
+                    <article class="statistics-panel statistics-analytics-panel statistics-dashboard-wide-panel">
+                        <div class="statistics-panel-head">
+                            <div>
+                                <span class="statistics-panel-kicker" data-i18n="statistics_scheduled_service_pattern">Scheduled service pattern</span>
+                                <h2 data-i18n="statistics_weekday_hour_heatmap">Weekday × departure hour</h2>
+                            </div>
+                        </div>
+                        <div id="statisticsNetworkRhythmChart" class="statistics-echart statistics-echart-heatmap" role="img" aria-label="Observed departures by weekday and hour"></div>
+                        <div id="statisticsNetworkRhythmTable" class="statistics-chart-data-table"></div>
+                    </article>
+                    <article class="statistics-panel statistics-analytics-panel">
+                        <div class="statistics-panel-head">
+                            <div>
+                                <span class="statistics-panel-kicker" data-i18n="statistics_category_profiles">Category profiles</span>
+                                <h2 data-i18n="statistics_hourly_category_profile">Hourly category profile</h2>
+                            </div>
+                        </div>
+                        <div id="statisticsCategoryRhythmChart" class="statistics-echart statistics-echart-heatmap" role="img" aria-label="Hourly service profile by category"></div>
+                        <div id="statisticsCategoryRhythmTable" class="statistics-chart-data-table"></div>
+                    </article>
+                </div>
+            </section>
+
+            <section class="statistics-dashboard-topic" data-analytics-topic-panel="stations" hidden>
+                <div class="statistics-network-layout">
+                    <article class="statistics-panel statistics-analytics-panel statistics-station-ranking-panel">
+                        <div class="statistics-panel-head">
+                            <div>
+                                <span class="statistics-panel-kicker" data-i18n="statistics_station_activity">Distinct observed services</span>
+                                <h2 data-i18n="statistics_busiest_stations">Busiest observed stations</h2>
+                            </div>
+                        </div>
+                        <p class="statistics-method-note" data-i18n="statistics_station_volume_note">Repeated 30-minute observations are deduplicated; this is not passenger footfall.</p>
+                        <div id="statisticsStationLeaderboard" class="statistics-leaderboard" aria-live="polite"></div>
+                    </article>
+                    <article class="statistics-panel statistics-analytics-panel">
+                        <div class="statistics-panel-head">
+                            <div>
+                                <span class="statistics-panel-kicker" data-i18n="statistics_scale_quality">Scale and quality</span>
+                                <h2 data-i18n="statistics_station_scale_punctuality">Station scale vs punctuality</h2>
+                            </div>
+                        </div>
+                        <div id="statisticsStationScatterChart" class="statistics-echart" role="img" aria-label="Station scale versus punctuality"></div>
+                        <div id="statisticsStationScatterTable" class="statistics-chart-data-table"></div>
+                    </article>
+                </div>
+                <article class="statistics-panel statistics-analytics-panel statistics-dashboard-full">
+                    <div class="statistics-panel-head statistics-query-head">
+                        <div>
+                            <span class="statistics-panel-kicker" data-i18n="statistics_station_activity_pattern">Station activity pattern</span>
+                            <h2 data-i18n="statistics_station_rhythm">Station rhythm</h2>
+                        </div>
+                        <label class="statistics-performance-field statistics-inline-select">
+                            <span data-i18n="statistics_station">Station</span>
+                            <select id="statisticsAnalyticsStation" class="select select-bordered"></select>
+                        </label>
+                    </div>
+                    <p class="statistics-method-note" data-i18n="statistics_station_rhythm_scope">Station rhythm includes all observable services at the selected station so the time pattern remains comparable.</p>
+                    <div id="statisticsStationRhythmChart" class="statistics-echart statistics-echart-heatmap" role="img" aria-label="Selected station weekday and hour rhythm"></div>
+                    <div id="statisticsStationRhythmTable" class="statistics-chart-data-table"></div>
+                </article>
+            </section>
+
+            <section class="statistics-dashboard-topic" data-analytics-topic-panel="routes" hidden>
+                <div class="statistics-performance-grid statistics-performance-grid-wide">
+                    <article class="statistics-panel statistics-analytics-panel">
+                        <div class="statistics-panel-head">
+                            <div>
+                                <span class="statistics-panel-kicker" data-i18n="statistics_relation_activity">Distinct observed services</span>
+                                <h2 data-i18n="statistics_most_observed_relations">Most observed routes</h2>
+                            </div>
+                        </div>
+                        <div id="statisticsRelationLeaderboard" class="statistics-leaderboard" aria-live="polite"></div>
+                    </article>
+                    <article class="statistics-panel statistics-analytics-panel">
+                        <div class="statistics-panel-head">
+                            <div>
+                                <span class="statistics-panel-kicker" data-i18n="statistics_delay_change">First-to-final eligible stop</span>
+                                <h2 data-i18n="statistics_delay_recovery">Delay gained or recovered</h2>
+                            </div>
+                        </div>
+                        <div id="statisticsRecoveryChart" class="statistics-echart" role="img" aria-label="Average delay gained or recovered by route"></div>
+                        <p class="statistics-method-note" data-i18n="statistics_recovery_method">Negative values mean observed delay was recovered; positive values mean delay increased.</p>
+                    </article>
+                </div>
+                <article class="statistics-panel statistics-analytics-panel statistics-dashboard-full">
+                    <div class="statistics-panel-head">
+                        <div>
+                            <span class="statistics-panel-kicker" data-i18n="statistics_disruption_concentration">Long-tail disruption</span>
+                            <h2 data-i18n="statistics_disruption_pareto">Concentration of arrivals over 60 minutes late</h2>
+                        </div>
+                    </div>
+                    <div id="statisticsDisruptionChart" class="statistics-echart" role="img" aria-label="Pareto chart of severe delay concentration by route"></div>
+                    <div id="statisticsDisruptionTable" class="statistics-chart-data-table"></div>
+                </article>
+            </section>
+
+            <section class="statistics-dashboard-topic" data-analytics-topic-panel="services" hidden>
+                <div class="statistics-service-insight-grid">
+                    <article class="statistics-panel statistics-service-feature-card">
+                        <span class="statistics-panel-kicker" data-i18n="statistics_cross_midnight">Cross-midnight services</span>
+                        <strong id="statisticsCrossMidnightRate">--</strong>
+                        <span id="statisticsCrossMidnightSample">--</span>
+                        <p data-i18n="statistics_cross_midnight_note">A service is cross-midnight when its scheduled arrival date follows its scheduled departure date.</p>
+                    </article>
+                    <article class="statistics-panel statistics-analytics-panel statistics-service-spotlight-panel">
+                        <div class="statistics-panel-head">
+                            <div>
+                                <span class="statistics-panel-kicker" data-i18n="statistics_service_spotlight">Train service spotlight</span>
+                                <h2 id="statisticsSpotlightTitle">--</h2>
+                            </div>
+                            <span id="statisticsSpotlightObservations" class="statistics-chart-unit">--</span>
+                        </div>
+                        <div id="statisticsServiceLifecycleChart" class="statistics-echart statistics-echart-compact" role="img" aria-label="Delay along the selected train service"></div>
+                        <div id="statisticsSpotlightFacts" class="statistics-spotlight-facts"></div>
+                    </article>
+                </div>
+                <article class="statistics-panel statistics-analytics-table-panel statistics-dashboard-full">
+                    <div class="statistics-panel-head">
+                        <div>
+                            <span class="statistics-panel-kicker" data-i18n="statistics_scheduled_duration">Scheduled duration</span>
+                            <h2 data-i18n="statistics_longest_journeys">Longest observed journeys</h2>
+                        </div>
+                    </div>
+                    <div id="statisticsLongestJourneys" class="statistics-journey-list"></div>
+                </article>
+            </section>
+
+            <section class="statistics-panel statistics-analytics-table-panel" data-analytics-topic-panel="routes" hidden>
+                <div class="statistics-panel-head statistics-query-head">
+                    <div>
+                        <span class="statistics-panel-kicker" data-i18n="statistics_comparable_dimensions">Comparable dimensions</span>
+                        <h2 data-i18n="statistics_performance_ranking">Performance ranking</h2>
+                    </div>
+                    <div class="statistics-ranking-actions">
+                        <label class="statistics-performance-field">
+                            <span data-i18n="statistics_rank_by">Rank by</span>
+                            <select id="statisticsAnalyticsDimension" class="select select-bordered">
+                                <option value="operator" data-i18n="statistics_dimension_operator">Operator</option>
+                                <option value="category" data-i18n="statistics_dimension_category">Category</option>
+                                <option value="station" data-i18n="statistics_dimension_station">Station</option>
+                                <option value="relation" data-i18n="statistics_dimension_relation">Route</option>
+                            </select>
+                        </label>
+                        <label class="statistics-performance-field">
+                            <span data-i18n="statistics_metric">Metric</span>
+                            <select id="statisticsAnalyticsRankSort" class="select select-bordered">
+                                <option value="punctuality" data-i18n="statistics_metric_punctuality_5">Within 5 min</option>
+                                <option value="p90" data-i18n="statistics_metric_p90">P90 delay</option>
+                                <option value="cancellation" data-i18n="statistics_metric_cancellation">Cancellation</option>
+                                <option value="sample" data-i18n="statistics_metric_sample">Sample size</option>
+                            </select>
+                        </label>
+                    </div>
+                </div>
+                <p class="statistics-method-note" data-i18n="statistics_ranking_method">Rows below the minimum arrival sample are excluded; sample size and denominator remain visible.</p>
+                <div class="statistics-table-wrap">
+                    <table class="statistics-table statistics-analytics-table">
+                        <thead id="statisticsAnalyticsRankingHead"></thead>
+                        <tbody id="statisticsAnalyticsRankingBody"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="statistics-panel statistics-analytics-table-panel" data-analytics-topic-panel="services" hidden>
+                <div class="statistics-panel-head statistics-query-head">
+                    <div>
+                        <span class="statistics-panel-kicker" data-i18n="statistics_observed_outliers">Observed outliers</span>
+                        <h2 data-i18n="statistics_disrupted_services">Most disrupted services</h2>
+                    </div>
+                </div>
+                <p class="statistics-method-note" data-i18n="statistics_outlier_identity_note">A service is identified by service date, train number, origin code and scheduled departure.</p>
+                <div class="statistics-table-wrap">
+                    <table class="statistics-table statistics-analytics-table statistics-outlier-table">
+                        <thead id="statisticsAnalyticsOutlierHead"></thead>
+                        <tbody id="statisticsAnalyticsOutlierBody"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <details class="statistics-methodology" data-analytics-topic-panel="quality" hidden>
+                <summary>
+                    <span class="material-symbols-outlined" aria-hidden="true">menu_book</span>
+                    <span data-i18n="statistics_methodology_title">Definitions and data quality</span>
+                </summary>
+                <div class="statistics-methodology-grid">
+                    <div><strong data-i18n="statistics_method_punctuality_title">Arrival punctuality</strong><p data-i18n="statistics_method_punctuality_detail">Completed, canonical services with a final observed arrival; thresholds are at most 5 and 15 minutes.</p></div>
+                    <div><strong data-i18n="statistics_method_cancel_title">Cancellation</strong><p data-i18n="statistics_method_cancel_detail">Observed full-service cancellations divided by services with a reliable completed-or-cancelled outcome.</p></div>
+                    <div><strong data-i18n="statistics_method_missing_title">Missing evidence</strong><p data-i18n="statistics_method_missing_detail">Provider failures, unresolved identities and unfinished services are excluded, never converted to zero or cancellation.</p></div>
+                    <div><strong data-i18n="statistics_method_scope_title">Scope</strong><p data-i18n="statistics_method_scope_detail">Results describe the ViaggiaTreno services BelloTreno could observe; they are not official whole-network statistics.</p></div>
+                </div>
+            </details>
         </section>
 
         <footer class="statistics-disclaimer">

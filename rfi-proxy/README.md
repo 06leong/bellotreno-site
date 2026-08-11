@@ -84,6 +84,12 @@ STATISTICS_ARCHIVE_DUCKDB_MEMORY_LIMIT=256MB
 STATISTICS_ARCHIVE_DUCKDB_THREADS=1
 STATISTICS_ARCHIVE_DUCKDB_MAX_TEMP_DIRECTORY_SIZE=4GB
 STATISTICS_ARCHIVE_INCLUDE_RAW_PAYLOADS=false
+
+# Optional professional analytics tuning
+STATISTICS_ANALYTICS_DUCKDB_MEMORY_LIMIT=384MB
+STATISTICS_ANALYTICS_DUCKDB_THREADS=1
+STATISTICS_ANALYTICS_HISTORY_DAYS=730
+STATISTICS_ANALYTICS_MIN_RANKING_SAMPLE=100
 ```
 
 Do not commit `.env`. Use `.env.example` as the template.
@@ -304,6 +310,46 @@ job rather than recursively changing ownership after every run.
 Treat a non-zero `create`, `plan`, `run`, or `verify` exit code as a failed
 operation. Do not release the snapshot or remove any local archive or rollback
 backup on the strength of `run` alone.
+
+### Professional analytics read model
+
+After the newest archive manifest has passed local verification, build the
+derived professional statistics read model:
+
+```bash
+mkdir -p statistics-analytics
+
+docker compose --profile analytics run --rm \
+  bellotreno-statistics-analytics build \
+  > analytics-build-latest.json
+
+cat analytics-build-latest.json
+du -h statistics-analytics/analytics.db
+```
+
+The one-shot analytics service has no network and mounts
+`statistics-archive` read-only. It reads only files referenced by completed
+manifests, derives stabilized service/stop facts, collection quality, daily
+metrics, exact 7/28/90-day quantiles, dimension rankings, and outliers, then
+publishes `statistics-analytics/analytics.db` through an atomic rename. The
+always-on statistics service mounts that directory read-only and never loads
+DuckDB. If a build fails, the previous `analytics.db` remains available.
+
+Analytics schema v2 also materializes operator/category composition,
+weekday/hour rhythm, distinct-service station activity, route delay recovery,
+cross-midnight and journey-duration metrics, severe-delay concentration, and
+stop sequences for exact outlier service identities. The always-on API exposes
+these latest-date explorer marts through `GET /v1/analytics/explore`; the
+existing `meta`, `overview`, `rankings`, `outliers`, and CSV contracts remain
+available. Explorer requests may select one operator or one category and one
+station rhythm, but never combine operator and category filters. A missing v2
+model returns an unavailable reason rather than synthesized zero values.
+
+The read model is disposable and must not be treated as another archive or
+backup. The immutable Parquet partitions and completed manifests remain the
+source of truth. Rebuild analytics after each successful Parquet run; a failed
+analytics build must not block snapshot release once the Parquet archive itself
+has passed the applicable local or remote verification policy.
 
 ### Off-VPS copy through Cloudreve
 
