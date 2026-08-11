@@ -3885,6 +3885,10 @@ button.swiss-section-title {
     position: relative;
     display: flex;
     align-items: center;
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    border-radius: 14px;
 }
 
 .statistics-select-shell > .material-symbols-outlined {
@@ -3910,8 +3914,14 @@ button.swiss-section-title {
 }
 
 .statistics-date-field select {
+    display: block;
+    min-width: 0;
+    max-width: 100%;
     padding-inline: 42px 38px;
+    overflow: hidden;
     font-weight: 650;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .statistics-latest-complete {
@@ -4967,6 +4977,10 @@ button.swiss-section-title {
     font-size: 0.78rem;
     font-weight: 740;
     cursor: pointer;
+}
+
+.statistics-export-button[hidden] {
+    display: none;
 }
 
 .statistics-mode-button .material-symbols-outlined {
