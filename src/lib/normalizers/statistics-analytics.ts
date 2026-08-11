@@ -123,6 +123,152 @@ export interface AnalyticsOutlierPayload {
   total: number;
 }
 
+export interface AnalyticsCompactMetric {
+  observedServices: number;
+  outcomeEligibleServices: number;
+  arrivalSample: number;
+  punctuality: { within5: AnalyticsRate; within15: AnalyticsRate };
+  cancellation: AnalyticsRate;
+  severeDelay: { over30: AnalyticsRate; over60: AnalyticsRate; over120: AnalyticsRate };
+  delayMinutes: { p50: number | null; p75: number | null; p90: number | null; p95: number | null; mean: number | null };
+}
+
+export interface AnalyticsMixItem extends AnalyticsCompactMetric {
+  key: string;
+  label: string;
+  sharePercent: number | null;
+}
+
+export interface AnalyticsRhythmItem extends AnalyticsCompactMetric {
+  weekday: number;
+  hour: number;
+}
+
+export interface AnalyticsStationItem {
+  key: string;
+  label: string;
+  observedServices: number;
+  previousObservedServices: number;
+  arrivalSample: number;
+  roles: {
+    arrivals: number;
+    departures: number;
+    transits: number;
+    arrivalPercent: number | null;
+    departurePercent: number | null;
+    transitPercent: number | null;
+  };
+  punctuality: { within5: AnalyticsRate };
+  cancellation: AnalyticsRate;
+  delayMinutes: { p50: number | null; p90: number | null };
+}
+
+export interface AnalyticsRelationItem extends AnalyticsCompactMetric {
+  key: string;
+  label: string;
+  previousObservedServices: number;
+  crossMidnightServices: number;
+  recovery: {
+    sample: number;
+    recoveredServices: number;
+    meanMinutes: number | null;
+    p50Minutes: number | null;
+  };
+}
+
+export interface AnalyticsStationRhythmItem {
+  weekday: number;
+  hour: number;
+  observed_services: number;
+  arrivals: number;
+  departures: number;
+  transits: number;
+}
+
+export interface AnalyticsJourney {
+  service_date: string;
+  train_key: string;
+  train_number: string;
+  operator: string | null;
+  category: string | null;
+  origin: string | null;
+  destination: string | null;
+  origin_code: string | null;
+  destination_code: string | null;
+  relation_key: string | null;
+  scheduled_departure: string | null;
+  scheduled_arrival: string | null;
+  scheduled_duration_minutes: number | null;
+  cross_midnight: number;
+  delay_change: number | null;
+  final_departure_delay: number | null;
+  final_arrival_delay: number | null;
+  observation_count: number;
+}
+
+export interface AnalyticsSpotlightStop {
+  service_date: string;
+  train_key: string;
+  stop_number: number;
+  station_code: string | null;
+  station_name: string | null;
+  stop_type: string | null;
+  platform: string | null;
+  arrival_expected: string | null;
+  arrival_actual: string | null;
+  arrival_delay: number | null;
+  departure_expected: string | null;
+  departure_actual: string | null;
+  departure_delay: number | null;
+  stop_cancelled: number;
+  delay_change: number | null;
+}
+
+export interface AnalyticsExplore {
+  available: true;
+  asOfDate: string;
+  windowDays: AnalyticsWindow;
+  filter: { type: "operator" | "category" | null; key: string | null };
+  composition: {
+    activeOperators: number;
+    operators: AnalyticsMixItem[];
+    categories: AnalyticsMixItem[];
+    matrix: Array<{ operator: string; category: string } & AnalyticsCompactMetric>;
+  };
+  rhythm: AnalyticsRhythmItem[];
+  categoryRhythm: Array<AnalyticsRhythmItem & { category: string }>;
+  network: {
+    stations: AnalyticsStationItem[];
+    relations: AnalyticsRelationItem[];
+    stationRhythm: {
+      stationCode: string | null;
+      stationLabel: string | null;
+      filterScope: "all_services";
+      items: AnalyticsStationRhythmItem[];
+    };
+  };
+  services: {
+    crossMidnight: {
+      numerator: number;
+      denominator: number;
+      percent: number | null;
+      previousPercent: number | null;
+      durationSample: number;
+      durationMeanMinutes: number | null;
+      durationP90Minutes: number | null;
+    };
+    longestJourneys: AnalyticsJourney[];
+    recoveryRelations: AnalyticsRelationItem[];
+    spotlight: { service: AnalyticsOutlier | null; stops: AnalyticsSpotlightStop[] };
+    disruptionConcentration: {
+      eventDefinition: string;
+      totalEvents: number;
+      items: Array<{ key: string; label: string; events: number; sharePercent: number | null; cumulativePercent: number | null }>;
+    };
+  };
+  disclaimer: string;
+}
+
 type JsonRecord = Record<string, unknown>;
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -163,6 +309,34 @@ function normalizeRate(value: unknown, field: string): AnalyticsRate {
     confidence95: isRecord(confidence)
       ? { low: requiredNumber(confidence.low, `${field}.confidence.low`), high: requiredNumber(confidence.high, `${field}.confidence.high`) }
       : null
+  };
+}
+
+function normalizeCompactMetric(value: unknown, field: string): AnalyticsCompactMetric {
+  if (!isRecord(value) || !isRecord(value.punctuality) || !isRecord(value.severeDelay) || !isRecord(value.delayMinutes)) {
+    throw new TypeError(`Invalid analytics compact metric: ${field}`);
+  }
+  return {
+    observedServices: requiredNumber(value.observedServices, `${field}.observedServices`),
+    outcomeEligibleServices: requiredNumber(value.outcomeEligibleServices, `${field}.outcomeEligibleServices`),
+    arrivalSample: requiredNumber(value.arrivalSample, `${field}.arrivalSample`),
+    punctuality: {
+      within5: normalizeRate(value.punctuality.within5, `${field}.punctuality.within5`),
+      within15: normalizeRate(value.punctuality.within15, `${field}.punctuality.within15`)
+    },
+    cancellation: normalizeRate(value.cancellation, `${field}.cancellation`),
+    severeDelay: {
+      over30: normalizeRate(value.severeDelay.over30, `${field}.severeDelay.over30`),
+      over60: normalizeRate(value.severeDelay.over60, `${field}.severeDelay.over60`),
+      over120: normalizeRate(value.severeDelay.over120, `${field}.severeDelay.over120`)
+    },
+    delayMinutes: {
+      p50: optionalNumber(value.delayMinutes.p50),
+      p75: optionalNumber(value.delayMinutes.p75),
+      p90: optionalNumber(value.delayMinutes.p90),
+      p95: optionalNumber(value.delayMinutes.p95),
+      mean: optionalNumber(value.delayMinutes.mean)
+    }
   };
 }
 
@@ -343,6 +517,182 @@ export function normalizeAnalyticsOutliers(value: unknown): AnalyticsOutlierPayl
       observation_count: requiredNumber(item.observation_count, "observation_count")
     })),
     total: requiredNumber(value.total, "total")
+  };
+}
+
+export function normalizeAnalyticsExplore(value: unknown): AnalyticsExplore {
+  if (!isRecord(value) || value.available !== true || !isRecord(value.composition) || !isRecord(value.network) || !isRecord(value.services)) {
+    throw new TypeError("Analytics exploration is unavailable");
+  }
+  const windowDays = requiredNumber(value.windowDays, "windowDays");
+  if (windowDays !== 7 && windowDays !== 28 && windowDays !== 90) throw new TypeError("Invalid exploration window");
+  const filter = isRecord(value.filter) ? value.filter : {};
+  const normalizeMix = (item: JsonRecord, field: string): AnalyticsMixItem => ({
+    key: requiredString(item.key, `${field}.key`),
+    label: requiredString(item.label, `${field}.label`),
+    sharePercent: optionalNumber(item.sharePercent),
+    ...normalizeCompactMetric(item, field)
+  });
+  const normalizeStation = (item: JsonRecord): AnalyticsStationItem => {
+    if (!isRecord(item.roles) || !isRecord(item.punctuality) || !isRecord(item.delayMinutes)) throw new TypeError("Invalid station exploration item");
+    return {
+      key: requiredString(item.key, "station.key"),
+      label: requiredString(item.label, "station.label"),
+      observedServices: requiredNumber(item.observedServices, "station.observedServices"),
+      previousObservedServices: requiredNumber(item.previousObservedServices, "station.previousObservedServices"),
+      arrivalSample: requiredNumber(item.arrivalSample, "station.arrivalSample"),
+      roles: {
+        arrivals: requiredNumber(item.roles.arrivals, "station.roles.arrivals"),
+        departures: requiredNumber(item.roles.departures, "station.roles.departures"),
+        transits: requiredNumber(item.roles.transits, "station.roles.transits"),
+        arrivalPercent: optionalNumber(item.roles.arrivalPercent),
+        departurePercent: optionalNumber(item.roles.departurePercent),
+        transitPercent: optionalNumber(item.roles.transitPercent)
+      },
+      punctuality: { within5: normalizeRate(item.punctuality.within5, "station.punctuality.within5") },
+      cancellation: normalizeRate(item.cancellation, "station.cancellation"),
+      delayMinutes: { p50: optionalNumber(item.delayMinutes.p50), p90: optionalNumber(item.delayMinutes.p90) }
+    };
+  };
+  const normalizeRelation = (item: JsonRecord): AnalyticsRelationItem => {
+    if (!isRecord(item.recovery)) throw new TypeError("Invalid relation exploration item");
+    return {
+      key: requiredString(item.key, "relation.key"),
+      label: requiredString(item.label, "relation.label"),
+      previousObservedServices: requiredNumber(item.previousObservedServices, "relation.previousObservedServices"),
+      crossMidnightServices: requiredNumber(item.crossMidnightServices, "relation.crossMidnightServices"),
+      recovery: {
+        sample: requiredNumber(item.recovery.sample, "relation.recovery.sample"),
+        recoveredServices: requiredNumber(item.recovery.recoveredServices, "relation.recovery.recoveredServices"),
+        meanMinutes: optionalNumber(item.recovery.meanMinutes),
+        p50Minutes: optionalNumber(item.recovery.p50Minutes)
+      },
+      ...normalizeCompactMetric(item, "relation")
+    };
+  };
+  const nullableString = (item: JsonRecord, field: string): string | null => typeof item[field] === "string" ? item[field] as string : null;
+  const normalizeJourney = (item: JsonRecord): AnalyticsJourney => ({
+    service_date: requiredString(item.service_date, "journey.service_date"),
+    train_key: requiredString(item.train_key, "journey.train_key"),
+    train_number: requiredString(item.train_number, "journey.train_number"),
+    operator: nullableString(item, "operator"),
+    category: nullableString(item, "category"),
+    origin: nullableString(item, "origin"),
+    destination: nullableString(item, "destination"),
+    origin_code: nullableString(item, "origin_code"),
+    destination_code: nullableString(item, "destination_code"),
+    relation_key: nullableString(item, "relation_key"),
+    scheduled_departure: nullableString(item, "scheduled_departure"),
+    scheduled_arrival: nullableString(item, "scheduled_arrival"),
+    scheduled_duration_minutes: optionalNumber(item.scheduled_duration_minutes),
+    cross_midnight: requiredNumber(item.cross_midnight, "journey.cross_midnight"),
+    delay_change: optionalNumber(item.delay_change),
+    final_departure_delay: optionalNumber(item.final_departure_delay),
+    final_arrival_delay: optionalNumber(item.final_arrival_delay),
+    observation_count: requiredNumber(item.observation_count, "journey.observation_count")
+  });
+  const composition = value.composition;
+  const network = value.network;
+  const services = value.services;
+  if (!isRecord(network.stationRhythm) || !isRecord(services.crossMidnight) || !isRecord(services.spotlight) || !isRecord(services.disruptionConcentration)) {
+    throw new TypeError("Invalid analytics exploration sections");
+  }
+  const relations = Array.isArray(network.relations) ? network.relations.filter(isRecord).map(normalizeRelation) : [];
+  const spotlightService = services.spotlight.service;
+  const normalizedSpotlight = spotlightService === null || spotlightService === undefined
+    ? null
+    : normalizeAnalyticsOutliers({ available: true, asOfDate: value.asOfDate, windowDays, items: [spotlightService], total: 1 }).items[0] ?? null;
+  return {
+    available: true,
+    asOfDate: requiredString(value.asOfDate, "asOfDate"),
+    windowDays,
+    filter: {
+      type: filter.type === "operator" || filter.type === "category" ? filter.type : null,
+      key: typeof filter.key === "string" ? filter.key : null
+    },
+    composition: {
+      activeOperators: requiredNumber(composition.activeOperators, "composition.activeOperators"),
+      operators: Array.isArray(composition.operators) ? composition.operators.filter(isRecord).map((item) => normalizeMix(item, "operator")) : [],
+      categories: Array.isArray(composition.categories) ? composition.categories.filter(isRecord).map((item) => normalizeMix(item, "category")) : [],
+      matrix: Array.isArray(composition.matrix) ? composition.matrix.filter(isRecord).map((item) => ({
+        operator: requiredString(item.operator, "matrix.operator"),
+        category: requiredString(item.category, "matrix.category"),
+        ...normalizeCompactMetric(item, "matrix")
+      })) : []
+    },
+    rhythm: Array.isArray(value.rhythm) ? value.rhythm.filter(isRecord).map((item) => ({
+      weekday: requiredNumber(item.weekday, "rhythm.weekday"),
+      hour: requiredNumber(item.hour, "rhythm.hour"),
+      ...normalizeCompactMetric(item, "rhythm")
+    })) : [],
+    categoryRhythm: Array.isArray(value.categoryRhythm) ? value.categoryRhythm.filter(isRecord).map((item) => ({
+      category: requiredString(item.category, "categoryRhythm.category"),
+      weekday: requiredNumber(item.weekday, "categoryRhythm.weekday"),
+      hour: requiredNumber(item.hour, "categoryRhythm.hour"),
+      ...normalizeCompactMetric(item, "categoryRhythm")
+    })) : [],
+    network: {
+      stations: Array.isArray(network.stations) ? network.stations.filter(isRecord).map(normalizeStation) : [],
+      relations,
+      stationRhythm: {
+        stationCode: typeof network.stationRhythm.stationCode === "string" ? network.stationRhythm.stationCode : null,
+        stationLabel: typeof network.stationRhythm.stationLabel === "string" ? network.stationRhythm.stationLabel : null,
+        filterScope: "all_services",
+        items: Array.isArray(network.stationRhythm.items) ? network.stationRhythm.items.filter(isRecord).map((item) => ({
+          weekday: requiredNumber(item.weekday, "stationRhythm.weekday"),
+          hour: requiredNumber(item.hour, "stationRhythm.hour"),
+          observed_services: requiredNumber(item.observed_services, "stationRhythm.observed_services"),
+          arrivals: requiredNumber(item.arrivals, "stationRhythm.arrivals"),
+          departures: requiredNumber(item.departures, "stationRhythm.departures"),
+          transits: requiredNumber(item.transits, "stationRhythm.transits")
+        })) : []
+      }
+    },
+    services: {
+      crossMidnight: {
+        numerator: requiredNumber(services.crossMidnight.numerator, "crossMidnight.numerator"),
+        denominator: requiredNumber(services.crossMidnight.denominator, "crossMidnight.denominator"),
+        percent: optionalNumber(services.crossMidnight.percent),
+        previousPercent: optionalNumber(services.crossMidnight.previousPercent),
+        durationSample: requiredNumber(services.crossMidnight.durationSample, "crossMidnight.durationSample"),
+        durationMeanMinutes: optionalNumber(services.crossMidnight.durationMeanMinutes),
+        durationP90Minutes: optionalNumber(services.crossMidnight.durationP90Minutes)
+      },
+      longestJourneys: Array.isArray(services.longestJourneys) ? services.longestJourneys.filter(isRecord).map(normalizeJourney) : [],
+      recoveryRelations: Array.isArray(services.recoveryRelations) ? services.recoveryRelations.filter(isRecord).map(normalizeRelation) : [],
+      spotlight: {
+        service: normalizedSpotlight,
+        stops: Array.isArray(services.spotlight.stops) ? services.spotlight.stops.filter(isRecord).map((item) => ({
+          service_date: requiredString(item.service_date, "stop.service_date"),
+          train_key: requiredString(item.train_key, "stop.train_key"),
+          stop_number: requiredNumber(item.stop_number, "stop.stop_number"),
+          station_code: nullableString(item, "station_code"),
+          station_name: nullableString(item, "station_name"),
+          stop_type: nullableString(item, "stop_type"),
+          platform: nullableString(item, "platform"),
+          arrival_expected: nullableString(item, "arrival_expected"),
+          arrival_actual: nullableString(item, "arrival_actual"),
+          arrival_delay: optionalNumber(item.arrival_delay),
+          departure_expected: nullableString(item, "departure_expected"),
+          departure_actual: nullableString(item, "departure_actual"),
+          departure_delay: optionalNumber(item.departure_delay),
+          stop_cancelled: requiredNumber(item.stop_cancelled, "stop.stop_cancelled"),
+          delay_change: optionalNumber(item.delay_change)
+        })) : []
+      },
+      disruptionConcentration: {
+        eventDefinition: requiredString(services.disruptionConcentration.eventDefinition, "concentration.eventDefinition"),
+        totalEvents: requiredNumber(services.disruptionConcentration.totalEvents, "concentration.totalEvents"),
+        items: Array.isArray(services.disruptionConcentration.items) ? services.disruptionConcentration.items.filter(isRecord).map((item) => ({
+          key: requiredString(item.key, "concentration.key"),
+          label: requiredString(item.label, "concentration.label"),
+          events: requiredNumber(item.events, "concentration.events"),
+          sharePercent: optionalNumber(item.sharePercent),
+          cumulativePercent: optionalNumber(item.cumulativePercent)
+        })) : []
+      }
+    },
+    disclaimer: typeof value.disclaimer === "string" ? value.disclaimer : ""
   };
 }
 

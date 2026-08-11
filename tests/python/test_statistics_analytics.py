@@ -222,6 +222,41 @@ class StatisticsAnalyticsTest(unittest.TestCase):
             ).fetchone()[0]
             self.assertEqual(duplicate_number, 2)
 
+            cross_midnight = connection.execute(
+                "SELECT observed_services, cross_midnight_services, duration_sample "
+                "FROM cross_midnight_window WHERE as_of_date='2026-08-02' "
+                "AND window_days=7 AND period='current' "
+                "AND filter_type='all' AND filter_key='all'"
+            ).fetchone()
+            self.assertEqual(tuple(cross_midnight), (3, 3, 3))
+
+            milano_station = connection.execute(
+                "SELECT observed_services, departures, arrivals, transits "
+                "FROM station_window WHERE as_of_date='2026-08-02' "
+                "AND window_days=7 AND period='current' "
+                "AND filter_type='all' AND station_code='S001'"
+            ).fetchone()
+            self.assertEqual(tuple(milano_station), (1, 1, 0, 0))
+
+            roma_relation = connection.execute(
+                "SELECT recovery_sample, recovered_services, delay_change_mean, "
+                "cross_midnight_services FROM relation_feature_window "
+                "WHERE as_of_date='2026-08-02' AND window_days=7 "
+                "AND period='current' AND filter_type='all' "
+                "AND relation_id='MILANO CENTRALE -> ROMA TERMINI'"
+            ).fetchone()
+            self.assertEqual(tuple(roma_relation), (1, 0, 5.0, 1))
+
+            service_lifecycle = connection.execute(
+                "SELECT station_name, departure_delay, arrival_delay "
+                "FROM outlier_stop WHERE train_key='200-S003-1785708000000' "
+                "ORDER BY stop_number"
+            ).fetchall()
+            self.assertEqual(
+                [tuple(row) for row in service_lifecycle],
+                [("TORINO PORTA NUOVA", 120, None), ("LECCE", None, 180)],
+            )
+
             quality = connection.execute(
                 "SELECT coverage_status, comparison_eligible FROM quality_day "
                 "WHERE collection_date='2026-08-02'"
@@ -229,7 +264,8 @@ class StatisticsAnalyticsTest(unittest.TestCase):
             self.assertEqual(tuple(quality), ("complete", 1))
 
             metadata = dict(connection.execute("SELECT name, value FROM analytics_metadata"))
-            self.assertEqual(metadata["metricDefinitionVersion"], "2026-08-09-v1")
+            self.assertEqual(metadata["schemaVersion"], "2")
+            self.assertEqual(metadata["metricDefinitionVersion"], "2026-08-11-v2")
             self.assertEqual(metadata["asOfDate"], "2026-08-02")
 
     def test_failed_rebuild_does_not_replace_last_good_read_model(self):

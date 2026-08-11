@@ -16,8 +16,8 @@ from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 
-ANALYTICS_SCHEMA_VERSION = 1
-METRIC_DEFINITION_VERSION = "2026-08-09-v1"
+ANALYTICS_SCHEMA_VERSION = 2
+METRIC_DEFINITION_VERSION = "2026-08-11-v2"
 DEFAULT_ARCHIVE_ROOT = "/archive"
 DEFAULT_ANALYTICS_ROOT = "/analytics"
 DEFAULT_WINDOWS = (7, 28, 90)
@@ -678,6 +678,252 @@ def build_semantic_tables(connection: Any, index: ArchiveIndex, config: Analytic
            OR category_rank <= 250 OR operator_category_rank <= 100
         """
     )
+
+    log("building dashboard composition, rhythm, station, and service marts")
+    connection.execute(
+        f"""
+        CREATE OR REPLACE TEMP TABLE dashboard_periods AS
+        WITH windows(window_days) AS (VALUES {windows_sql})
+        SELECT window_days, 'current' AS period,
+               DATE '{max_date}' - (window_days - 1) * INTERVAL 1 DAY AS window_start,
+               DATE '{max_date}' AS window_end
+        FROM windows
+        UNION ALL
+        SELECT window_days, 'previous' AS period,
+               DATE '{max_date}' - (window_days * 2 - 1) * INTERVAL 1 DAY AS window_start,
+               DATE '{max_date}' - window_days * INTERVAL 1 DAY AS window_end
+        FROM windows
+        """
+    )
+    connection.execute(
+        f"""
+        CREATE OR REPLACE TEMP TABLE operator_category_window AS
+        SELECT '{max_date}' AS as_of_date, p.window_days, p.period,
+               CAST(p.window_start AS VARCHAR) AS window_start,
+               CAST(p.window_end AS VARCHAR) AS window_end,
+               COALESCE(f.operator, 'unknown') AS operator,
+               COALESCE(f.category, 'unknown') AS category,
+               {METRIC_COLUMNS}
+        FROM dashboard_periods p
+        JOIN fact_service_outcome f
+          ON CAST(f.service_date AS DATE) BETWEEN p.window_start AND p.window_end
+        GROUP BY p.window_days, p.period, p.window_start, p.window_end,
+                 COALESCE(f.operator, 'unknown'), COALESCE(f.category, 'unknown')
+        """
+    )
+    connection.execute(
+        f"""
+        CREATE OR REPLACE TEMP TABLE rhythm_scope_fact AS
+        WITH base AS (
+            SELECT *,
+                   CAST(EXTRACT(ISODOW FROM CAST(service_date AS DATE)) - 1 AS INTEGER) AS weekday,
+                   TRY_CAST(SUBSTR(scheduled_departure, 12, 2) AS INTEGER) AS departure_hour
+            FROM fact_service_outcome
+            WHERE scheduled_departure IS NOT NULL
+        )
+        SELECT *, 'all' AS filter_type, 'all' AS filter_key FROM base
+        UNION ALL
+        SELECT *, 'operator', COALESCE(operator, 'unknown') FROM base
+        UNION ALL
+        SELECT *, 'category', COALESCE(category, 'unknown') FROM base
+        """
+    )
+    connection.execute(
+        f"""
+        CREATE OR REPLACE TEMP TABLE rhythm_window AS
+        SELECT '{max_date}' AS as_of_date, p.window_days, p.period,
+               r.filter_type, r.filter_key, r.weekday, r.departure_hour AS hour,
+               {METRIC_COLUMNS}
+        FROM dashboard_periods p
+        JOIN rhythm_scope_fact r
+          ON CAST(r.service_date AS DATE) BETWEEN p.window_start AND p.window_end
+        WHERE r.departure_hour BETWEEN 0 AND 23
+        GROUP BY p.window_days, p.period, r.filter_type, r.filter_key,
+                 r.weekday, r.departure_hour
+        """
+    )
+    connection.execute(
+        """
+        CREATE OR REPLACE TEMP TABLE station_scope_fact AS
+        WITH base AS (
+            SELECT *,
+                   COALESCE(NULLIF(station_name, ''), station_code) AS station_label,
+                   CASE WHEN LOWER(COALESCE(stop_type, '')) IN ('origine', 'origin') THEN 'departure'
+                        WHEN LOWER(COALESCE(stop_type, '')) IN ('destinazione', 'destination') THEN 'arrival'
+                        ELSE 'transit' END AS station_role,
+                   COALESCE(departure_expected, arrival_expected) AS station_expected,
+                   COALESCE(departure_expected_date, arrival_expected_date, service_date) AS station_expected_date,
+                   CASE WHEN stop_cancelled=1 OR arrival_delay IS NOT NULL THEN 1 ELSE 0 END AS outcome_eligible,
+                   CASE WHEN stop_cancelled=0 AND arrival_delay IS NOT NULL THEN 1 ELSE 0 END AS arrival_eligible,
+                   stop_cancelled AS cancelled,
+                   CASE WHEN stop_cancelled=0 AND arrival_delay IS NOT NULL THEN 1 ELSE 0 END AS completed,
+                   CASE WHEN stop_cancelled=0 THEN arrival_delay END AS final_arrival_delay
+            FROM fact_stop_outcome
+            WHERE station_code IS NOT NULL AND identity_quality='canonical'
+        )
+        SELECT *, 'all' AS filter_type, 'all' AS filter_key FROM base
+        UNION ALL
+        SELECT *, 'operator', COALESCE(operator, 'unknown') FROM base
+        UNION ALL
+        SELECT *, 'category', COALESCE(category, 'unknown') FROM base
+        """
+    )
+    connection.execute(
+        f"""
+        CREATE OR REPLACE TEMP TABLE station_window AS
+        SELECT '{max_date}' AS as_of_date, p.window_days, p.period,
+               s.filter_type, s.filter_key, s.station_code,
+               MAX(s.station_label) AS station_label,
+               COUNT(DISTINCT s.service_date || '|' || s.train_key) AS observed_services,
+               COUNT(DISTINCT CASE WHEN s.station_role='arrival' THEN s.service_date || '|' || s.train_key END) AS arrivals,
+               COUNT(DISTINCT CASE WHEN s.station_role='departure' THEN s.service_date || '|' || s.train_key END) AS departures,
+               COUNT(DISTINCT CASE WHEN s.station_role='transit' THEN s.service_date || '|' || s.train_key END) AS transits,
+               SUM(s.outcome_eligible) AS outcome_eligible_services,
+               SUM(CASE WHEN s.outcome_eligible=1 AND s.cancelled=1 THEN 1 ELSE 0 END) AS cancelled_services,
+               SUM(s.arrival_eligible) AS arrival_sample,
+               SUM(CASE WHEN s.arrival_eligible=1 AND s.final_arrival_delay <= 5 THEN 1 ELSE 0 END) AS within_5,
+               SUM(CASE WHEN s.arrival_eligible=1 AND s.final_arrival_delay <= 15 THEN 1 ELSE 0 END) AS within_15,
+               SUM(CASE WHEN s.arrival_eligible=1 AND s.final_arrival_delay > 60 THEN 1 ELSE 0 END) AS over_60,
+               quantile_cont(s.final_arrival_delay, 0.5) FILTER (WHERE s.arrival_eligible=1) AS delay_p50,
+               quantile_cont(s.final_arrival_delay, 0.9) FILTER (WHERE s.arrival_eligible=1) AS delay_p90
+        FROM dashboard_periods p
+        JOIN station_scope_fact s
+          ON CAST(s.service_date AS DATE) BETWEEN p.window_start AND p.window_end
+        GROUP BY p.window_days, p.period, s.filter_type, s.filter_key,
+                 s.station_code
+        """
+    )
+    connection.execute(
+        f"""
+        CREATE OR REPLACE TEMP TABLE top_station AS
+        SELECT station_code
+        FROM station_window
+        WHERE as_of_date='{max_date}' AND window_days=90 AND period='current'
+          AND filter_type='all' AND filter_key='all'
+        ORDER BY observed_services DESC, station_code
+        LIMIT 250
+        """
+    )
+    connection.execute(
+        f"""
+        CREATE OR REPLACE TEMP TABLE station_hour_window AS
+        WITH timed AS (
+            SELECT s.*,
+                   CAST(EXTRACT(ISODOW FROM CAST(s.station_expected_date AS DATE)) - 1 AS INTEGER) AS weekday,
+                   TRY_CAST(SUBSTR(s.station_expected, 12, 2) AS INTEGER) AS hour
+            FROM station_scope_fact s
+            JOIN top_station t USING (station_code)
+            WHERE s.filter_type='all' AND s.filter_key='all'
+              AND s.station_expected IS NOT NULL
+        )
+        SELECT '{max_date}' AS as_of_date, p.window_days,
+               t.station_code, MAX(t.station_label) AS station_label,
+               t.weekday, t.hour,
+               COUNT(DISTINCT t.service_date || '|' || t.train_key) AS observed_services,
+               COUNT(DISTINCT CASE WHEN t.station_role='arrival' THEN t.service_date || '|' || t.train_key END) AS arrivals,
+               COUNT(DISTINCT CASE WHEN t.station_role='departure' THEN t.service_date || '|' || t.train_key END) AS departures,
+               COUNT(DISTINCT CASE WHEN t.station_role='transit' THEN t.service_date || '|' || t.train_key END) AS transits
+        FROM dashboard_periods p
+        JOIN timed t ON CAST(t.service_date AS DATE) BETWEEN p.window_start AND p.window_end
+        WHERE p.period='current' AND t.hour BETWEEN 0 AND 23
+        GROUP BY p.window_days, t.station_code, t.weekday, t.hour
+        """
+    )
+    connection.execute(
+        """
+        CREATE OR REPLACE TEMP TABLE relation_scope_fact AS
+        WITH base AS (
+            SELECT *,
+                   COALESCE(NULLIF(relation_key, ''), train_key) AS relation_id,
+                   COALESCE(NULLIF(relation_key, ''), train_key) AS relation_label,
+                   CASE WHEN arrival_eligible=1 AND final_departure_delay IS NOT NULL
+                        THEN final_arrival_delay - final_departure_delay END AS delay_change,
+                   CASE WHEN scheduled_departure IS NOT NULL AND scheduled_arrival IS NOT NULL
+                        THEN CASE WHEN SUBSTR(scheduled_arrival, 1, 10) > SUBSTR(scheduled_departure, 1, 10)
+                                  THEN 1 ELSE 0 END END AS cross_midnight,
+                   CASE WHEN TRY_CAST(scheduled_departure AS TIMESTAMPTZ) IS NOT NULL
+                             AND TRY_CAST(scheduled_arrival AS TIMESTAMPTZ) IS NOT NULL
+                        THEN (EPOCH(TRY_CAST(scheduled_arrival AS TIMESTAMPTZ))
+                            - EPOCH(TRY_CAST(scheduled_departure AS TIMESTAMPTZ))) / 60.0 END AS scheduled_duration_minutes
+            FROM fact_service_outcome
+            WHERE identity_quality='canonical'
+        )
+        SELECT *, 'all' AS filter_type, 'all' AS filter_key FROM base
+        UNION ALL
+        SELECT *, 'operator', COALESCE(operator, 'unknown') FROM base
+        UNION ALL
+        SELECT *, 'category', COALESCE(category, 'unknown') FROM base
+        """
+    )
+    connection.execute(
+        f"""
+        CREATE OR REPLACE TEMP TABLE relation_feature_window AS
+        SELECT '{max_date}' AS as_of_date, p.window_days, p.period,
+               r.filter_type, r.filter_key, r.relation_id, MAX(r.relation_label) AS relation_label,
+               {METRIC_COLUMNS},
+               COUNT(*) FILTER (WHERE r.delay_change IS NOT NULL) AS recovery_sample,
+               COUNT(*) FILTER (WHERE r.delay_change < 0) AS recovered_services,
+               AVG(r.delay_change) FILTER (WHERE r.delay_change IS NOT NULL) AS delay_change_mean,
+               quantile_cont(r.delay_change, 0.5) FILTER (WHERE r.delay_change IS NOT NULL) AS delay_change_p50,
+               SUM(r.cross_midnight) AS cross_midnight_services,
+               COUNT(*) FILTER (WHERE r.scheduled_duration_minutes >= 0) AS duration_sample,
+               AVG(r.scheduled_duration_minutes) FILTER (WHERE r.scheduled_duration_minutes >= 0) AS duration_mean,
+               MAX(r.scheduled_duration_minutes) FILTER (WHERE r.scheduled_duration_minutes >= 0) AS duration_max
+        FROM dashboard_periods p
+        JOIN relation_scope_fact r
+          ON CAST(r.service_date AS DATE) BETWEEN p.window_start AND p.window_end
+        GROUP BY p.window_days, p.period, r.filter_type, r.filter_key,
+                 r.relation_id
+        """
+    )
+    connection.execute(
+        f"""
+        CREATE OR REPLACE TEMP TABLE cross_midnight_window AS
+        SELECT '{max_date}' AS as_of_date, p.window_days, p.period,
+               r.filter_type, r.filter_key,
+               COUNT(*) FILTER (WHERE r.cross_midnight IS NOT NULL) AS observed_services,
+               SUM(r.cross_midnight) AS cross_midnight_services,
+               COUNT(*) FILTER (WHERE r.scheduled_duration_minutes >= 0) AS duration_sample,
+               AVG(r.scheduled_duration_minutes) FILTER (WHERE r.scheduled_duration_minutes >= 0) AS duration_mean,
+               quantile_cont(r.scheduled_duration_minutes, 0.9)
+                   FILTER (WHERE r.scheduled_duration_minutes >= 0) AS duration_p90
+        FROM dashboard_periods p
+        JOIN relation_scope_fact r
+          ON CAST(r.service_date AS DATE) BETWEEN p.window_start AND p.window_end
+        GROUP BY p.window_days, p.period, r.filter_type, r.filter_key
+        """
+    )
+    connection.execute(
+        f"""
+        CREATE OR REPLACE TEMP TABLE long_journey_service AS
+        SELECT service_date, train_key, train_number, operator, category,
+               origin, destination, origin_code, destination_code, relation_key,
+               scheduled_departure, scheduled_arrival, scheduled_duration_minutes,
+               cross_midnight, delay_change, final_departure_delay,
+               final_arrival_delay, observation_count
+        FROM relation_scope_fact
+        WHERE filter_type='all' AND filter_key='all'
+          AND CAST(service_date AS DATE)
+              BETWEEN DATE '{max_date}' - INTERVAL 89 DAY AND DATE '{max_date}'
+          AND scheduled_duration_minutes >= 0
+        ORDER BY scheduled_duration_minutes DESC, service_date DESC, train_number
+        LIMIT 1000
+        """
+    )
+    connection.execute(
+        """
+        CREATE OR REPLACE TEMP TABLE outlier_stop AS
+        SELECT s.service_date, s.train_key, s.stop_number, s.station_code,
+               s.station_name, s.stop_type, s.platform,
+               s.arrival_expected, s.arrival_actual, s.arrival_delay,
+               s.departure_expected, s.departure_actual, s.departure_delay,
+               s.stop_cancelled, s.delay_change
+        FROM fact_stop_outcome s
+        JOIN outlier_service o
+          ON o.service_date=s.service_date AND o.train_key=s.train_key
+        ORDER BY s.service_date, s.train_key, s.stop_number
+        """
+    )
     return max_date
 
 
@@ -737,6 +983,14 @@ def _write_read_model(
         "network_window",
         "dimension_window",
         "outlier_service",
+        "operator_category_window",
+        "rhythm_window",
+        "station_window",
+        "station_hour_window",
+        "relation_feature_window",
+        "cross_midnight_window",
+        "long_journey_service",
+        "outlier_stop",
     )
     rows: dict[str, int] = {}
     with closing(sqlite3.connect(destination)) as output:
@@ -779,6 +1033,30 @@ def _write_read_model(
         )
         output.execute(
             "CREATE INDEX idx_outlier_filter ON outlier_service(operator, category, service_date)"
+        )
+        output.execute(
+            "CREATE INDEX idx_operator_category_window ON operator_category_window(as_of_date, window_days, period, operator, category)"
+        )
+        output.execute(
+            "CREATE INDEX idx_rhythm_window ON rhythm_window(as_of_date, window_days, period, filter_type, filter_key, weekday, hour)"
+        )
+        output.execute(
+            "CREATE INDEX idx_station_window ON station_window(as_of_date, window_days, period, filter_type, filter_key, observed_services DESC)"
+        )
+        output.execute(
+            "CREATE INDEX idx_station_hour_window ON station_hour_window(as_of_date, window_days, station_code, weekday, hour)"
+        )
+        output.execute(
+            "CREATE INDEX idx_relation_feature_window ON relation_feature_window(as_of_date, window_days, period, filter_type, filter_key, observed_services DESC)"
+        )
+        output.execute(
+            "CREATE INDEX idx_cross_midnight_window ON cross_midnight_window(as_of_date, window_days, period, filter_type, filter_key)"
+        )
+        output.execute(
+            "CREATE INDEX idx_long_journey_window ON long_journey_service(service_date, operator, category, scheduled_duration_minutes DESC)"
+        )
+        output.execute(
+            "CREATE INDEX idx_outlier_stop ON outlier_stop(service_date, train_key, stop_number)"
         )
         output.execute("ANALYZE")
         output.commit()

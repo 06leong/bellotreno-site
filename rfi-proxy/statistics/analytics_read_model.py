@@ -491,6 +491,479 @@ class AnalyticsReadModel:
             "offset": offset,
         }
 
+    def explore(
+        self,
+        *,
+        as_of: str | None,
+        window: int,
+        operator: str = "",
+        category: str = "",
+        station: str = "",
+    ) -> dict[str, Any]:
+        meta = self.metadata()
+        selected_date = self.validate_date(as_of, str(meta["asOfDate"]))
+        window = self.validate_window(window)
+        if operator and category:
+            raise ValueError("operator and category filters cannot be combined yet")
+        if _as_int(meta.get("schemaVersion")) < 2:
+            raise AnalyticsUnavailable("analytics_explore_not_built")
+        if selected_date != meta["asOfDate"]:
+            return {
+                "available": False,
+                "reason": "analytics_explore_latest_only",
+                "asOfDate": selected_date,
+                "latestAsOfDate": meta["asOfDate"],
+                "windowDays": window,
+            }
+
+        filter_type = "operator" if operator else "category" if category else "all"
+        filter_key = operator or category or "all"
+        start_date = (date.fromisoformat(selected_date) - timedelta(days=window - 1)).isoformat()
+
+        def compact_metric(row: sqlite3.Row) -> dict[str, Any]:
+            metric = _metric_payload(row) or {}
+            return {
+                "observedServices": metric.get("observedServices", 0),
+                "outcomeEligibleServices": metric.get("outcomeEligibleServices", 0),
+                "arrivalSample": metric.get("arrivalSample", 0),
+                "punctuality": metric.get("punctuality"),
+                "cancellation": metric.get("cancellation"),
+                "severeDelay": metric.get("severeDelay"),
+                "delayMinutes": metric.get("delayMinutes"),
+            }
+
+        with closing(self.connect()) as connection:
+            network = connection.execute(
+                "SELECT * FROM network_window WHERE as_of_date=? AND window_days=?",
+                (selected_date, window),
+            ).fetchone()
+            operator_rows = connection.execute(
+                """
+                SELECT * FROM dimension_window
+                WHERE as_of_date=? AND window_days=? AND dimension_type='operator'
+                ORDER BY observed_services DESC, dimension_label
+                """,
+                (selected_date, window),
+            ).fetchall()
+            category_rows = connection.execute(
+                """
+                SELECT * FROM dimension_window
+                WHERE as_of_date=? AND window_days=? AND dimension_type='category'
+                ORDER BY observed_services DESC, dimension_label
+                """,
+                (selected_date, window),
+            ).fetchall()
+            matrix_rows = connection.execute(
+                """
+                SELECT * FROM operator_category_window
+                WHERE as_of_date=? AND window_days=? AND period='current'
+                  AND (?='' OR operator=?) AND (?='' OR category=?)
+                ORDER BY observed_services DESC, operator, category
+                """,
+                (selected_date, window, operator, operator, category, category),
+            ).fetchall()
+            rhythm_rows = connection.execute(
+                """
+                SELECT * FROM rhythm_window
+                WHERE as_of_date=? AND window_days=? AND period='current'
+                  AND filter_type=? AND filter_key=?
+                ORDER BY weekday, hour
+                """,
+                (selected_date, window, filter_type, filter_key),
+            ).fetchall()
+            category_rhythm_rows = (
+                connection.execute(
+                    """
+                    SELECT * FROM rhythm_window
+                    WHERE as_of_date=? AND window_days=? AND period='current'
+                      AND filter_type='category'
+                      AND (?='' OR filter_key=?)
+                    ORDER BY filter_key, weekday, hour
+                    """,
+                    (selected_date, window, category, category),
+                ).fetchall()
+                if not operator
+                else []
+            )
+            station_rows = connection.execute(
+                """
+                SELECT * FROM station_window
+                WHERE as_of_date=? AND window_days=? AND period='current'
+                  AND filter_type=? AND filter_key=?
+                  AND observed_services>=?
+                ORDER BY observed_services DESC, station_label
+                LIMIT 100
+                """,
+                (
+                    selected_date,
+                    window,
+                    filter_type,
+                    filter_key,
+                    max(1, _as_int(meta.get("minimumRankingSample"))),
+                ),
+            ).fetchall()
+            previous_stations = {
+                row["station_code"]: row
+                for row in connection.execute(
+                    """
+                    SELECT * FROM station_window
+                    WHERE as_of_date=? AND window_days=? AND period='previous'
+                      AND filter_type=? AND filter_key=?
+                    """,
+                    (selected_date, window, filter_type, filter_key),
+                ).fetchall()
+            }
+            relation_rows = connection.execute(
+                """
+                SELECT * FROM relation_feature_window
+                WHERE as_of_date=? AND window_days=? AND period='current'
+                  AND filter_type=? AND filter_key=?
+                  AND observed_services>=?
+                ORDER BY observed_services DESC, relation_label
+                LIMIT 100
+                """,
+                (
+                    selected_date,
+                    window,
+                    filter_type,
+                    filter_key,
+                    max(1, _as_int(meta.get("minimumRankingSample"))),
+                ),
+            ).fetchall()
+            concentration_rows = connection.execute(
+                """
+                SELECT * FROM relation_feature_window
+                WHERE as_of_date=? AND window_days=? AND period='current'
+                  AND filter_type=? AND filter_key=?
+                  AND arrival_sample>=?
+                ORDER BY over_60 DESC, arrival_sample DESC, relation_label
+                LIMIT 1000
+                """,
+                (
+                    selected_date,
+                    window,
+                    filter_type,
+                    filter_key,
+                    max(1, _as_int(meta.get("minimumRankingSample"))),
+                ),
+            ).fetchall()
+            recovery_rows = connection.execute(
+                """
+                SELECT * FROM relation_feature_window
+                WHERE as_of_date=? AND window_days=? AND period='current'
+                  AND filter_type=? AND filter_key=?
+                  AND recovery_sample>=?
+                  AND delay_change_mean IS NOT NULL
+                ORDER BY ABS(delay_change_mean) DESC, recovery_sample DESC, relation_label
+                LIMIT 10
+                """,
+                (
+                    selected_date,
+                    window,
+                    filter_type,
+                    filter_key,
+                    max(1, _as_int(meta.get("minimumRankingSample"))),
+                ),
+            ).fetchall()
+            previous_relations = {
+                row["relation_id"]: row
+                for row in connection.execute(
+                    """
+                    SELECT * FROM relation_feature_window
+                    WHERE as_of_date=? AND window_days=? AND period='previous'
+                      AND filter_type=? AND filter_key=?
+                    """,
+                    (selected_date, window, filter_type, filter_key),
+                ).fetchall()
+            }
+            selected_station = station or (station_rows[0]["station_code"] if station_rows else "")
+            station_hour_rows = connection.execute(
+                """
+                SELECT weekday, hour, observed_services, arrivals, departures, transits
+                FROM station_hour_window
+                WHERE as_of_date=? AND window_days=? AND station_code=?
+                ORDER BY weekday, hour
+                """,
+                (selected_date, window, selected_station),
+            ).fetchall() if selected_station else []
+            cross_midnight = connection.execute(
+                """
+                SELECT * FROM cross_midnight_window
+                WHERE as_of_date=? AND window_days=? AND period='current'
+                  AND filter_type=? AND filter_key=?
+                """,
+                (selected_date, window, filter_type, filter_key),
+            ).fetchone()
+            previous_cross_midnight = connection.execute(
+                """
+                SELECT * FROM cross_midnight_window
+                WHERE as_of_date=? AND window_days=? AND period='previous'
+                  AND filter_type=? AND filter_key=?
+                """,
+                (selected_date, window, filter_type, filter_key),
+            ).fetchone()
+            journey_where = ["service_date BETWEEN ? AND ?"]
+            journey_params: list[Any] = [start_date, selected_date]
+            if operator:
+                journey_where.append("operator=?")
+                journey_params.append(operator)
+            if category:
+                journey_where.append("category=?")
+                journey_params.append(category)
+            longest_journeys = connection.execute(
+                f"""
+                SELECT * FROM long_journey_service
+                WHERE {' AND '.join(journey_where)}
+                ORDER BY scheduled_duration_minutes DESC, service_date DESC, train_number
+                LIMIT 8
+                """,
+                journey_params,
+            ).fetchall()
+            outlier_where = ["service_date BETWEEN ? AND ?"]
+            outlier_params: list[Any] = [start_date, selected_date]
+            if operator:
+                outlier_where.append("operator=?")
+                outlier_params.append(operator)
+            if category:
+                outlier_where.append("category=?")
+                outlier_params.append(category)
+            spotlight = connection.execute(
+                f"""
+                SELECT * FROM outlier_service
+                WHERE {' AND '.join(outlier_where)}
+                ORDER BY cancelled ASC, final_arrival_delay DESC NULLS LAST,
+                         observation_count DESC, service_date DESC
+                LIMIT 1
+                """,
+                outlier_params,
+            ).fetchone()
+            spotlight_stops = connection.execute(
+                """
+                SELECT * FROM outlier_stop
+                WHERE service_date=? AND train_key=? ORDER BY stop_number
+                """,
+                (spotlight["service_date"], spotlight["train_key"]),
+            ).fetchall() if spotlight else []
+
+        network_observed = _as_int(network["observed_services"] if network else 0)
+        operator_mix_rows = (
+            matrix_rows
+            if category
+            else [row for row in operator_rows if not operator or row["dimension_key"] == operator]
+        )
+        category_mix_rows = (
+            matrix_rows
+            if operator
+            else [row for row in category_rows if not category or row["dimension_key"] == category]
+        )
+        operator_mix_observed = (
+            sum(_as_int(row["observed_services"]) for row in operator_mix_rows)
+            if operator or category
+            else network_observed
+        )
+        category_mix_observed = (
+            sum(_as_int(row["observed_services"]) for row in category_mix_rows)
+            if operator or category
+            else network_observed
+        )
+
+        def mix_item(
+            row: sqlite3.Row,
+            *,
+            key_column: str = "dimension_key",
+            label_column: str = "dimension_label",
+            denominator: int = network_observed,
+        ) -> dict[str, Any]:
+            observed = _as_int(row["observed_services"])
+            return {
+                "key": row[key_column],
+                "label": row[label_column],
+                "sharePercent": _rate(observed, denominator),
+                **compact_metric(row),
+            }
+
+        def station_item(row: sqlite3.Row) -> dict[str, Any]:
+            previous = previous_stations.get(row["station_code"])
+            observed = _as_int(row["observed_services"])
+            arrivals = _as_int(row["arrivals"])
+            departures = _as_int(row["departures"])
+            transits = _as_int(row["transits"])
+            role_total = arrivals + departures + transits
+            arrival_sample = _as_int(row["arrival_sample"])
+            outcome_sample = _as_int(row["outcome_eligible_services"])
+            return {
+                "key": row["station_code"],
+                "label": row["station_label"],
+                "observedServices": observed,
+                "roles": {
+                    "arrivals": arrivals,
+                    "departures": departures,
+                    "transits": transits,
+                    "arrivalPercent": _rate(arrivals, role_total),
+                    "departurePercent": _rate(departures, role_total),
+                    "transitPercent": _rate(transits, role_total),
+                },
+                "punctuality": {
+                    "within5": {
+                        "numerator": _as_int(row["within_5"]),
+                        "denominator": arrival_sample,
+                        "percent": _rate(_as_int(row["within_5"]), arrival_sample),
+                    }
+                },
+                "cancellation": {
+                    "numerator": _as_int(row["cancelled_services"]),
+                    "denominator": outcome_sample,
+                    "percent": _rate(_as_int(row["cancelled_services"]), outcome_sample),
+                },
+                "arrivalSample": arrival_sample,
+                "delayMinutes": {
+                    "p50": _as_float(row["delay_p50"]),
+                    "p90": _as_float(row["delay_p90"]),
+                },
+                "previousObservedServices": _as_int(previous["observed_services"] if previous else 0),
+            }
+
+        def relation_item(row: sqlite3.Row) -> dict[str, Any]:
+            previous = previous_relations.get(row["relation_id"])
+            return {
+                "key": row["relation_id"],
+                "label": row["relation_label"],
+                **compact_metric(row),
+                "recovery": {
+                    "sample": _as_int(row["recovery_sample"]),
+                    "recoveredServices": _as_int(row["recovered_services"]),
+                    "meanMinutes": _as_float(row["delay_change_mean"]),
+                    "p50Minutes": _as_float(row["delay_change_p50"]),
+                },
+                "crossMidnightServices": _as_int(row["cross_midnight_services"]),
+                "previousObservedServices": _as_int(previous["observed_services"] if previous else 0),
+            }
+
+        relation_items = [relation_item(row) for row in relation_rows]
+        concentration_items = [relation_item(row) for row in concentration_rows]
+        severe_total = sum(
+            _as_int((item.get("severeDelay") or {}).get("over60", {}).get("numerator"))
+            for item in concentration_items
+        )
+        concentration = []
+        cumulative = 0
+        for item in sorted(
+            concentration_items,
+            key=lambda value: _as_int((value.get("severeDelay") or {}).get("over60", {}).get("numerator")),
+            reverse=True,
+        )[:10]:
+            events = _as_int((item.get("severeDelay") or {}).get("over60", {}).get("numerator"))
+            cumulative += events
+            concentration.append(
+                {
+                    "key": item["key"],
+                    "label": item["label"],
+                    "events": events,
+                    "sharePercent": _rate(events, severe_total),
+                    "cumulativePercent": _rate(cumulative, severe_total),
+                }
+            )
+
+        cross_observed = _as_int(cross_midnight["observed_services"] if cross_midnight else 0)
+        cross_count = _as_int(cross_midnight["cross_midnight_services"] if cross_midnight else 0)
+        previous_cross_observed = _as_int(previous_cross_midnight["observed_services"] if previous_cross_midnight else 0)
+        previous_cross_count = _as_int(previous_cross_midnight["cross_midnight_services"] if previous_cross_midnight else 0)
+
+        return {
+            "available": True,
+            "asOfDate": selected_date,
+            "windowDays": window,
+            "filter": {"type": None if filter_type == "all" else filter_type, "key": None if filter_key == "all" else filter_key},
+            "composition": {
+                "activeOperators": sum(
+                    1
+                    for row in operator_mix_rows
+                    if row["operator" if category else "dimension_key"] != "unknown"
+                    and _as_int(row["observed_services"]) > 0
+                ),
+                "operators": [
+                    mix_item(
+                        row,
+                        key_column="operator" if category else "dimension_key",
+                        label_column="operator" if category else "dimension_label",
+                        denominator=operator_mix_observed,
+                    )
+                    for row in operator_mix_rows
+                ],
+                "categories": [
+                    mix_item(
+                        row,
+                        key_column="category" if operator else "dimension_key",
+                        label_column="category" if operator else "dimension_label",
+                        denominator=category_mix_observed,
+                    )
+                    for row in category_mix_rows
+                ],
+                "matrix": [
+                    {
+                        "operator": row["operator"],
+                        "category": row["category"],
+                        **compact_metric(row),
+                    }
+                    for row in matrix_rows
+                ],
+            },
+            "rhythm": [
+                {
+                    "weekday": _as_int(row["weekday"]),
+                    "hour": _as_int(row["hour"]),
+                    **compact_metric(row),
+                }
+                for row in rhythm_rows
+            ],
+            "categoryRhythm": [
+                {
+                    "category": row["filter_key"],
+                    "weekday": _as_int(row["weekday"]),
+                    "hour": _as_int(row["hour"]),
+                    **compact_metric(row),
+                }
+                for row in category_rhythm_rows
+            ],
+            "network": {
+                "stations": [station_item(row) for row in station_rows],
+                "relations": relation_items,
+                "stationRhythm": {
+                    "stationCode": selected_station or None,
+                    "stationLabel": next((row["station_label"] for row in station_rows if row["station_code"] == selected_station), selected_station or None),
+                    "items": [dict(row) for row in station_hour_rows],
+                    "filterScope": "all_services",
+                },
+            },
+            "services": {
+                "crossMidnight": {
+                    "numerator": cross_count,
+                    "denominator": cross_observed,
+                    "percent": _rate(cross_count, cross_observed),
+                    "previousPercent": _rate(previous_cross_count, previous_cross_observed),
+                    "durationSample": _as_int(cross_midnight["duration_sample"] if cross_midnight else 0),
+                    "durationMeanMinutes": _as_float(cross_midnight["duration_mean"] if cross_midnight else None),
+                    "durationP90Minutes": _as_float(cross_midnight["duration_p90"] if cross_midnight else None),
+                },
+                "longestJourneys": [dict(row) for row in longest_journeys],
+                "recoveryRelations": sorted(
+                    [relation_item(row) for row in recovery_rows],
+                    key=lambda item: abs(item["recovery"]["meanMinutes"]),
+                    reverse=True,
+                )[:10],
+                "spotlight": {
+                    "service": dict(spotlight) if spotlight else None,
+                    "stops": [dict(row) for row in spotlight_stops],
+                },
+                "disruptionConcentration": {
+                    "eventDefinition": "relation_services_over_60_minutes",
+                    "totalEvents": severe_total,
+                    "items": concentration,
+                },
+            },
+            "disclaimer": "Distinct observable services and stop outcomes; not passenger counts or official full-network statistics. Missing evidence is not zero.",
+        }
+
 
 def rows_to_csv(rows: Iterable[dict[str, Any]]) -> tuple[list[str], list[list[Any]]]:
     materialized = list(rows)

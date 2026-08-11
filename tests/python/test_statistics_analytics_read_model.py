@@ -99,11 +99,71 @@ class StatisticsAnalyticsReadModelTest(unittest.TestCase):
                     observation_count INTEGER, latest_state_quality INTEGER,
                     detail_quality INTEGER, observation_quality INTEGER
                 );
+                CREATE TABLE operator_category_window (
+                    as_of_date TEXT, window_days INTEGER, period TEXT,
+                    window_start TEXT, window_end TEXT, operator TEXT, category TEXT,
+                    {METRIC_DEFINITIONS}, delay_p50 REAL, delay_p75 REAL,
+                    delay_p90 REAL, delay_p95 REAL, delay_mean REAL
+                );
+                CREATE TABLE rhythm_window (
+                    as_of_date TEXT, window_days INTEGER, period TEXT,
+                    filter_type TEXT, filter_key TEXT, weekday INTEGER, hour INTEGER,
+                    {METRIC_DEFINITIONS}, delay_p50 REAL, delay_p75 REAL,
+                    delay_p90 REAL, delay_p95 REAL, delay_mean REAL
+                );
+                CREATE TABLE station_window (
+                    as_of_date TEXT, window_days INTEGER, period TEXT,
+                    filter_type TEXT, filter_key TEXT, station_code TEXT,
+                    station_label TEXT, observed_services INTEGER,
+                    arrivals INTEGER, departures INTEGER, transits INTEGER,
+                    outcome_eligible_services INTEGER, cancelled_services INTEGER,
+                    arrival_sample INTEGER, within_5 INTEGER, within_15 INTEGER,
+                    over_60 INTEGER, delay_p50 REAL, delay_p90 REAL
+                );
+                CREATE TABLE station_hour_window (
+                    as_of_date TEXT, window_days INTEGER, station_code TEXT,
+                    station_label TEXT, weekday INTEGER, hour INTEGER,
+                    observed_services INTEGER, arrivals INTEGER,
+                    departures INTEGER, transits INTEGER
+                );
+                CREATE TABLE relation_feature_window (
+                    as_of_date TEXT, window_days INTEGER, period TEXT,
+                    filter_type TEXT, filter_key TEXT, relation_id TEXT,
+                    relation_label TEXT, {METRIC_DEFINITIONS},
+                    delay_p50 REAL, delay_p75 REAL, delay_p90 REAL,
+                    delay_p95 REAL, delay_mean REAL, recovery_sample INTEGER,
+                    recovered_services INTEGER, delay_change_mean REAL,
+                    delay_change_p50 REAL, cross_midnight_services INTEGER,
+                    duration_sample INTEGER, duration_mean REAL, duration_max REAL
+                );
+                CREATE TABLE cross_midnight_window (
+                    as_of_date TEXT, window_days INTEGER, period TEXT,
+                    filter_type TEXT, filter_key TEXT, observed_services INTEGER,
+                    cross_midnight_services INTEGER, duration_sample INTEGER,
+                    duration_mean REAL, duration_p90 REAL
+                );
+                CREATE TABLE long_journey_service (
+                    service_date TEXT, train_key TEXT, train_number TEXT,
+                    operator TEXT, category TEXT, origin TEXT, destination TEXT,
+                    origin_code TEXT, destination_code TEXT, relation_key TEXT,
+                    scheduled_departure TEXT, scheduled_arrival TEXT,
+                    scheduled_duration_minutes REAL, cross_midnight INTEGER,
+                    delay_change REAL, final_departure_delay REAL,
+                    final_arrival_delay REAL, observation_count INTEGER
+                );
+                CREATE TABLE outlier_stop (
+                    service_date TEXT, train_key TEXT, stop_number INTEGER,
+                    station_code TEXT, station_name TEXT, stop_type TEXT,
+                    platform TEXT, arrival_expected TEXT, arrival_actual TEXT,
+                    arrival_delay INTEGER, departure_expected TEXT,
+                    departure_actual TEXT, departure_delay INTEGER,
+                    stop_cancelled INTEGER, delay_change REAL
+                );
                 """
             )
             metadata = {
-                "schemaVersion": "1",
-                "metricDefinitionVersion": "2026-08-09-v1",
+                "schemaVersion": "2",
+                "metricDefinitionVersion": "2026-08-11-v2",
                 "buildId": "fixture-build",
                 "builtAt": "2026-08-29T02:30:00Z",
                 "asOfDate": "2026-08-28",
@@ -157,6 +217,57 @@ class StatisticsAnalyticsReadModelTest(unittest.TestCase):
                     90, 90, 90,
                 ),
             )
+            connection.execute(
+                f"INSERT INTO operator_category_window VALUES (?,?,?,?,?,?,?,{metric_placeholders})",
+                ["2026-08-28", 7, "current", "2026-08-22", "2026-08-28", "10", "ICN", *metric_values(service_days=7)],
+            )
+            for filter_type, filter_key in (("all", "all"), ("category", "ICN")):
+                connection.execute(
+                    f"INSERT INTO rhythm_window VALUES (?,?,?,?,?,?,?,{metric_placeholders})",
+                    ["2026-08-28", 7, "current", filter_type, filter_key, 4, 20, *metric_values(service_days=7)],
+                )
+            station_values = (
+                "2026-08-28", 7, "current", "all", "all", "S001",
+                "MILANO CENTRALE", 600, 200, 200, 200, 540, 20, 500,
+                400, 450, 10, 3.0, 18.0,
+            )
+            connection.execute(
+                "INSERT INTO station_window VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                station_values,
+            )
+            connection.execute(
+                "INSERT INTO station_window VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                ("2026-08-28", 7, "previous", "all", "all", "S001", "MILANO CENTRALE", 550, 180, 190, 180, 500, 18, 460, 365, 420, 9, 3.5, 20.0),
+            )
+            connection.execute(
+                "INSERT INTO station_hour_window VALUES (?,?,?,?,?,?,?,?,?,?)",
+                ("2026-08-28", 7, "S001", "MILANO CENTRALE", 4, 20, 80, 25, 30, 25),
+            )
+            relation_metric_values = metric_values(service_days=7)
+            connection.execute(
+                f"INSERT INTO relation_feature_window VALUES (?,?,?,?,?,?,?,{metric_placeholders},?,?,?,?,?,?,?,?)",
+                ["2026-08-28", 7, "current", "all", "all", "MILANO CENTRALE -> LECCE", "MILANO CENTRALE -> LECCE", *relation_metric_values, 700, 320, -4.5, -3.0, 120, 800, 430.0, 720.0],
+            )
+            connection.execute(
+                f"INSERT INTO relation_feature_window VALUES (?,?,?,?,?,?,?,{metric_placeholders},?,?,?,?,?,?,?,?)",
+                ["2026-08-28", 7, "previous", "all", "all", "MILANO CENTRALE -> LECCE", "MILANO CENTRALE -> LECCE", *metric_values(service_days=7), 650, 280, -2.0, -1.0, 100, 750, 420.0, 700.0],
+            )
+            connection.execute(
+                "INSERT INTO cross_midnight_window VALUES (?,?,?,?,?,?,?,?,?,?)",
+                ("2026-08-28", 7, "current", "all", "all", 1000, 120, 900, 240.0, 600.0),
+            )
+            connection.execute(
+                "INSERT INTO cross_midnight_window VALUES (?,?,?,?,?,?,?,?,?,?)",
+                ("2026-08-28", 7, "previous", "all", "all", 900, 90, 820, 230.0, 580.0),
+            )
+            connection.execute(
+                "INSERT INTO long_journey_service VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                ("2026-08-28", "100-S001-1", "100", "10", "ICN", "MILANO CENTRALE", "LECCE", "S001", "S030", "MILANO CENTRALE -> LECCE", "2026-08-28T20:00:00+02:00", "2026-08-29T08:00:00+02:00", 720.0, 1, 60.0, 120.0, 180.0, 12),
+            )
+            connection.execute(
+                "INSERT INTO outlier_stop VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                ("2026-08-28", "100-S001-1", 0, "S001", "MILANO CENTRALE", "origine", "1", None, None, None, "2026-08-28T20:00:00+02:00", "2026-08-28T22:00:00+02:00", 120, 0, None),
+            )
             connection.commit()
         self.model = AnalyticsReadModel(self.database)
 
@@ -192,6 +303,19 @@ class StatisticsAnalyticsReadModelTest(unittest.TestCase):
             self.model.overview(as_of=None, window=7, operator="10", category="IC")
         with self.assertRaises(AnalyticsUnavailable):
             AnalyticsReadModel(Path(self.temporary.name) / "missing.db").metadata()
+
+    def test_explore_returns_composition_rhythm_network_and_service_features(self):
+        payload = self.model.explore(as_of=None, window=7)
+        self.assertTrue(payload["available"])
+        self.assertEqual(payload["composition"]["activeOperators"], 1)
+        self.assertEqual(payload["composition"]["matrix"][0]["category"], "ICN")
+        self.assertEqual(payload["rhythm"][0]["hour"], 20)
+        self.assertEqual(payload["categoryRhythm"][0]["category"], "ICN")
+        self.assertEqual(payload["network"]["stations"][0]["roles"]["transits"], 200)
+        self.assertEqual(payload["network"]["stationRhythm"]["stationCode"], "S001")
+        self.assertEqual(payload["services"]["crossMidnight"]["percent"], 12.0)
+        self.assertEqual(payload["services"]["recoveryRelations"][0]["recovery"]["meanMinutes"], -4.5)
+        self.assertEqual(payload["services"]["spotlight"]["stops"][0]["station_code"], "S001")
 
     def test_wilson_interval_is_bounded(self):
         interval = wilson_interval(1, 1)

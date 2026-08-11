@@ -2,12 +2,14 @@ import { onBelloLanguageChanged } from "./language-events.js";
 import {
     formatAnalyticsNumber,
     formatAnalyticsPercent,
+    normalizeAnalyticsExplore,
     normalizeAnalyticsMeta,
     normalizeAnalyticsOutliers,
     normalizeAnalyticsOverview,
     normalizeAnalyticsRanking,
     percentagePointChange,
     type AnalyticsDimension,
+    type AnalyticsExplore,
     type AnalyticsMeta,
     type AnalyticsMetricSet,
     type AnalyticsOutlierPayload,
@@ -20,12 +22,14 @@ import {
 (function () {
     type AnalyticsChartModule = typeof import("./statistics-echarts.js");
     type StatisticsMode = "live" | "performance";
+    type AnalyticsTopic = "overview" | "mix" | "rhythm" | "stations" | "routes" | "services" | "quality";
 
     interface AnalyticsState {
         asOf: string;
         category: string;
         charts: AnalyticsChartModule | null;
         dimension: AnalyticsDimension;
+        explore: AnalyticsExplore | null;
         initialized: boolean;
         loading: boolean;
         meta: AnalyticsMeta | null;
@@ -34,10 +38,13 @@ import {
         outliers: AnalyticsOutlierPayload | null;
         overview: AnalyticsOverview | null;
         ranking: AnalyticsRankingPayload | null;
+        rankings: Partial<Record<AnalyticsDimension, AnalyticsRankingPayload>>;
         rankDirection: "asc" | "desc";
         rankSort: AnalyticsRankingSort;
         requestSerial: number;
+        station: string;
         themeObserver: MutationObserver | null;
+        topic: AnalyticsTopic;
         windowDays: AnalyticsWindow;
     }
 
@@ -47,6 +54,7 @@ import {
         category: "",
         charts: null,
         dimension: "operator",
+        explore: null,
         initialized: false,
         loading: false,
         meta: null,
@@ -55,10 +63,13 @@ import {
         outliers: null,
         overview: null,
         ranking: null,
+        rankings: {},
         rankDirection: "asc",
         rankSort: "punctuality",
         requestSerial: 0,
+        station: "",
         themeObserver: null,
+        topic: "overview",
         windowDays: 28
     };
 
@@ -121,10 +132,28 @@ import {
         });
     }
 
+    function paramsForDashboardRanking(dimension: AnalyticsDimension): URLSearchParams {
+        return new URLSearchParams({
+            asOf: state.asOf,
+            window: String(state.windowDays),
+            dimension,
+            sort: "sample",
+            direction: "desc",
+            minimumSample: String(state.meta?.minimumRankingSample || 100),
+            limit: "25"
+        });
+    }
+
     function paramsForOutliers(): URLSearchParams {
         const params = new URLSearchParams({ asOf: state.asOf, window: String(state.windowDays), limit: "25" });
         if (state.operator) params.set("operator", state.operator);
         if (state.category) params.set("category", state.category);
+        return params;
+    }
+
+    function paramsForExplore(): URLSearchParams {
+        const params = paramsForOverview();
+        if (state.station) params.set("station", state.station);
         return params;
     }
 
@@ -169,8 +198,10 @@ import {
             if (state.operator) url.searchParams.set("operator", state.operator); else url.searchParams.delete("operator");
             if (state.category) url.searchParams.set("category", state.category); else url.searchParams.delete("category");
             url.searchParams.set("dimension", state.dimension);
+            if (state.topic !== "overview") url.searchParams.set("topic", state.topic); else url.searchParams.delete("topic");
+            if (state.station) url.searchParams.set("station", state.station); else url.searchParams.delete("station");
         } else {
-            ["mode", "window", "asOf", "operator", "category", "dimension"].forEach((key) => url.searchParams.delete(key));
+            ["mode", "window", "asOf", "operator", "category", "dimension", "topic", "station"].forEach((key) => url.searchParams.delete(key));
         }
         window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
     }
@@ -183,8 +214,11 @@ import {
         state.asOf = params.get("asOf") || "";
         state.operator = params.get("operator") || "";
         state.category = (params.get("category") || "").toUpperCase();
+        state.station = params.get("station") || "";
         const dimension = params.get("dimension");
         if (dimension === "operator" || dimension === "category" || dimension === "station" || dimension === "relation") state.dimension = dimension;
+        const topic = params.get("topic");
+        if (topic === "mix" || topic === "rhythm" || topic === "stations" || topic === "routes" || topic === "services" || topic === "quality") state.topic = topic;
     }
 
     async function setMode(mode: StatisticsMode): Promise<void> {
@@ -242,6 +276,28 @@ import {
             const selected = Number(button.dataset.analyticsWindow) === state.windowDays;
             button.classList.toggle("active", selected);
             button.setAttribute("aria-pressed", String(selected));
+        });
+        document.querySelectorAll<HTMLButtonElement>("[data-analytics-topic]").forEach((button) => {
+            button.addEventListener("click", () => {
+                const topic = button.dataset.analyticsTopic;
+                if (topic === "overview" || topic === "mix" || topic === "rhythm" || topic === "stations" || topic === "routes" || topic === "services" || topic === "quality") setTopic(topic);
+            });
+        });
+        $("statisticsAnalyticsTopics")?.addEventListener("keydown", (event) => {
+            if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "Home" && event.key !== "End") return;
+            const buttons = [...document.querySelectorAll<HTMLButtonElement>("[data-analytics-topic]")];
+            const current = buttons.findIndex((button) => button.dataset.analyticsTopic === state.topic);
+            const nextIndex = event.key === "Home"
+                ? 0
+                : event.key === "End"
+                    ? buttons.length - 1
+                    : (current + (event.key === "ArrowRight" ? 1 : -1) + buttons.length) % buttons.length;
+            const next = buttons[nextIndex];
+            const topic = next?.dataset.analyticsTopic;
+            if (!next || !topic) return;
+            event.preventDefault();
+            next.focus();
+            if (topic === "overview" || topic === "mix" || topic === "rhythm" || topic === "stations" || topic === "routes" || topic === "services" || topic === "quality") setTopic(topic);
         });
         const asOf = $<HTMLSelectElement>("statisticsAnalyticsAsOf");
         const operator = $<HTMLSelectElement>("statisticsAnalyticsOperator");
@@ -521,6 +577,259 @@ import {
         body.replaceChildren(...rows);
     }
 
+    function syncTopicPanels(): void {
+        document.querySelectorAll<HTMLButtonElement>("[data-analytics-topic]").forEach((button) => {
+            const selected = button.dataset.analyticsTopic === state.topic;
+            button.classList.toggle("active", selected);
+            button.setAttribute("aria-selected", String(selected));
+            button.tabIndex = selected ? 0 : -1;
+        });
+        document.querySelectorAll<HTMLElement>("[data-analytics-topic-panel]").forEach((panel) => {
+            panel.hidden = panel.dataset.analyticsTopicPanel !== state.topic;
+        });
+        const methodology = document.querySelector<HTMLDetailsElement>("details.statistics-methodology");
+        if (methodology && state.topic === "quality") methodology.open = true;
+    }
+
+    function setTopic(topic: AnalyticsTopic): void {
+        state.topic = topic;
+        syncTopicPanels();
+        updateUrl();
+        requestAnimationFrame(() => void renderCharts());
+    }
+
+    function metricChange(current: number, previous: number): string {
+        if (previous <= 0) return tr("statistics_no_previous_window", "No previous complete window");
+        const change = (current - previous) * 100 / previous;
+        const sign = change > 0 ? "+" : "";
+        return `${sign}${formatAnalyticsNumber(change, locale(), 1)}% · ${tr("statistics_vs_previous_window", "vs previous window")}`;
+    }
+
+    function renderLeaderboard(
+        targetId: string,
+        items: Array<{ key: string; label: string; value: number; detail: string; comparison?: string }>
+    ): void {
+        const target = $(targetId);
+        if (!target) return;
+        if (!items.length) {
+            target.replaceChildren(element("p", "statistics-dashboard-empty", tr("statistics_no_comparable_rows", "No rows meet the comparison sample threshold.")));
+            return;
+        }
+        const maximum = Math.max(...items.map((item) => item.value), 1);
+        target.replaceChildren(...items.slice(0, 15).map((item, index) => {
+            const row = element("article", "statistics-leaderboard-row");
+            row.dataset.key = item.key;
+            const rank = element("span", "statistics-leaderboard-rank", String(index + 1).padStart(2, "0"));
+            const body = element("div", "statistics-leaderboard-body");
+            const heading = element("div", "statistics-leaderboard-heading");
+            heading.append(element("strong", "", item.label), element("span", "", formatAnalyticsNumber(item.value, locale())));
+            const track = element("div", "statistics-leaderboard-track");
+            const fill = element("span", "statistics-leaderboard-fill");
+            fill.style.width = `${Math.max(2, item.value * 100 / maximum)}%`;
+            track.append(fill);
+            const meta = element("div", "statistics-leaderboard-meta");
+            meta.append(element("span", "", item.detail));
+            if (item.comparison) meta.append(element("span", "", item.comparison));
+            body.append(heading, track, meta);
+            row.append(rank, body);
+            return row;
+        }));
+    }
+
+    function dashboardRankingItems(dimension: AnalyticsDimension): AnalyticsRankingPayload["items"] {
+        return state.rankings[dimension]?.items ?? [];
+    }
+
+    function renderStationLeaderboard(explore: AnalyticsExplore | null): void {
+        if (explore) {
+            renderLeaderboard("statisticsStationLeaderboard", explore.network.stations.map((item) => ({
+                key: item.key,
+                label: item.label,
+                value: item.observedServices,
+                detail: `${tr("statistics_roles_arrival", "Arrivals")} ${formatAnalyticsPercent(item.roles.arrivalPercent, locale())} · ${tr("statistics_roles_departure", "Departures")} ${formatAnalyticsPercent(item.roles.departurePercent, locale())} · ${tr("statistics_roles_transit", "Transit")} ${formatAnalyticsPercent(item.roles.transitPercent, locale())}`,
+                comparison: metricChange(item.observedServices, item.previousObservedServices)
+            })));
+            return;
+        }
+        renderLeaderboard("statisticsStationLeaderboard", dashboardRankingItems("station").map((item) => ({
+            key: item.key,
+            label: item.label,
+            value: item.observedServices,
+            detail: `${tr("statistics_metric_punctuality_5", "Within 5 min")} ${formatAnalyticsPercent(item.punctuality.within5.percent, locale())} · ${tr("statistics_arrival_sample", "Arrival sample")} ${formatAnalyticsNumber(item.arrivalSample, locale())}`
+        })));
+    }
+
+    function renderRelationLeaderboard(explore: AnalyticsExplore | null): void {
+        if (explore) {
+            renderLeaderboard("statisticsRelationLeaderboard", explore.network.relations.map((item) => ({
+                key: item.key,
+                label: item.label,
+                value: item.observedServices,
+                detail: `${tr("statistics_metric_punctuality_5", "Within 5 min")} ${formatAnalyticsPercent(item.punctuality.within5.percent, locale())} · P90 ${formatAnalyticsNumber(item.delayMinutes.p90, locale(), 1)} ${tr("statistics_minutes_short", "min")}`,
+                comparison: metricChange(item.observedServices, item.previousObservedServices)
+            })));
+            return;
+        }
+        renderLeaderboard("statisticsRelationLeaderboard", dashboardRankingItems("relation").map((item) => ({
+            key: item.key,
+            label: item.label,
+            value: item.observedServices,
+            detail: `${tr("statistics_metric_punctuality_5", "Within 5 min")} ${formatAnalyticsPercent(item.punctuality.within5.percent, locale())} · P90 ${formatAnalyticsNumber(item.delayMinutes.p90, locale(), 1)} ${tr("statistics_minutes_short", "min")}`
+        })));
+    }
+
+    function renderStationSelect(explore: AnalyticsExplore): void {
+        const select = $<HTMLSelectElement>("statisticsAnalyticsStation");
+        if (!select) return;
+        select.disabled = false;
+        const selected = explore.network.stationRhythm.stationCode || state.station || explore.network.stations[0]?.key || "";
+        select.replaceChildren(...explore.network.stations.map((station) => {
+            const option = element("option", "", `${station.label} · ${formatAnalyticsNumber(station.observedServices, locale())}`);
+            option.value = station.key;
+            return option;
+        }));
+        if (selected) select.value = selected;
+        state.station = selected;
+    }
+
+    function renderCrossMidnight(explore: AnalyticsExplore): void {
+        const metric = explore.services.crossMidnight;
+        const value = $("statisticsCrossMidnightRate");
+        const sample = $("statisticsCrossMidnightSample");
+        if (value) value.textContent = formatAnalyticsPercent(metric.percent, locale());
+        if (sample) sample.textContent = `${formatAnalyticsNumber(metric.numerator, locale())}/${formatAnalyticsNumber(metric.denominator, locale())} ${tr("statistics_observed_services", "observed services")} · P90 ${formatAnalyticsNumber(metric.durationP90Minutes, locale(), 0)} ${tr("statistics_minutes_short", "min")}`;
+    }
+
+    function renderJourneys(explore: AnalyticsExplore): void {
+        const target = $("statisticsLongestJourneys");
+        if (!target) return;
+        if (!explore.services.longestJourneys.length) {
+            target.replaceChildren(element("p", "statistics-dashboard-empty", tr("statistics_no_chart_data", "No chart data")));
+            return;
+        }
+        target.replaceChildren(...explore.services.longestJourneys.map((journey, index) => {
+            const row = element("article", "statistics-journey-row");
+            const rank = element("span", "statistics-journey-rank", String(index + 1).padStart(2, "0"));
+            const body = element("div", "statistics-journey-body");
+            const title = element("strong", "", `${journey.category ? `${journey.category} ` : ""}${journey.train_number}`);
+            const route = element("span", "", `${journey.origin ?? journey.origin_code ?? "—"} → ${journey.destination ?? journey.destination_code ?? "—"}`);
+            const tags = element("div", "statistics-journey-tags");
+            tags.append(
+                element("span", "", operatorLabel(journey.operator)),
+                element("span", "", `${formatAnalyticsNumber(journey.scheduled_duration_minutes, locale(), 0)} ${tr("statistics_minutes_short", "min")}`)
+            );
+            if (journey.cross_midnight) tags.append(element("span", "statistics-journey-night", tr("statistics_cross_midnight", "Cross-midnight")));
+            body.append(title, route, tags);
+            row.append(rank, body);
+            return row;
+        }));
+    }
+
+    function renderSpotlight(explore: AnalyticsExplore): void {
+        const service = explore.services.spotlight.service;
+        const title = $("statisticsSpotlightTitle");
+        const observations = $("statisticsSpotlightObservations");
+        const facts = $("statisticsSpotlightFacts");
+        if (!service) {
+            if (title) title.textContent = tr("statistics_no_outliers", "No disrupted services are available for this window.");
+            if (observations) observations.textContent = "—";
+            facts?.replaceChildren();
+            return;
+        }
+        if (title) title.textContent = `${service.category ? `${service.category} ` : ""}${service.train_number} · ${service.origin ?? "—"} → ${service.destination ?? "—"}`;
+        if (observations) observations.textContent = `${formatAnalyticsNumber(service.observation_count, locale())} ${tr("statistics_observations", "observations")}`;
+        if (facts) {
+            const values = [
+                [tr("statistics_service_date", "Service date"), displayDate(service.service_date)],
+                [tr("statistics_operator", "Operator"), operatorLabel(service.operator)],
+                [tr("statistics_arrival_delay", "Arrival delay"), service.cancelled ? tr("statistics_status_cancelled", "Cancelled") : `${formatAnalyticsNumber(service.final_arrival_delay, locale(), 0)} ${tr("statistics_minutes_short", "min")}`],
+                [tr("statistics_station_count", "Stops"), formatAnalyticsNumber(explore.services.spotlight.stops.length, locale())]
+            ];
+            facts.replaceChildren(...values.map(([label, value]) => {
+                const item = element("div");
+                item.append(element("span", "", label), element("strong", "", value));
+                return item;
+            }));
+        }
+    }
+
+    function renderDataTable(targetId: string, columns: string[], rows: string[][]): void {
+        const target = $(targetId);
+        if (!target) return;
+        const details = element("details", "statistics-chart-data-details");
+        details.append(element("summary", "", tr("statistics_view_chart_data", "View chart data table")));
+        const wrap = element("div", "statistics-chart-data-scroll");
+        const table = element("table");
+        const head = element("thead");
+        const headRow = element("tr");
+        columns.forEach((column) => headRow.append(element("th", "", column)));
+        head.append(headRow);
+        const body = element("tbody");
+        rows.forEach((values) => {
+            const row = element("tr");
+            values.forEach((value) => row.append(element("td", "", value)));
+            body.append(row);
+        });
+        table.append(head, body);
+        wrap.append(table);
+        details.append(wrap);
+        target.replaceChildren(details);
+    }
+
+    function renderExploreTables(explore: AnalyticsExplore): void {
+        renderDataTable("statisticsOperatorMixTable", [tr("statistics_operator", "Operator"), tr("statistics_observed_services", "Observed services"), tr("statistics_share", "Share")], explore.composition.operators.map((item) => [operatorLabel(item.label), formatAnalyticsNumber(item.observedServices, locale()), formatAnalyticsPercent(item.sharePercent, locale())]));
+        renderDataTable("statisticsCategoryMixTable", [tr("statistics_category", "Category"), tr("statistics_observed_services", "Observed services"), tr("statistics_share", "Share")], explore.composition.categories.map((item) => [item.label, formatAnalyticsNumber(item.observedServices, locale()), formatAnalyticsPercent(item.sharePercent, locale())]));
+        renderDataTable("statisticsOperatorCategoryTable", [tr("statistics_operator", "Operator"), tr("statistics_category", "Category"), tr("statistics_observed_services", "Observed services")], explore.composition.matrix.map((item) => [operatorLabel(item.operator), item.category, formatAnalyticsNumber(item.observedServices, locale())]));
+        renderDataTable("statisticsNetworkRhythmTable", [tr("statistics_weekday", "Weekday"), tr("statistics_hour", "Hour"), tr("statistics_observed_services", "Observed services")], explore.rhythm.map((item) => [chartLabels().weekdays[item.weekday] ?? String(item.weekday), `${String(item.hour).padStart(2, "0")}:00`, formatAnalyticsNumber(item.observedServices, locale())]));
+        renderDataTable("statisticsCategoryRhythmTable", [tr("statistics_category", "Category"), tr("statistics_hour", "Hour"), tr("statistics_observed_services", "Observed services")], explore.categoryRhythm.map((item) => [item.category, `${String(item.hour).padStart(2, "0")}:00`, formatAnalyticsNumber(item.observedServices, locale())]));
+        renderDataTable("statisticsStationScatterTable", [tr("statistics_station", "Station"), tr("statistics_observed_services", "Observed services"), tr("statistics_metric_punctuality_5", "Within 5 min")], explore.network.stations.map((item) => [item.label, formatAnalyticsNumber(item.observedServices, locale()), formatAnalyticsPercent(item.punctuality.within5.percent, locale())]));
+        renderDataTable("statisticsStationRhythmTable", [tr("statistics_weekday", "Weekday"), tr("statistics_hour", "Hour"), tr("statistics_observed_services", "Observed services")], explore.network.stationRhythm.items.map((item) => [chartLabels().weekdays[item.weekday] ?? String(item.weekday), `${String(item.hour).padStart(2, "0")}:00`, formatAnalyticsNumber(item.observed_services, locale())]));
+        renderDataTable("statisticsDisruptionTable", [tr("statistics_route", "Route"), tr("statistics_metric_over_60", "Arrivals over 60 min"), tr("statistics_cumulative_share", "Cumulative share")], explore.services.disruptionConcentration.items.map((item) => [item.label, formatAnalyticsNumber(item.events, locale()), formatAnalyticsPercent(item.cumulativePercent, locale())]));
+    }
+
+    function renderExplore(explore: AnalyticsExplore | null): void {
+        renderStationLeaderboard(explore);
+        renderRelationLeaderboard(explore);
+        if (!explore) {
+            const operatorItems = dashboardRankingItems("operator");
+            const categoryItems = dashboardRankingItems("category");
+            const total = state.overview?.current.observedServices ?? 0;
+            const active = $("statisticsActiveOperators");
+            const activeOperators = state.meta?.dimensions.operator.filter((item) => item.key !== "unknown" && item.sample > 0).length
+                ?? operatorItems.filter((item) => item.key !== "unknown" && item.observedServices > 0).length;
+            if (active) active.textContent = `${formatAnalyticsNumber(activeOperators, locale())} ${tr("statistics_active_operators", "active operators")}`;
+            renderDataTable("statisticsOperatorMixTable", [tr("statistics_operator", "Operator"), tr("statistics_observed_services", "Observed services"), tr("statistics_share", "Share")], operatorItems.map((item) => [operatorLabel(item.label), formatAnalyticsNumber(item.observedServices, locale()), formatAnalyticsPercent(total > 0 ? item.observedServices * 100 / total : null, locale())]));
+            renderDataTable("statisticsCategoryMixTable", [tr("statistics_category", "Category"), tr("statistics_observed_services", "Observed services"), tr("statistics_share", "Share")], categoryItems.map((item) => [item.label, formatAnalyticsNumber(item.observedServices, locale()), formatAnalyticsPercent(total > 0 ? item.observedServices * 100 / total : null, locale())]));
+            const unavailable = tr("statistics_extended_model_pending", "This view becomes available after the latest analytical model is published.");
+            for (const id of ["statisticsOperatorCategoryTable", "statisticsNetworkRhythmTable", "statisticsCategoryRhythmTable", "statisticsStationRhythmTable", "statisticsDisruptionTable"]) {
+                $(id)?.replaceChildren(element("p", "statistics-dashboard-empty", unavailable));
+            }
+            const stationSelect = $<HTMLSelectElement>("statisticsAnalyticsStation");
+            if (stationSelect) {
+                stationSelect.replaceChildren(element("option", "", unavailable));
+                stationSelect.disabled = true;
+            }
+            const crossRate = $("statisticsCrossMidnightRate");
+            const crossSample = $("statisticsCrossMidnightSample");
+            const spotlightTitle = $("statisticsSpotlightTitle");
+            const spotlightObservations = $("statisticsSpotlightObservations");
+            if (crossRate) crossRate.textContent = "—";
+            if (crossSample) crossSample.textContent = unavailable;
+            if (spotlightTitle) spotlightTitle.textContent = unavailable;
+            if (spotlightObservations) spotlightObservations.textContent = "—";
+            $("statisticsLongestJourneys")?.replaceChildren(element("p", "statistics-dashboard-empty", unavailable));
+            $("statisticsSpotlightFacts")?.replaceChildren();
+            return;
+        }
+        const active = $("statisticsActiveOperators");
+        if (active) active.textContent = `${formatAnalyticsNumber(explore.composition.activeOperators, locale())} ${tr("statistics_active_operators", "active operators")}`;
+        renderStationSelect(explore);
+        renderCrossMidnight(explore);
+        renderJourneys(explore);
+        renderSpotlight(explore);
+        renderExploreTables(explore);
+    }
+
     function renderAccessibleChartTable(targetId: string, overview: AnalyticsOverview, columns: Array<{ label: string; value: (metric: AnalyticsMetricSet) => string }>): void {
         const target = $(targetId);
         if (!target) return;
@@ -558,7 +867,7 @@ import {
             over60: tr("statistics_metric_over_60", "Over 60 min"),
             over120: tr("statistics_metric_over_120", "Over 120 min"),
             noData: tr("statistics_no_chart_data", "No chart data"),
-            weekdays: Array.from({ length: 7 }, (_, index) => weekdayFormatter.format(new Date(Date.UTC(2026, 0, 4 + index)))),
+            weekdays: Array.from({ length: 7 }, (_, index) => weekdayFormatter.format(new Date(Date.UTC(2026, 0, 5 + index)))),
             delayBuckets: {
                 early: tr("statistics_bucket_early", "Early"),
                 "0_5": tr("statistics_bucket_0_5", "0–5"),
@@ -574,31 +883,74 @@ import {
 
     async function renderCharts(): Promise<void> {
         if (state.mode !== "performance" || !state.overview) return;
-        const containers = {
-            punctuality: $("statisticsPunctualityTrendChart"),
-            percentiles: $("statisticsDelayPercentileChart"),
-            distribution: $("statisticsDelayDistributionChart"),
-            severeDelay: $("statisticsSevereDelayChart"),
-            calendar: $("statisticsPunctualityCalendarChart")
-        };
-        if (Object.values(containers).some((item) => !item)) return;
-        containers.punctuality?.setAttribute("aria-label", tr("statistics_punctuality_trend", "Arrival punctuality trend"));
-        containers.percentiles?.setAttribute("aria-label", tr("statistics_delay_percentiles", "Arrival delay percentiles"));
-        containers.distribution?.setAttribute("aria-label", tr("statistics_delay_buckets", "Arrival delay distribution"));
-        containers.severeDelay?.setAttribute("aria-label", tr("statistics_severe_delay_share", "Severe arrival delay share"));
-        containers.calendar?.setAttribute("aria-label", tr("statistics_punctuality_calendar", "Punctuality calendar"));
+        if (state.topic === "quality") return;
         state.charts ??= await import("./statistics-echarts.js");
-        state.charts.renderAnalyticsCharts(containers as Record<keyof typeof containers, HTMLElement>, state.overview, chartLabels());
-        renderAccessibleChartTable("statisticsPunctualityTrendTable", state.overview, [
-            { label: tr("statistics_metric_punctuality_5", "Within 5 min"), value: (metric) => formatAnalyticsPercent(metric.punctuality.within5.percent, locale()) },
-            { label: tr("statistics_metric_punctuality_15", "Within 15 min"), value: (metric) => formatAnalyticsPercent(metric.punctuality.within15.percent, locale()) },
-            { label: tr("statistics_arrival_sample", "Arrival sample"), value: (metric) => formatAnalyticsNumber(metric.arrivalSample, locale()) }
-        ]);
-        renderAccessibleChartTable("statisticsDelayPercentileTable", state.overview, [
-            { label: tr("statistics_metric_p50", "P50"), value: (metric) => formatAnalyticsNumber(metric.delayMinutes.p50, locale(), 1) },
-            { label: tr("statistics_metric_p90", "P90"), value: (metric) => formatAnalyticsNumber(metric.delayMinutes.p90, locale(), 1) },
-            { label: tr("statistics_metric_p95", "P95"), value: (metric) => formatAnalyticsNumber(metric.delayMinutes.p95, locale(), 1) }
-        ]);
+        if (state.topic === "overview") {
+            const containers = {
+                punctuality: $("statisticsPunctualityTrendChart"),
+                percentiles: $("statisticsDelayPercentileChart"),
+                distribution: $("statisticsDelayDistributionChart"),
+                severeDelay: $("statisticsSevereDelayChart"),
+                calendar: $("statisticsPunctualityCalendarChart")
+            };
+            if (!Object.values(containers).some((item) => !item)) {
+                containers.punctuality?.setAttribute("aria-label", tr("statistics_punctuality_trend", "Arrival punctuality trend"));
+                containers.percentiles?.setAttribute("aria-label", tr("statistics_delay_percentiles", "Arrival delay percentiles"));
+                containers.distribution?.setAttribute("aria-label", tr("statistics_delay_buckets", "Arrival delay distribution"));
+                containers.severeDelay?.setAttribute("aria-label", tr("statistics_severe_delay_share", "Severe arrival delay share"));
+                containers.calendar?.setAttribute("aria-label", tr("statistics_punctuality_calendar", "Punctuality calendar"));
+                state.charts.renderAnalyticsCharts(containers as Record<keyof typeof containers, HTMLElement>, state.overview, chartLabels());
+                renderAccessibleChartTable("statisticsPunctualityTrendTable", state.overview, [
+                    { label: tr("statistics_metric_punctuality_5", "Within 5 min"), value: (metric) => formatAnalyticsPercent(metric.punctuality.within5.percent, locale()) },
+                    { label: tr("statistics_metric_punctuality_15", "Within 15 min"), value: (metric) => formatAnalyticsPercent(metric.punctuality.within15.percent, locale()) },
+                    { label: tr("statistics_arrival_sample", "Arrival sample"), value: (metric) => formatAnalyticsNumber(metric.arrivalSample, locale()) }
+                ]);
+                renderAccessibleChartTable("statisticsDelayPercentileTable", state.overview, [
+                    { label: tr("statistics_metric_p50", "P50"), value: (metric) => formatAnalyticsNumber(metric.delayMinutes.p50, locale(), 1) },
+                    { label: tr("statistics_metric_p90", "P90"), value: (metric) => formatAnalyticsNumber(metric.delayMinutes.p90, locale(), 1) },
+                    { label: tr("statistics_metric_p95", "P95"), value: (metric) => formatAnalyticsNumber(metric.delayMinutes.p95, locale(), 1) }
+                ]);
+            }
+        }
+        const exploreLabels: import("./statistics-echarts.js").AnalyticsExploreChartLabels = {
+            services: tr("statistics_observed_services", "Observed services"),
+            punctuality: tr("statistics_metric_punctuality_5", "Within 5 min"),
+            cumulative: tr("statistics_cumulative_share", "Cumulative share"),
+            delayMinutes: tr("statistics_delay_minutes", "Delay minutes"),
+            recovered: tr("statistics_recovered", "Recovered"),
+            gained: tr("statistics_gained", "Gained"),
+            arrivals: tr("statistics_roles_arrival", "Arrivals"),
+            departures: tr("statistics_roles_departure", "Departures"),
+            transits: tr("statistics_roles_transit", "Transit"),
+            noData: tr("statistics_no_chart_data", "No chart data"),
+            weekdays: chartLabels().weekdays
+        };
+        if (!state.explore) {
+            const fallbackContainers: Pick<import("./statistics-echarts.js").AnalyticsExploreChartContainers, "operatorMix" | "categoryMix" | "stationScatter"> = {};
+            if (state.topic === "mix") Object.assign(fallbackContainers, { operatorMix: $("statisticsOperatorMixChart"), categoryMix: $("statisticsCategoryMixChart") });
+            if (state.topic === "stations") Object.assign(fallbackContainers, { stationScatter: $("statisticsStationScatterChart") });
+            const operatorRanking = state.rankings.operator;
+            state.charts.renderRankingFallbackCharts(fallbackContainers, {
+                operator: operatorRanking ? { ...operatorRanking, items: operatorRanking.items.map((item) => ({ ...item, label: operatorLabel(item.label) })) } : undefined,
+                category: state.rankings.category,
+                station: state.rankings.station
+            }, state.overview.current.observedServices, exploreLabels);
+            return;
+        }
+        const exploreContainers: import("./statistics-echarts.js").AnalyticsExploreChartContainers = {};
+        if (state.topic === "mix") Object.assign(exploreContainers, { operatorMix: $("statisticsOperatorMixChart"), categoryMix: $("statisticsCategoryMixChart"), operatorCategory: $("statisticsOperatorCategoryChart") });
+        if (state.topic === "rhythm") Object.assign(exploreContainers, { networkRhythm: $("statisticsNetworkRhythmChart"), categoryRhythm: $("statisticsCategoryRhythmChart") });
+        if (state.topic === "stations") Object.assign(exploreContainers, { stationScatter: $("statisticsStationScatterChart"), stationRhythm: $("statisticsStationRhythmChart") });
+        if (state.topic === "routes") Object.assign(exploreContainers, { recovery: $("statisticsRecoveryChart"), disruption: $("statisticsDisruptionChart") });
+        if (state.topic === "services") Object.assign(exploreContainers, { lifecycle: $("statisticsServiceLifecycleChart") });
+        const chartExplore: AnalyticsExplore = {
+            ...state.explore,
+            composition: {
+                ...state.explore.composition,
+                operators: state.explore.composition.operators.map((item) => ({ ...item, label: operatorLabel(item.label) }))
+            }
+        };
+        state.charts.renderExploreCharts(exploreContainers, chartExplore, exploreLabels);
     }
 
     function renderAnalytics(): void {
@@ -608,6 +960,8 @@ import {
         renderMetrics(state.overview);
         renderRanking(state.ranking);
         renderOutliers(state.outliers);
+        renderExplore(state.explore);
+        syncTopicPanels();
         clearStatus();
         void renderCharts();
     }
@@ -620,15 +974,27 @@ import {
         syncFilterControls();
         updateUrl();
         try {
-            const [overviewRaw, rankingRaw, outliersRaw] = await Promise.all([
+            const [overviewRaw, rankingRaw, outliersRaw, operatorRaw, categoryRaw, stationRaw, relationRaw, explore] = await Promise.all([
                 fetchJson("/overview", paramsForOverview()),
                 fetchJson("/rankings", paramsForRanking()),
-                fetchJson("/outliers", paramsForOutliers())
+                fetchJson("/outliers", paramsForOutliers()),
+                fetchJson("/rankings", paramsForDashboardRanking("operator")),
+                fetchJson("/rankings", paramsForDashboardRanking("category")),
+                fetchJson("/rankings", paramsForDashboardRanking("station")),
+                fetchJson("/rankings", paramsForDashboardRanking("relation")),
+                fetchJson("/explore", paramsForExplore()).then(normalizeAnalyticsExplore).catch(() => null)
             ]);
             if (serial !== state.requestSerial) return;
             state.overview = normalizeAnalyticsOverview(overviewRaw);
             state.ranking = normalizeAnalyticsRanking(rankingRaw);
             state.outliers = normalizeAnalyticsOutliers(outliersRaw);
+            state.rankings = {
+                operator: normalizeAnalyticsRanking(operatorRaw),
+                category: normalizeAnalyticsRanking(categoryRaw),
+                station: normalizeAnalyticsRanking(stationRaw),
+                relation: normalizeAnalyticsRanking(relationRaw)
+            };
+            state.explore = explore;
             renderAnalytics();
         } catch (error) {
             if (serial === state.requestSerial) setStatus(analyticsErrorMessage(error), "warning");
@@ -682,11 +1048,17 @@ import {
         $<HTMLSelectElement>("statisticsAnalyticsOperator")?.addEventListener("change", (event) => {
             state.operator = (event.currentTarget as HTMLSelectElement).value;
             if (state.operator) state.category = "";
+            state.station = "";
             void loadAnalytics();
         });
         $<HTMLSelectElement>("statisticsAnalyticsCategory")?.addEventListener("change", (event) => {
             state.category = (event.currentTarget as HTMLSelectElement).value;
             if (state.category) state.operator = "";
+            state.station = "";
+            void loadAnalytics();
+        });
+        $<HTMLSelectElement>("statisticsAnalyticsStation")?.addEventListener("change", (event) => {
+            state.station = (event.currentTarget as HTMLSelectElement).value;
             void loadAnalytics();
         });
         $<HTMLSelectElement>("statisticsAnalyticsDimension")?.addEventListener("change", (event) => {
@@ -713,13 +1085,16 @@ import {
         state.meta = null;
         state.overview = null;
         state.ranking = null;
+        state.rankings = {};
         state.outliers = null;
+        state.explore = null;
         state.loading = false;
         state.requestSerial += 1;
         readUrlState();
         bindEvents();
         syncModeButtons();
         syncFilterControls();
+        syncTopicPanels();
         state.initialized = true;
         if (state.mode === "performance") void ensureAnalyticsLoaded();
     }

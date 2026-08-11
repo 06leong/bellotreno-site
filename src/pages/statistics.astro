@@ -284,7 +284,38 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
             <section id="statisticsAnalyticsMetrics" class="statistics-performance-metrics" aria-label="Historical performance indicators"></section>
 
-            <section class="statistics-performance-grid statistics-performance-grid-wide">
+            <nav id="statisticsAnalyticsTopics" class="statistics-analytics-topics" aria-label="Historical analysis topics" role="tablist">
+                <button type="button" class="active" role="tab" aria-selected="true" data-analytics-topic="overview">
+                    <span class="material-symbols-outlined" aria-hidden="true">monitoring</span>
+                    <span data-i18n="statistics_topic_overview">Overview</span>
+                </button>
+                <button type="button" role="tab" aria-selected="false" data-analytics-topic="mix">
+                    <span class="material-symbols-outlined" aria-hidden="true">donut_large</span>
+                    <span data-i18n="statistics_topic_mix">Service mix</span>
+                </button>
+                <button type="button" role="tab" aria-selected="false" data-analytics-topic="rhythm">
+                    <span class="material-symbols-outlined" aria-hidden="true">date_range</span>
+                    <span data-i18n="statistics_topic_rhythm">Network rhythm</span>
+                </button>
+                <button type="button" role="tab" aria-selected="false" data-analytics-topic="stations">
+                    <span class="material-symbols-outlined" aria-hidden="true">location_on</span>
+                    <span data-i18n="statistics_topic_stations">Stations</span>
+                </button>
+                <button type="button" role="tab" aria-selected="false" data-analytics-topic="routes">
+                    <span class="material-symbols-outlined" aria-hidden="true">route</span>
+                    <span data-i18n="statistics_topic_routes">Routes</span>
+                </button>
+                <button type="button" role="tab" aria-selected="false" data-analytics-topic="services">
+                    <span class="material-symbols-outlined" aria-hidden="true">train</span>
+                    <span data-i18n="statistics_topic_services">Train services</span>
+                </button>
+                <button type="button" role="tab" aria-selected="false" data-analytics-topic="quality">
+                    <span class="material-symbols-outlined" aria-hidden="true">fact_check</span>
+                    <span data-i18n="statistics_topic_quality">Data quality</span>
+                </button>
+            </nav>
+
+            <section class="statistics-performance-grid statistics-performance-grid-wide" data-analytics-topic-panel="overview">
                 <article class="statistics-panel statistics-analytics-panel">
                     <div class="statistics-panel-head">
                         <div>
@@ -310,7 +341,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                 </article>
             </section>
 
-            <section class="statistics-performance-grid">
+            <section class="statistics-performance-grid" data-analytics-topic-panel="overview">
                 <article class="statistics-panel statistics-analytics-panel">
                     <div class="statistics-panel-head">
                         <div>
@@ -340,7 +371,174 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                 </article>
             </section>
 
-            <section class="statistics-panel statistics-analytics-table-panel">
+            <section class="statistics-dashboard-topic" data-analytics-topic-panel="mix" hidden>
+                <div class="statistics-performance-grid statistics-performance-grid-wide">
+                    <article class="statistics-panel statistics-analytics-panel">
+                        <div class="statistics-panel-head">
+                            <div>
+                                <span class="statistics-panel-kicker" data-i18n="statistics_observed_service_share">Observed service share</span>
+                                <h2 data-i18n="statistics_operator_mix">Operator mix</h2>
+                            </div>
+                            <span id="statisticsActiveOperators" class="statistics-chart-unit">--</span>
+                        </div>
+                        <div id="statisticsOperatorMixChart" class="statistics-echart" role="img" aria-label="Observed service share by operator"></div>
+                        <div id="statisticsOperatorMixTable" class="statistics-chart-data-table"></div>
+                    </article>
+                    <article class="statistics-panel statistics-analytics-panel">
+                        <div class="statistics-panel-head">
+                            <div>
+                                <span class="statistics-panel-kicker" data-i18n="statistics_observed_service_share">Observed service share</span>
+                                <h2 data-i18n="statistics_category_mix">Category mix</h2>
+                            </div>
+                        </div>
+                        <div id="statisticsCategoryMixChart" class="statistics-echart" role="img" aria-label="Observed service share by category"></div>
+                        <div id="statisticsCategoryMixTable" class="statistics-chart-data-table"></div>
+                    </article>
+                </div>
+                <article class="statistics-panel statistics-analytics-panel statistics-dashboard-full">
+                    <div class="statistics-panel-head">
+                        <div>
+                            <span class="statistics-panel-kicker" data-i18n="statistics_cross_dimension">Cross-dimension composition</span>
+                            <h2 data-i18n="statistics_operator_category_matrix">Operator × category matrix</h2>
+                        </div>
+                    </div>
+                    <p class="statistics-method-note" data-i18n="statistics_mix_scope_note">Shares describe distinct observable services, not passengers, seats or market share.</p>
+                    <div id="statisticsOperatorCategoryChart" class="statistics-echart statistics-echart-matrix" role="img" aria-label="Operator and category matrix"></div>
+                    <div id="statisticsOperatorCategoryTable" class="statistics-chart-data-table"></div>
+                </article>
+            </section>
+
+            <section class="statistics-dashboard-topic" data-analytics-topic-panel="rhythm" hidden>
+                <div class="statistics-performance-grid statistics-performance-grid-wide">
+                    <article class="statistics-panel statistics-analytics-panel statistics-dashboard-wide-panel">
+                        <div class="statistics-panel-head">
+                            <div>
+                                <span class="statistics-panel-kicker" data-i18n="statistics_scheduled_service_pattern">Scheduled service pattern</span>
+                                <h2 data-i18n="statistics_weekday_hour_heatmap">Weekday × departure hour</h2>
+                            </div>
+                        </div>
+                        <div id="statisticsNetworkRhythmChart" class="statistics-echart statistics-echart-heatmap" role="img" aria-label="Observed departures by weekday and hour"></div>
+                        <div id="statisticsNetworkRhythmTable" class="statistics-chart-data-table"></div>
+                    </article>
+                    <article class="statistics-panel statistics-analytics-panel">
+                        <div class="statistics-panel-head">
+                            <div>
+                                <span class="statistics-panel-kicker" data-i18n="statistics_category_profiles">Category profiles</span>
+                                <h2 data-i18n="statistics_hourly_category_profile">Hourly category profile</h2>
+                            </div>
+                        </div>
+                        <div id="statisticsCategoryRhythmChart" class="statistics-echart statistics-echart-heatmap" role="img" aria-label="Hourly service profile by category"></div>
+                        <div id="statisticsCategoryRhythmTable" class="statistics-chart-data-table"></div>
+                    </article>
+                </div>
+            </section>
+
+            <section class="statistics-dashboard-topic" data-analytics-topic-panel="stations" hidden>
+                <div class="statistics-network-layout">
+                    <article class="statistics-panel statistics-analytics-panel statistics-station-ranking-panel">
+                        <div class="statistics-panel-head">
+                            <div>
+                                <span class="statistics-panel-kicker" data-i18n="statistics_station_activity">Distinct observed services</span>
+                                <h2 data-i18n="statistics_busiest_stations">Busiest observed stations</h2>
+                            </div>
+                        </div>
+                        <p class="statistics-method-note" data-i18n="statistics_station_volume_note">Repeated 30-minute observations are deduplicated; this is not passenger footfall.</p>
+                        <div id="statisticsStationLeaderboard" class="statistics-leaderboard" aria-live="polite"></div>
+                    </article>
+                    <article class="statistics-panel statistics-analytics-panel">
+                        <div class="statistics-panel-head">
+                            <div>
+                                <span class="statistics-panel-kicker" data-i18n="statistics_scale_quality">Scale and quality</span>
+                                <h2 data-i18n="statistics_station_scale_punctuality">Station scale vs punctuality</h2>
+                            </div>
+                        </div>
+                        <div id="statisticsStationScatterChart" class="statistics-echart" role="img" aria-label="Station scale versus punctuality"></div>
+                        <div id="statisticsStationScatterTable" class="statistics-chart-data-table"></div>
+                    </article>
+                </div>
+                <article class="statistics-panel statistics-analytics-panel statistics-dashboard-full">
+                    <div class="statistics-panel-head statistics-query-head">
+                        <div>
+                            <span class="statistics-panel-kicker" data-i18n="statistics_station_activity_pattern">Station activity pattern</span>
+                            <h2 data-i18n="statistics_station_rhythm">Station rhythm</h2>
+                        </div>
+                        <label class="statistics-performance-field statistics-inline-select">
+                            <span data-i18n="statistics_station">Station</span>
+                            <select id="statisticsAnalyticsStation" class="select select-bordered"></select>
+                        </label>
+                    </div>
+                    <p class="statistics-method-note" data-i18n="statistics_station_rhythm_scope">Station rhythm includes all observable services at the selected station so the time pattern remains comparable.</p>
+                    <div id="statisticsStationRhythmChart" class="statistics-echart statistics-echart-heatmap" role="img" aria-label="Selected station weekday and hour rhythm"></div>
+                    <div id="statisticsStationRhythmTable" class="statistics-chart-data-table"></div>
+                </article>
+            </section>
+
+            <section class="statistics-dashboard-topic" data-analytics-topic-panel="routes" hidden>
+                <div class="statistics-performance-grid statistics-performance-grid-wide">
+                    <article class="statistics-panel statistics-analytics-panel">
+                        <div class="statistics-panel-head">
+                            <div>
+                                <span class="statistics-panel-kicker" data-i18n="statistics_relation_activity">Distinct observed services</span>
+                                <h2 data-i18n="statistics_most_observed_relations">Most observed routes</h2>
+                            </div>
+                        </div>
+                        <div id="statisticsRelationLeaderboard" class="statistics-leaderboard" aria-live="polite"></div>
+                    </article>
+                    <article class="statistics-panel statistics-analytics-panel">
+                        <div class="statistics-panel-head">
+                            <div>
+                                <span class="statistics-panel-kicker" data-i18n="statistics_delay_change">First-to-final eligible stop</span>
+                                <h2 data-i18n="statistics_delay_recovery">Delay gained or recovered</h2>
+                            </div>
+                        </div>
+                        <div id="statisticsRecoveryChart" class="statistics-echart" role="img" aria-label="Average delay gained or recovered by route"></div>
+                        <p class="statistics-method-note" data-i18n="statistics_recovery_method">Negative values mean observed delay was recovered; positive values mean delay increased.</p>
+                    </article>
+                </div>
+                <article class="statistics-panel statistics-analytics-panel statistics-dashboard-full">
+                    <div class="statistics-panel-head">
+                        <div>
+                            <span class="statistics-panel-kicker" data-i18n="statistics_disruption_concentration">Long-tail disruption</span>
+                            <h2 data-i18n="statistics_disruption_pareto">Concentration of arrivals over 60 minutes late</h2>
+                        </div>
+                    </div>
+                    <div id="statisticsDisruptionChart" class="statistics-echart" role="img" aria-label="Pareto chart of severe delay concentration by route"></div>
+                    <div id="statisticsDisruptionTable" class="statistics-chart-data-table"></div>
+                </article>
+            </section>
+
+            <section class="statistics-dashboard-topic" data-analytics-topic-panel="services" hidden>
+                <div class="statistics-service-insight-grid">
+                    <article class="statistics-panel statistics-service-feature-card">
+                        <span class="statistics-panel-kicker" data-i18n="statistics_cross_midnight">Cross-midnight services</span>
+                        <strong id="statisticsCrossMidnightRate">--</strong>
+                        <span id="statisticsCrossMidnightSample">--</span>
+                        <p data-i18n="statistics_cross_midnight_note">A service is cross-midnight when its scheduled arrival date follows its scheduled departure date.</p>
+                    </article>
+                    <article class="statistics-panel statistics-analytics-panel statistics-service-spotlight-panel">
+                        <div class="statistics-panel-head">
+                            <div>
+                                <span class="statistics-panel-kicker" data-i18n="statistics_service_spotlight">Train service spotlight</span>
+                                <h2 id="statisticsSpotlightTitle">--</h2>
+                            </div>
+                            <span id="statisticsSpotlightObservations" class="statistics-chart-unit">--</span>
+                        </div>
+                        <div id="statisticsServiceLifecycleChart" class="statistics-echart statistics-echart-compact" role="img" aria-label="Delay along the selected train service"></div>
+                        <div id="statisticsSpotlightFacts" class="statistics-spotlight-facts"></div>
+                    </article>
+                </div>
+                <article class="statistics-panel statistics-analytics-table-panel statistics-dashboard-full">
+                    <div class="statistics-panel-head">
+                        <div>
+                            <span class="statistics-panel-kicker" data-i18n="statistics_scheduled_duration">Scheduled duration</span>
+                            <h2 data-i18n="statistics_longest_journeys">Longest observed journeys</h2>
+                        </div>
+                    </div>
+                    <div id="statisticsLongestJourneys" class="statistics-journey-list"></div>
+                </article>
+            </section>
+
+            <section class="statistics-panel statistics-analytics-table-panel" data-analytics-topic-panel="routes" hidden>
                 <div class="statistics-panel-head statistics-query-head">
                     <div>
                         <span class="statistics-panel-kicker" data-i18n="statistics_comparable_dimensions">Comparable dimensions</span>
@@ -376,7 +574,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                 </div>
             </section>
 
-            <section class="statistics-panel statistics-analytics-table-panel">
+            <section class="statistics-panel statistics-analytics-table-panel" data-analytics-topic-panel="services" hidden>
                 <div class="statistics-panel-head statistics-query-head">
                     <div>
                         <span class="statistics-panel-kicker" data-i18n="statistics_observed_outliers">Observed outliers</span>
@@ -392,7 +590,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                 </div>
             </section>
 
-            <details class="statistics-methodology">
+            <details class="statistics-methodology" data-analytics-topic-panel="quality" hidden>
                 <summary>
                     <span class="material-symbols-outlined" aria-hidden="true">menu_book</span>
                     <span data-i18n="statistics_methodology_title">Definitions and data quality</span>

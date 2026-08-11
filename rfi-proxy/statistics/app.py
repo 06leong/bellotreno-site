@@ -2280,7 +2280,8 @@ def ranking_endpoint() -> Response:
 
 def analytics_error_response(exc: Exception) -> tuple[Response, int]:
     if isinstance(exc, AnalyticsUnavailable):
-        return jsonify({"available": False, "reason": "analytics_not_built"}), 503
+        reason = str(exc) or "analytics_not_built"
+        return jsonify({"available": False, "reason": reason}), 503
     if isinstance(exc, ValueError):
         return jsonify({"available": False, "reason": "invalid_request", "error": str(exc)}), 400
     app.logger.exception("analytics request failed: %s", exc)
@@ -2342,6 +2343,22 @@ def analytics_outliers_endpoint() -> Response:
                 query=request.args.get("q", "").strip(),
                 limit=as_int(request.args.get("limit"), 25),
                 offset=as_int(request.args.get("offset"), 0),
+            )
+        )
+    except (AnalyticsUnavailable, sqlite3.Error, ValueError, json.JSONDecodeError) as exc:
+        return analytics_error_response(exc)
+
+
+@app.get("/v1/analytics/explore")
+def analytics_explore_endpoint() -> Response:
+    try:
+        return jsonify(
+            analytics_read_model.explore(
+                as_of=request.args.get("asOf") or request.args.get("date"),
+                window=as_int(request.args.get("window"), 28),
+                operator=request.args.get("operator", "").strip(),
+                category=request.args.get("category", "").strip().upper(),
+                station=request.args.get("station", "").strip(),
             )
         )
     except (AnalyticsUnavailable, sqlite3.Error, ValueError, json.JSONDecodeError) as exc:

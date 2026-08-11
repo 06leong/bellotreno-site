@@ -335,6 +335,16 @@ publishes `statistics-analytics/analytics.db` through an atomic rename. The
 always-on statistics service mounts that directory read-only and never loads
 DuckDB. If a build fails, the previous `analytics.db` remains available.
 
+Analytics schema v2 also materializes operator/category composition,
+weekday/hour rhythm, distinct-service station activity, route delay recovery,
+cross-midnight and journey-duration metrics, severe-delay concentration, and
+stop sequences for exact outlier service identities. The always-on API exposes
+these latest-date explorer marts through `GET /v1/analytics/explore`; the
+existing `meta`, `overview`, `rankings`, `outliers`, and CSV contracts remain
+available. Explorer requests may select one operator or one category and one
+station rhythm, but never combine operator and category filters. A missing v2
+model returns an unavailable reason rather than synthesized zero values.
+
 The read model is disposable and must not be treated as another archive or
 backup. The immutable Parquet partitions and completed manifests remain the
 source of truth. Rebuild analytics after each successful Parquet run; a failed
