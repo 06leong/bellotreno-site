@@ -3914,14 +3914,11 @@ button.swiss-section-title {
 }
 
 .statistics-date-field select {
-    display: block;
     min-width: 0;
     max-width: 100%;
     padding-inline: 42px 38px;
-    overflow: hidden;
     font-weight: 650;
     text-overflow: ellipsis;
-    white-space: nowrap;
 }
 
 .statistics-latest-complete {
