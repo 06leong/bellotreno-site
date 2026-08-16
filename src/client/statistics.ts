@@ -132,12 +132,6 @@ import {
         y?: number;
     }
 
-    interface DonutSegment {
-        color?: string;
-        label: string;
-        value: number;
-    }
-
     interface SummaryCounts {
         arrivalDelayed: number | null;
         arrivalEarly: number | null;
@@ -205,6 +199,8 @@ import {
         EXP: "#35556b",
         IR: "#69737f"
     };
+    type StatisticsChartModule = typeof import("./statistics-echarts.js");
+    let chartModulePromise: Promise<StatisticsChartModule> | null = null;
 
     function tr(key: string, fallback?: string): string {
         const dict = window.translations;
@@ -849,10 +845,6 @@ import {
         ]);
     }
 
-    function emptyChart(message = tr("statistics_no_chart_data", "No chart data")): string {
-        return `<div class="statistics-empty-chart">${esc(message)}</div>`;
-    }
-
     function emptyChartElement(message = tr("statistics_no_chart_data", "No chart data")): HTMLDivElement {
         const element = document.createElement("div");
         element.className = "statistics-empty-chart";
@@ -878,217 +870,6 @@ import {
         return String(raw);
     }
 
-    function renderLineChart(points: unknown): string {
-        const data = asArray(points)
-            .map((point) => ({ point, value: pointValue(point) }))
-            .filter((item): item is { point: JsonRecord; value: number } => item.value !== null);
-        if (!data.length) return emptyChart();
-        const values = data.map((item) => item.value);
-        const max = Math.max(...values, 1);
-        const width = 680;
-        const height = 260;
-        const padLeft = 52;
-        const padRight = 26;
-        const padTop = 24;
-        const padBottom = 34;
-        const plotWidth = width - padLeft - padRight;
-        const plotHeight = height - padTop - padBottom;
-        const step = data.length > 1 ? plotWidth / (data.length - 1) : 0;
-        const coords = data.map((item, index): [number, number] => {
-            const x = padLeft + step * index;
-            const y = height - padBottom - (item.value / max) * plotHeight;
-            return [x, y];
-        });
-        const line = coords.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
-        const area = `${padLeft},${height - padBottom} ${line} ${width - padRight},${height - padBottom}`;
-        const xStep = Math.max(1, Math.ceil(data.length / 8));
-        const xTicks = data.filter((_, index) => index === 0 || index === data.length - 1 || index % xStep === 0);
-        const yTicks = [0, 0.25, 0.5, 0.75, 1].map((ratio) => {
-            const value = Math.round(max * ratio);
-            const y = height - padBottom - ratio * plotHeight;
-            return { value, y };
-        }).filter((tick, index, list) => list.findIndex((item) => item.value === tick.value) === index);
-        return `
-            <div class="statistics-line-chart-wrap">
-                <svg class="statistics-line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(tr("statistics_chart_running", "Trains in circulation"))}">
-                    ${yTicks.map((tick) => `
-                        <line class="statistics-chart-grid" x1="${padLeft}" y1="${tick.y.toFixed(1)}" x2="${width - padRight}" y2="${tick.y.toFixed(1)}" />
-                        <text x="${padLeft - 10}" y="${(tick.y + 4).toFixed(1)}" text-anchor="end">${esc(formatNumber(tick.value))}</text>
-                    `).join("")}
-                    <line x1="${padLeft}" y1="${height - padBottom}" x2="${width - padRight}" y2="${height - padBottom}" />
-                    <line x1="${padLeft}" y1="${padTop}" x2="${padLeft}" y2="${height - padBottom}" />
-                    <polygon points="${area}" />
-                    <polyline points="${line}" />
-                    ${coords.map(([x, y], index) => {
-                        const label = pointLabel(data[index].point);
-                        const value = data[index].value;
-                        return `
-                            <circle class="statistics-chart-point" tabindex="0" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5"
-                                data-label="${esc(label)}" data-value="${esc(formatNumber(value))}" data-x="${x.toFixed(1)}" data-y="${y.toFixed(1)}">
-                                <title>${esc(label)}: ${esc(formatNumber(value))}</title>
-                            </circle>
-                        `;
-                    }).join("")}
-                    ${xTicks.map((item, index) => {
-                        const dataIndex = data.indexOf(item);
-                        const x = padLeft + step * dataIndex;
-                        const anchor = index === 0 ? "start" : index === xTicks.length - 1 ? "end" : "middle";
-                        return `<text x="${x.toFixed(1)}" y="${height - 8}" text-anchor="${anchor}">${esc(pointLabel(item.point))}</text>`;
-                    }).join("")}
-                </svg>
-                <div class="statistics-chart-tooltip" hidden></div>
-            </div>
-        `;
-    }
-
-    function bindRunningChartEvents(): void {
-        const chart = $("statisticsRunningChart");
-        if (!chart || chart.dataset.bound === "1") return;
-        chart.dataset.bound = "1";
-        const showPoint = (point: HTMLElement) => {
-            const tooltip = chart.querySelector<HTMLElement>(".statistics-chart-tooltip");
-            if (!tooltip) return;
-            const label = point.dataset.label || "";
-            const value = point.dataset.value || "";
-            const valueEl = document.createElement("strong");
-            valueEl.textContent = value;
-            const labelEl = document.createElement("span");
-            labelEl.textContent = label;
-            replaceChildrenSafe(tooltip, [valueEl, labelEl]);
-            tooltip.style.left = `clamp(48px, ${(asNumber(point.dataset.x, 0) / 680) * 100}%, calc(100% - 48px))`;
-            tooltip.style.top = `${(asNumber(point.dataset.y, 0) / 260) * 100}%`;
-            tooltip.hidden = false;
-        };
-        chart.addEventListener("click", (event) => {
-            const point = event.target instanceof Element
-                ? event.target.closest<HTMLElement>(".statistics-chart-point")
-                : null;
-            if (point) showPoint(point);
-        });
-        chart.addEventListener("keydown", (event: KeyboardEvent) => {
-            if (event.key !== "Enter" && event.key !== " ") return;
-            const point = event.target instanceof Element
-                ? event.target.closest<HTMLElement>(".statistics-chart-point")
-                : null;
-            if (!point) return;
-            event.preventDefault();
-            showPoint(point);
-        });
-    }
-
-    function renderDonut(segments: DonutSegment[], title: string): string {
-        const filtered = segments.filter((segment) => asNumber(segment.value) > 0);
-        if (!filtered.length) return emptyChart();
-        const total = filtered.reduce((sum, item) => sum + asNumber(item.value), 0);
-        let cursor = 0;
-        const gradient = filtered.map((item, index) => {
-            const start = cursor;
-            const end = cursor + (asNumber(item.value) / total) * 100;
-            cursor = end;
-            return `${item.color || palette[index % palette.length]} ${start.toFixed(2)}% ${end.toFixed(2)}%`;
-        }).join(", ");
-        return `
-            <div class="statistics-donut-wrap">
-                <div class="statistics-donut" style="background: conic-gradient(${gradient})">
-                    <div><strong>${esc(formatNumber(total))}</strong><span>${esc(title)}</span></div>
-                </div>
-                <div class="statistics-legend">
-                    ${filtered.map((item, index) => `
-                        <div><span style="background:${esc(item.color || palette[index % palette.length])}"></span><b>${esc(item.label)}</b><em>${esc(formatNumber(item.value))} - ${esc(pct((asNumber(item.value) / total) * 100))}</em></div>
-                    `).join("")}
-                </div>
-            </div>
-        `;
-    }
-
-    function renderInteractiveDonut(segments: DonutSegment[], title: string): string {
-        const filtered = segments.filter((segment) => asNumber(segment.value) > 0);
-        if (!filtered.length) return emptyChart();
-        const total = filtered.reduce((sum, item) => sum + asNumber(item.value), 0);
-        const radius = 72;
-        const circumference = 2 * Math.PI * radius;
-        let strokeOffset = 0;
-        return `
-            <div class="statistics-donut-wrap" data-donut-total="${esc(formatNumber(total))}">
-                <div class="statistics-donut-svg-wrap">
-                    <svg class="statistics-donut-svg" viewBox="0 0 180 180" role="img" aria-label="${esc(title)}">
-                        <circle class="statistics-donut-track" cx="90" cy="90" r="${radius}" />
-                        ${filtered.map((item, index) => {
-                            const value = asNumber(item.value);
-                            const percent = (value / total) * 100;
-                            const length = (value / total) * circumference;
-                            const dash = `${Math.max(0.01, length).toFixed(3)} ${Math.max(0, circumference - length).toFixed(3)}`;
-                            const offset = strokeOffset;
-                            strokeOffset += length;
-                            const color = item.color || palette[index % palette.length];
-                            return `
-                                <circle class="statistics-donut-segment" tabindex="0" role="button" cx="90" cy="90" r="${radius}"
-                                    stroke="${esc(color)}" stroke-dasharray="${dash}" stroke-dashoffset="${(-offset).toFixed(3)}"
-                                    data-label="${esc(item.label)}" data-value="${esc(formatNumber(value))}" data-percent="${esc(pct(percent))}"
-                                    transform="rotate(-90 90 90)">
-                                    <title>${esc(item.label)}: ${esc(formatNumber(value))} - ${esc(pct(percent))}</title>
-                                </circle>
-                            `;
-                        }).join("")}
-                    </svg>
-                    <div class="statistics-donut-center"><strong>${esc(formatNumber(total))}</strong><span>${esc(title)}</span></div>
-                </div>
-                <div class="statistics-legend">
-                    ${filtered.map((item, index) => `
-                        <button type="button" class="statistics-legend-row"
-                            data-label="${esc(item.label)}" data-value="${esc(formatNumber(item.value))}" data-percent="${esc(pct((asNumber(item.value) / total) * 100))}">
-                            <span style="background:${esc(item.color || palette[index % palette.length])}"></span>
-                            <b>${esc(item.label)}</b>
-                            <em>${esc(formatNumber(item.value))} - ${esc(pct((asNumber(item.value) / total) * 100))}</em>
-                        </button>
-                    `).join("")}
-                </div>
-                <div class="statistics-donut-selected" hidden></div>
-            </div>
-        `;
-    }
-
-    function bindDonutChartEvents(): void {
-        document.querySelectorAll<HTMLElement>(".statistics-chart-box").forEach((chart) => {
-            if (chart.dataset.donutBound === "1") return;
-            chart.dataset.donutBound = "1";
-            const showSegment = (target: HTMLElement) => {
-                const wrap = target.closest(".statistics-donut-wrap");
-                const selected = wrap?.querySelector<HTMLElement>(".statistics-donut-selected");
-                if (!wrap || !selected) return;
-                const label = target.dataset.label || "";
-                const value = target.dataset.value || "";
-                const percent = target.dataset.percent || "";
-                selected.hidden = false;
-                const labelEl = document.createElement("b");
-                labelEl.textContent = label;
-                const valueEl = document.createElement("strong");
-                valueEl.textContent = value;
-                const percentEl = document.createElement("span");
-                percentEl.textContent = percent;
-                replaceChildrenSafe(selected, [labelEl, valueEl, percentEl]);
-                wrap.querySelectorAll<HTMLElement>(".statistics-donut-segment, .statistics-legend-row").forEach((item) => {
-                    item.classList.toggle("active", item.dataset.label === label);
-                });
-            };
-            chart.addEventListener("click", (event) => {
-                const target = event.target instanceof Element
-                    ? event.target.closest<HTMLElement>(".statistics-donut-segment, .statistics-legend-row")
-                    : null;
-                if (target) showSegment(target);
-            });
-            chart.addEventListener("keydown", (event: KeyboardEvent) => {
-                if (event.key !== "Enter" && event.key !== " ") return;
-                const target = event.target instanceof Element
-                    ? event.target.closest<HTMLElement>(".statistics-donut-segment, .statistics-legend-row")
-                    : null;
-                if (!target) return;
-                event.preventDefault();
-                showSegment(target);
-            });
-        });
-    }
-
     function categoryChartData(categories: unknown): Array<{ label: string; value: number }> {
         const buckets = new Map<string, number>();
         asArray<ChartDatum>(categories).forEach((item) => {
@@ -1106,78 +887,73 @@ import {
         return data;
     }
 
-    function renderCategoryChart(element: HTMLElement, categories: unknown): void {
-        const data = categoryChartData(categories);
-        if (!data.length) {
-            replaceChildrenSafe(element, [emptyChartElement()]);
-            return;
-        }
-        const max = Math.max(...data.map((item) => item.value), 1);
-        const wrap = document.createElement("div");
-        wrap.className = "statistics-bars";
-        data.forEach((item) => {
-            const row = document.createElement("div");
-            row.className = "statistics-bar-row";
-
-            const label = document.createElement("span");
-            label.appendChild(categoryBadgeElement(item.label));
-
-            const bar = document.createElement("div");
-            const fill = document.createElement("i");
-            fill.style.width = `${Math.max(2, (item.value / max) * 100)}%`;
-            fill.style.background = categoryColor(item.label);
-            bar.appendChild(fill);
-
-            const value = document.createElement("strong");
-            value.textContent = formatNumber(item.value);
-
-            row.append(label, bar, value);
-            wrap.appendChild(row);
-        });
-        replaceChildrenSafe(element, [wrap]);
-    }
-
-    function renderCharts(): void {
+    async function renderCharts(): Promise<void> {
         const summary = state.summary || {};
         const values = summaryCounts();
         const series = normalizeTimeseries(state.timeseries);
         const runningPoints = asArray(series.points || series.running || series.trains || series.treniCircolanti);
-        const runningChart = $("statisticsRunningChart");
-        if (runningChart) runningChart.innerHTML = renderLineChart(runningPoints);
-        const regularityChart = $("statisticsRegularityChart");
-        if (regularityChart) {
-            regularityChart.innerHTML = renderInteractiveDonut([
-                { label: tr("statistics_regular", "Regular"), value: values.regular ?? 0, color: "#138a8a" },
-                { label: tr("statistics_status_delayed", "Delayed"), value: values.delayed ?? 0, color: "#2869d8" },
-                { label: tr("statistics_rescheduled", "Rescheduled"), value: values.rescheduled ?? 0, color: "#f59e0b" },
-                { label: tr("statistics_cancelled", "Cancelled"), value: values.cancelled ?? 0, color: "#d71920" }
-            ], tr("statistics_trains", "trains"));
-        }
-        const punctualityChart = $("statisticsPunctualityChart");
-        if (punctualityChart) {
-            punctualityChart.innerHTML = `
-                <div class="statistics-dual-donut">
-                    <div>
-                        <h3>${esc(tr("statistics_departure_punctuality", "Departure punctuality"))}</h3>
-                        ${renderInteractiveDonut([
-                            { label: tr("on_time", "On Time"), value: values.departureOnTime ?? 0, color: "#138a8a" },
-                            { label: tr("statistics_status_delayed", "Delayed"), value: values.departureDelayed ?? 0, color: "#d71920" }
-                        ], tr("departures", "Departures"))}
-                    </div>
-                    <div>
-                        <h3>${esc(tr("statistics_arrival_punctuality", "Arrival punctuality"))}</h3>
-                        ${renderInteractiveDonut([
-                            { label: tr("statistics_early", "Early"), value: values.arrivalEarly ?? 0, color: "#2869d8" },
-                            { label: tr("on_time", "On Time"), value: values.arrivalOnTime ?? 0, color: "#138a8a" },
-                            { label: tr("statistics_status_delayed", "Delayed"), value: values.arrivalDelayed ?? 0, color: "#d71920" }
-                        ], tr("arrivals", "Arrivals"))}
-                    </div>
-                </div>
-            `;
-        }
-        const categoryChart = $("statisticsCategoryChart");
-        if (categoryChart) {
-            renderCategoryChart(categoryChart, summary.categories || summary.categoryCounts || []);
+        const containers = {
+            running: $("statisticsRunningChart"),
+            regularity: $("statisticsRegularityChart"),
+            punctuality: $("statisticsPunctualityChart"),
+            categories: $("statisticsCategoryChart")
+        };
+        if (Object.values(containers).some((container) => !container)) return;
+        containers.running?.setAttribute("aria-label", tr("statistics_chart_running", "Trains in circulation"));
+        containers.regularity?.setAttribute("aria-label", tr("statistics_chart_regular", "Regularity"));
+        containers.punctuality?.setAttribute("aria-label", tr("statistics_chart_punctuality", "Punctuality"));
+        containers.categories?.setAttribute("aria-label", tr("statistics_chart_categories", "Categories"));
+        const running = runningPoints
+            .map((point) => ({ label: pointLabel(point), value: pointValue(point) }))
+            .filter((item): item is { label: string; value: number } => item.value !== null);
+        const categories = categoryChartData(summary.categories || summary.categoryCounts || []);
+        const categoryTotal = categories.reduce((sum, item) => sum + item.value, 0);
+        const departureTotal = (values.departureOnTime ?? 0) + (values.departureDelayed ?? 0);
+        const arrivalTotal = (values.arrivalEarly ?? 0) + (values.arrivalOnTime ?? 0) + (values.arrivalDelayed ?? 0);
+        const share = (value: number | null, total: number) => total > 0 ? ((value ?? 0) / total) * 100 : 0;
+        try {
+            chartModulePromise ??= import("./statistics-echarts.js");
+            const charts = await chartModulePromise;
+            charts.renderLiveCharts(containers as Record<keyof typeof containers, HTMLElement>, {
+                running,
+                regularity: [
+                    { label: tr("statistics_regular", "Regular"), value: values.regular ?? 0, color: "#41d69b" },
+                    { label: tr("statistics_status_delayed", "Delayed"), value: values.delayed ?? 0, color: "#53a8ff" },
+                    { label: tr("statistics_rescheduled", "Rescheduled"), value: values.rescheduled ?? 0, color: "#f7b955" },
+                    { label: tr("statistics_cancelled", "Cancelled"), value: values.cancelled ?? 0, color: "#ff6673" }
+                ],
+                punctuality: [
+                    {
+                        label: tr("departures", "Departures"),
+                        segments: [
+                            { label: tr("on_time", "On Time"), value: values.departureOnTime ?? 0, percent: share(values.departureOnTime, departureTotal), color: "#41d69b" },
+                            { label: tr("statistics_status_delayed", "Delayed"), value: values.departureDelayed ?? 0, percent: share(values.departureDelayed, departureTotal), color: "#ff6673" }
+                        ]
+                    },
+                    {
+                        label: tr("arrivals", "Arrivals"),
+                        segments: [
+                            { label: tr("statistics_early", "Early"), value: values.arrivalEarly ?? 0, percent: share(values.arrivalEarly, arrivalTotal), color: "#53a8ff" },
+                            { label: tr("on_time", "On Time"), value: values.arrivalOnTime ?? 0, percent: share(values.arrivalOnTime, arrivalTotal), color: "#41d69b" },
+                            { label: tr("statistics_status_delayed", "Delayed"), value: values.arrivalDelayed ?? 0, percent: share(values.arrivalDelayed, arrivalTotal), color: "#ff6673" }
+                        ]
+                    }
+                ],
+                categories: categories.map((item) => ({
+                    ...item,
+                    color: categoryColor(item.label),
+                    percent: categoryTotal > 0 ? item.value * 100 / categoryTotal : 0
+                }))
+            }, {
+                running: tr("statistics_chart_running", "Trains in circulation"),
+                trains: tr("statistics_trains", "trains"),
+                noData: tr("statistics_no_chart_data", "No chart data"),
+                share: tr("statistics_observed_service_share", "Observed service share")
+            });
+        } catch {
+            Object.values(containers).forEach((container) => {
+                if (container) replaceChildrenSafe(container, [emptyChartElement()]);
+            });
         }
     }
 
@@ -1189,7 +965,7 @@ import {
         renderCoverageNotice();
         renderComparisonStatus();
         renderMetrics();
-        renderCharts();
+        void renderCharts();
         renderInsights();
         renderTable();
     }
@@ -1585,8 +1361,6 @@ import {
             state.page += 1;
             loadTable();
         });
-        bindRunningChartEvents();
-        bindDonutChartEvents();
         document.querySelectorAll<HTMLElement>(".statistics-analysis-tab").forEach((tab) => {
             tab.addEventListener("click", () => {
                 document.querySelectorAll<HTMLElement>(".statistics-analysis-tab").forEach((item) => {
@@ -1621,5 +1395,9 @@ import {
         renderAll();
     });
 
+    document.addEventListener("astro:before-swap", () => {
+        void chartModulePromise?.then((charts) => charts.disposeLiveCharts());
+        chartModulePromise = null;
+    });
     document.addEventListener("astro:page-load", initStatisticsPage);
 })();
