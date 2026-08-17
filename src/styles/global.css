@@ -5284,11 +5284,27 @@ button.swiss-section-title {
 }
 
 .statistics-leaderboard-heading strong {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
     overflow: hidden;
     color: var(--color-base-content);
     font-size: 0.78rem;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.statistics-leaderboard-marker {
+    flex: 0 0 auto;
+    width: 8px;
+    height: 8px;
+    border: 1px solid color-mix(in oklch, var(--color-base-content) 18%, transparent);
+    border-radius: 999px;
+    box-shadow: 0 0 0 2px color-mix(in oklch, var(--statistics-item-color) 16%, transparent);
+}
+
+.statistics-leaderboard-row[style] .statistics-leaderboard-rank {
+    color: var(--statistics-item-color);
 }
 
 .statistics-leaderboard-heading > span {
@@ -5310,7 +5326,7 @@ button.swiss-section-title {
     display: block;
     height: 100%;
     border-radius: inherit;
-    background: linear-gradient(90deg, var(--statistics-blue), var(--statistics-teal));
+    background: var(--statistics-item-color, linear-gradient(90deg, var(--statistics-blue), var(--statistics-teal)));
 }
 
 .statistics-leaderboard-meta {
@@ -6120,40 +6136,38 @@ button.swiss-section-title {
 
 /* ===== Statistics operations workstation ===== */
 
-body:has(.statistics-page) {
-    background-color: #06101a;
-}
-
-body:has(.statistics-page) .aurora-bg {
-    opacity: 0.16;
-}
-
-body:has(.statistics-page) .navbar > .hidden .btn,
-body:has(.statistics-page) .navbar > .dropdown > .btn {
-    color: #e7f2fa;
-}
-
-body:has(.statistics-page) .navbar > .hidden .btn:hover,
-body:has(.statistics-page) .navbar > .dropdown > .btn:hover {
-    background-color: rgba(87, 154, 207, 0.14);
-    color: #ffffff;
-}
-
-body:has(.statistics-page) .navbar .dropdown-content {
-    border-color: rgba(151, 184, 207, 0.2);
-    background-color: rgba(8, 21, 34, 0.96);
-    color: #e7f2fa;
-}
-
-body:has(.statistics-page) footer {
-    color: #d5e5f0;
-}
-
 .statistics-page {
-    --color-base-100: #07111d;
-    --color-base-200: #0b1927;
-    --color-base-300: #102335;
-    --color-base-content: #edf7ff;
+    --statistics-accent: #c92f38;
+    --statistics-blue: #1769d2;
+    --statistics-teal: #087f83;
+    --statistics-green: #287d5c;
+    --statistics-red: #c92f38;
+    --statistics-orange: #bf7112;
+    --statistics-purple: #6f5bb0;
+    --statistics-surface: color-mix(in oklch, var(--color-base-100) 95%, var(--color-base-content) 5%);
+    --statistics-surface-muted: var(--color-base-200);
+    --statistics-border: color-mix(in oklch, var(--color-base-content) 14%, transparent);
+    --statistics-border-strong: color-mix(in oklch, var(--color-base-content) 24%, transparent);
+    --statistics-card-surface: color-mix(in oklch, var(--color-base-100) 92%, var(--color-base-content) 8%);
+    --statistics-card-border: color-mix(in oklch, var(--color-base-content) 15%, transparent);
+    --statistics-card-radius: 14px;
+    --statistics-card-shadow: 0 18px 42px color-mix(in oklch, var(--color-base-content) 11%, transparent);
+    --statistics-chart-text: #0f172a;
+    --statistics-chart-muted: rgba(15, 23, 42, 0.62);
+    --statistics-chart-grid: rgba(15, 23, 42, 0.14);
+    --statistics-chart-tooltip: #f8fafc;
+    --statistics-control-surface: color-mix(in oklch, var(--color-base-100) 88%, var(--color-base-content) 12%);
+    --statistics-control-disabled: var(--color-base-200);
+    --statistics-active-surface: color-mix(in oklch, var(--color-primary) 24%, var(--color-base-100));
+    --statistics-text-muted: color-mix(in oklch, var(--color-base-content) 64%, transparent);
+    --statistics-text-faint: color-mix(in oklch, var(--color-base-content) 46%, transparent);
+    --statistics-hover-surface: color-mix(in oklch, var(--color-primary) 13%, var(--color-base-100));
+    position: relative;
+    isolation: isolate;
+    color: var(--color-base-content);
+}
+
+[data-theme="dark"] .statistics-page {
     --statistics-accent: #ff6673;
     --statistics-blue: #53a8ff;
     --statistics-teal: #4bd4d7;
@@ -6167,24 +6181,17 @@ body:has(.statistics-page) footer {
     --statistics-border-strong: rgba(151, 184, 207, 0.28);
     --statistics-card-surface: #0a1724;
     --statistics-card-border: rgba(151, 184, 207, 0.17);
-    --statistics-card-radius: 14px;
     --statistics-card-shadow: 0 18px 42px rgba(0, 5, 12, 0.24);
     --statistics-chart-text: #edf7ff;
     --statistics-chart-muted: rgba(200, 218, 232, 0.66);
     --statistics-chart-grid: rgba(149, 180, 202, 0.16);
     --statistics-chart-tooltip: #0d1b29;
-    position: relative;
-    isolation: isolate;
-    color: var(--color-base-content);
-    color-scheme: dark;
-}
-
-.statistics-page::before {
-    position: absolute;
-    z-index: -1;
-    inset: 0 calc(50% - 50vw);
-    background-color: #06101a;
-    content: "";
+    --statistics-control-surface: #081421;
+    --statistics-control-disabled: #0c1727;
+    --statistics-active-surface: #173956;
+    --statistics-text-muted: rgba(212, 229, 241, 0.68);
+    --statistics-text-faint: rgba(205, 222, 234, 0.5);
+    --statistics-hover-surface: #102538;
 }
 
 .statistics-header {
@@ -6200,7 +6207,7 @@ body:has(.statistics-page) footer {
 }
 
 .statistics-header h1 {
-    color: #f5fbff;
+    color: var(--color-base-content);
     font-size: clamp(2.75rem, 5vw, 5.2rem);
     font-weight: 860;
     letter-spacing: -0.065em;
@@ -6208,7 +6215,7 @@ body:has(.statistics-page) footer {
 
 .statistics-header p:not(.statistics-kicker) {
     max-width: 68ch;
-    color: rgba(214, 228, 239, 0.68);
+    color: var(--statistics-text-muted);
 }
 
 .statistics-kicker,
@@ -6221,24 +6228,24 @@ body:has(.statistics-page) footer {
     padding: 3px;
     border-color: var(--statistics-border-strong);
     border-radius: 9px;
-    background: #091522;
+    background: var(--statistics-surface);
     box-shadow: none;
 }
 
 .statistics-mode-button {
     min-height: 42px;
     border-radius: 7px;
-    color: rgba(220, 234, 244, 0.62);
+    color: var(--statistics-text-muted);
 }
 
 .statistics-mode-button:hover {
-    color: #ffffff;
+    color: var(--color-base-content);
 }
 
 .statistics-mode-button.active {
-    background: #17344f;
-    color: #ffffff;
-    box-shadow: inset 0 0 0 1px rgba(115, 183, 238, 0.26);
+    background: var(--statistics-active-surface);
+    color: var(--color-base-content);
+    box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--statistics-blue) 28%, transparent);
 }
 
 .statistics-controls {
@@ -6248,7 +6255,7 @@ body:has(.statistics-page) footer {
 .statistics-date-field,
 .statistics-window-control legend,
 .statistics-performance-field > span {
-    color: rgba(212, 229, 241, 0.68);
+    color: var(--statistics-text-muted);
     font-size: 0.71rem;
     letter-spacing: 0.045em;
     text-transform: uppercase;
@@ -6260,15 +6267,15 @@ body:has(.statistics-page) footer {
 .statistics-performance-field select,
 .statistics-window-options {
     border-color: var(--statistics-border-strong);
-    background-color: #081421;
-    color: #edf7ff;
+    background-color: var(--statistics-control-surface);
+    color: var(--color-base-content);
     box-shadow: none;
 }
 
 .statistics-date-field select:disabled,
 .statistics-filter-grid select:disabled {
-    background-color: #0c1727;
-    color: rgba(211, 225, 239, 0.48);
+    background-color: var(--statistics-control-disabled);
+    color: var(--statistics-text-faint);
 }
 
 .statistics-latest-complete {
@@ -6277,23 +6284,23 @@ body:has(.statistics-page) footer {
 
 .statistics-status,
 .statistics-status-info {
-    border-color: rgba(83, 168, 255, 0.34);
-    background-color: #0c1e30;
-    color: #dcecf7;
+    border-color: color-mix(in oklch, var(--statistics-blue) 34%, transparent);
+    background-color: color-mix(in oklch, var(--statistics-blue) 10%, var(--statistics-surface));
+    color: var(--color-base-content);
 }
 
 .statistics-context-rail,
 .statistics-quality-rail {
-    border-color: rgba(75, 212, 215, 0.28);
+    border-color: color-mix(in oklch, var(--statistics-teal) 28%, transparent);
     border-radius: 10px;
-    background: #0b1a28;
+    background: var(--statistics-surface-muted);
     box-shadow: none;
     backdrop-filter: none;
 }
 
 .statistics-meta-row,
 .statistics-quality-facts {
-    background-color: #091522;
+    background-color: var(--statistics-surface);
 }
 
 .statistics-meta-item,
@@ -6304,7 +6311,7 @@ body:has(.statistics-page) footer {
 .statistics-summary-strip,
 .statistics-performance-metrics {
     border-radius: 12px;
-    background: #081522;
+    background: var(--statistics-surface);
     box-shadow: var(--statistics-card-shadow);
     backdrop-filter: none;
 }
@@ -6313,7 +6320,7 @@ body:has(.statistics-page) footer {
 .statistics-performance-metric {
     position: relative;
     border-color: var(--statistics-border);
-    background: #081522;
+    background: var(--statistics-surface);
 }
 
 .statistics-metric::before,
@@ -6355,17 +6362,17 @@ body:has(.statistics-page) footer {
 .statistics-performance-metric-label,
 .statistics-performance-metric-sample,
 .statistics-performance-metric-change {
-    color: rgba(205, 222, 234, 0.6);
+    color: var(--statistics-text-muted);
 }
 
 .statistics-metric strong,
 .statistics-performance-metric-value {
-    color: #f7fbff;
+    color: var(--color-base-content);
 }
 
 .statistics-comparison-status {
     border-color: var(--statistics-border);
-    background: #0a1724;
+    background: var(--statistics-card-surface);
 }
 
 .statistics-analysis-tabs {
@@ -6373,13 +6380,13 @@ body:has(.statistics-page) footer {
     padding: 4px;
     border: 1px solid var(--statistics-border);
     border-radius: 10px;
-    background: #081522;
+    background: var(--statistics-surface);
 }
 
 .statistics-analysis-tab {
     min-height: 38px;
     border-radius: 7px;
-    color: rgba(213, 228, 239, 0.62);
+    color: var(--statistics-text-muted);
 }
 
 .statistics-analysis-tab::after {
@@ -6388,8 +6395,8 @@ body:has(.statistics-page) footer {
 
 .statistics-analysis-tab:hover,
 .statistics-analysis-tab.active {
-    background: #16324b;
-    color: #ffffff;
+    background: var(--statistics-active-surface);
+    color: var(--color-base-content);
 }
 
 .statistics-primary-grid,
@@ -6425,7 +6432,7 @@ body:has(.statistics-page) footer {
 
 .statistics-panel-head h2,
 .statistics-performance-toolbar h2 {
-    color: #f3f9fd;
+    color: var(--color-base-content);
 }
 
 .statistics-panel-head h2 {
@@ -6446,8 +6453,8 @@ body:has(.statistics-page) footer {
 .statistics-insights-empty {
     border-color: var(--statistics-border);
     border-radius: 8px;
-    background: #07131f;
-    color: rgba(203, 221, 234, 0.48);
+    background: var(--statistics-control-surface);
+    color: var(--statistics-text-faint);
 }
 
 .statistics-insight,
@@ -6457,7 +6464,7 @@ body:has(.statistics-page) footer {
 
 .statistics-insight-index,
 .statistics-insight-severity {
-    background: #183a58;
+    background: var(--statistics-active-surface);
     color: var(--statistics-blue);
 }
 
@@ -6469,29 +6476,29 @@ body:has(.statistics-page) footer {
 
 .statistics-performance-toolbar p:not(.statistics-panel-kicker),
 .statistics-method-note {
-    color: rgba(203, 220, 232, 0.58);
+    color: var(--statistics-text-muted);
 }
 
 .statistics-performance-filters {
     padding: 13px;
     border-color: var(--statistics-border);
     border-radius: 10px;
-    background: #091522;
+    background: var(--statistics-surface);
 }
 
 .statistics-window-options button {
-    color: rgba(211, 227, 239, 0.6);
+    color: var(--statistics-text-muted);
 }
 
 .statistics-window-options button.active {
-    background: #173956;
-    color: #83c6ff;
-    box-shadow: inset 0 0 0 1px rgba(83, 168, 255, 0.32);
+    background: var(--statistics-active-surface);
+    color: var(--statistics-blue);
+    box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--statistics-blue) 32%, transparent);
 }
 
 .statistics-quality-rail.statistics-quality-partial {
-    border-color: rgba(247, 185, 85, 0.38);
-    background: #1b1920;
+    border-color: color-mix(in oklch, var(--statistics-orange) 38%, transparent);
+    background: color-mix(in oklch, var(--statistics-orange) 8%, var(--statistics-surface));
 }
 
 .statistics-performance-metrics {
@@ -6520,25 +6527,25 @@ body:has(.statistics-page) footer {
     padding: 4px;
     border-color: var(--statistics-border-strong);
     border-radius: 10px;
-    background: rgba(7, 17, 29, 0.96);
-    box-shadow: 0 12px 30px rgba(0, 5, 12, 0.24);
+    background: color-mix(in oklch, var(--statistics-surface) 96%, transparent);
+    box-shadow: 0 12px 30px color-mix(in oklch, var(--color-base-content) 12%, transparent);
     backdrop-filter: blur(16px);
 }
 
 .statistics-analytics-topics button {
     min-height: 40px;
     border-radius: 7px;
-    color: rgba(211, 227, 239, 0.62);
+    color: var(--statistics-text-muted);
 }
 
 .statistics-analytics-topics button:hover {
-    background: #102538;
-    color: #ffffff;
+    background: var(--statistics-hover-surface);
+    color: var(--color-base-content);
 }
 
 .statistics-analytics-topics button.active {
-    background: #173956;
-    color: #ffffff;
+    background: var(--statistics-active-surface);
+    color: var(--color-base-content);
     box-shadow: none;
 }
 
@@ -6546,12 +6553,12 @@ body:has(.statistics-page) footer {
 .statistics-methodology,
 .statistics-table-wrap {
     border-color: var(--statistics-border);
-    background: #07131f;
+    background: var(--statistics-control-surface);
 }
 
 .statistics-table th {
-    background: #0d1b2a;
-    color: rgba(220, 234, 244, 0.7);
+    background: var(--statistics-surface-muted);
+    color: var(--statistics-text-muted);
 }
 
 .statistics-table td,
@@ -6562,19 +6569,19 @@ body:has(.statistics-page) footer {
 }
 
 .statistics-table tbody tr:hover {
-    background: #0d2031;
+    background: var(--statistics-hover-surface);
 }
 
 .statistics-tab {
     border-color: var(--statistics-border);
-    background: #091522;
-    color: rgba(213, 228, 239, 0.65);
+    background: var(--statistics-surface);
+    color: var(--statistics-text-muted);
 }
 
 .statistics-tab.active {
-    border-color: #315f82;
-    background: #173956;
-    color: #ffffff;
+    border-color: color-mix(in oklch, var(--statistics-blue) 52%, var(--statistics-border));
+    background: var(--statistics-active-surface);
+    color: var(--color-base-content);
 }
 
 .statistics-leaderboard-fill {
@@ -6582,11 +6589,11 @@ body:has(.statistics-page) footer {
 }
 
 .statistics-service-feature-card {
-    background: #0a1927;
+    background: var(--statistics-card-surface);
 }
 
 .statistics-disclaimer {
-    color: rgba(205, 221, 233, 0.48);
+    color: var(--statistics-text-faint);
 }
 
 @media (max-width: 1180px) {
@@ -6705,7 +6712,7 @@ body:has(.statistics-page) footer {
         margin-inline: 0;
         padding: 4px;
         border: 1px solid var(--statistics-border);
-        background: #081522;
+        background: var(--statistics-surface);
     }
 
     .statistics-analysis-tab {
@@ -6741,7 +6748,7 @@ body:has(.statistics-page) footer {
 
     .statistics-table tbody tr {
         border-radius: 8px;
-        background: #081522;
+        background: var(--statistics-surface);
         box-shadow: none;
     }
 }

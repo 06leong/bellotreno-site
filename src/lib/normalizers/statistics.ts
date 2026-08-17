@@ -79,21 +79,65 @@ export const CATEGORY_ORDER = [
 ];
 
 export const CATEGORY_COLORS: Record<string, string> = {
-  REG: "#83b85b",
-  MET: "#83b85b",
-  FR: "#c94b45",
-  "EC FR": "#c94b45",
-  FA: "#c94b45",
-  FB: "#c94b45",
-  IC: "#3f95dd",
-  ICN: "#3f95dd",
-  EC: "#4d8d55",
-  EN: "#4d8d55",
-  EXP: "#5b748c",
-  NCL: "#e9edf3",
-  IR: "#7c8796",
-  TS: "#69c6d4",
+  AV: "#982719",
+  REG: "#70a84a",
+  MET: "#70a84a",
+  FR: "#bc3433",
+  "EC FR": "#bc3433",
+  FA: "#bc3433",
+  FB: "#bc3433",
+  IC: "#008ad8",
+  ICN: "#008ad8",
+  EC: "#3c8149",
+  EN: "#3c8149",
+  EXP: "#35556b",
+  NCL: "#d9dee7",
+  IR: "#69737f",
+  TS: "#827654",
 };
+
+/**
+ * Statistics keeps the ViaggiaTreno client-code distinction because the
+ * operator dimension is also a service-family dimension for Trenitalia.
+ * Search and train-detail surfaces intentionally continue to use CLIENT_MAP,
+ * where 1/2/4 all display as the consumer-facing "Trenitalia" brand.
+ */
+export const STATISTICS_OPERATOR_LABELS: Readonly<Record<string, string>> = Object.freeze({
+  "1": "Trenitalia AV",
+  "2": "Trenitalia REG",
+  "4": "Trenitalia IC",
+  "18": "Trenitalia TPER",
+  "63": "Trenord",
+  "64": "ÖBB",
+  "77": "FS Treni Turistici Italiani",
+  "910": "Ferrovie del Sud Est",
+  ITALO: "Italo",
+});
+
+export const STATISTICS_OPERATOR_COLORS: Readonly<Record<string, string>> = Object.freeze({
+  "1": "#bc3433",
+  "2": "#70a84a",
+  "4": "#008ad8",
+  "18": "#d19525",
+  "63": "#7864b8",
+  "64": "#d71920",
+  "77": "#827654",
+  "910": "#008878",
+  ITALO: "#982719",
+});
+
+export const STATISTICS_STATION_COLORS = Object.freeze([
+  "#1769d2",
+  "#d85b28",
+  "#18875f",
+  "#7b61b7",
+  "#c48a12",
+  "#008f9c",
+  "#c14372",
+  "#65758b",
+  "#4b86b4",
+  "#a45a3a",
+]);
 
 const ISO_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 const COVERAGE_STATUSES = new Set<StatisticsCoverageStatus>([
@@ -284,7 +328,28 @@ export function categorySortIndex(value: unknown): number {
 }
 
 export function statisticsCategoryColor(value: unknown): string {
-  return CATEGORY_COLORS[categoryCode(value)] || "#65bfc0";
+  return CATEGORY_COLORS[chartCategoryCode(value)] || "#69737f";
+}
+
+export function statisticsOperatorLabel(value: unknown, fallback?: unknown): string {
+  const primary = String(value ?? "").trim();
+  const secondary = String(fallback ?? "").trim();
+  for (const candidate of [primary, secondary]) {
+    if (!candidate) continue;
+    const mapped = STATISTICS_OPERATOR_LABELS[candidate.toUpperCase()];
+    if (mapped) return mapped;
+  }
+  return secondary || primary;
+}
+
+export function statisticsOperatorColor(value: unknown): string {
+  const key = String(value ?? "").trim().toUpperCase();
+  return STATISTICS_OPERATOR_COLORS[key] || "#69737f";
+}
+
+export function statisticsStationColor(index: number): string {
+  const normalizedIndex = Number.isFinite(index) ? Math.max(0, Math.trunc(index)) : 0;
+  return STATISTICS_STATION_COLORS[normalizedIndex % STATISTICS_STATION_COLORS.length] ?? "#1769d2";
 }
 
 /**

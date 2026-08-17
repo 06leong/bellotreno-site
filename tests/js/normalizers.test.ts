@@ -7,6 +7,9 @@ import {
   chartCategoryCode,
   normalizeCategoryCounts,
   statisticsCategoryColor,
+  statisticsOperatorColor,
+  statisticsOperatorLabel,
+  statisticsStationColor,
 } from "../../src/lib/normalizers/statistics.ts";
 import {
   buildPartialCancellationState,
@@ -57,6 +60,9 @@ test("statistics category helpers preserve special categories and regional alias
   assert.ok(CATEGORY_ORDER.includes("NCL"));
   assert.ok(CATEGORY_ORDER.includes("TS"));
   assert.equal(statisticsCategoryColor("EC FR"), statisticsCategoryColor("FR"));
+  assert.equal(statisticsCategoryColor("REG"), "#70a84a");
+  assert.equal(statisticsCategoryColor("IC"), "#008ad8");
+  assert.equal(statisticsCategoryColor("RV"), statisticsCategoryColor("REG"));
 
   assert.deepEqual(normalizeCategoryCounts([
     { label: "RE", value: 2 },
@@ -68,6 +74,17 @@ test("statistics category helpers preserve special categories and regional alias
     { label: "EC FR", value: 4 },
     { label: "IR", value: 1 },
   ]);
+});
+
+test("statistics operator labels preserve ViaggiaTreno service-family codes", () => {
+  assert.equal(statisticsOperatorLabel(1), "Trenitalia AV");
+  assert.equal(statisticsOperatorLabel("2"), "Trenitalia REG");
+  assert.equal(statisticsOperatorLabel("4"), "Trenitalia IC");
+  assert.equal(statisticsOperatorLabel("63"), "Trenord");
+  assert.equal(statisticsOperatorLabel("unknown", "Provider label"), "Provider label");
+  assert.notEqual(statisticsOperatorColor("1"), statisticsOperatorColor("2"));
+  assert.notEqual(statisticsStationColor(0), statisticsStationColor(1));
+  assert.equal(statisticsStationColor(10), statisticsStationColor(0));
 });
 
 test("station name matching is accent and punctuation tolerant", () => {
