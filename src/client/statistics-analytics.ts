@@ -18,6 +18,10 @@ import {
     type AnalyticsRankingSort,
     type AnalyticsWindow
 } from "../lib/normalizers/statistics-analytics.js";
+import {
+    statisticsOperatorLabel,
+    statisticsStationColor
+} from "../lib/normalizers/statistics.js";
 
 (function () {
     type AnalyticsChartModule = typeof import("./statistics-echarts.js");
@@ -252,9 +256,9 @@ import {
         return Number.isNaN(parsed.getTime()) ? value : new Intl.DateTimeFormat(locale(), { dateStyle: "medium", timeStyle: "short", timeZone: "Europe/Rome" }).format(parsed);
     }
 
-    function operatorLabel(value: string | null): string {
-        if (!value) return tr("statistics_unknown", "Unknown");
-        return window.CLIENT_MAP?.[value] || value;
+    function operatorLabel(value: string | null, fallback?: string | null): string {
+        const label = statisticsOperatorLabel(value, fallback);
+        return label || tr("statistics_unknown", "Unknown");
     }
 
     function fillSelect(select: HTMLSelectElement | null, items: Array<{ key: string; label: string }>, allLabel: string, selected: string): void {
@@ -323,7 +327,7 @@ import {
         }
         fillSelect(
             $<HTMLSelectElement>("statisticsAnalyticsOperator"),
-            meta.dimensions.operator.map((item) => ({ key: item.key, label: operatorLabel(item.label) })),
+            meta.dimensions.operator.map((item) => ({ key: item.key, label: operatorLabel(item.key, item.label) })),
             tr("statistics_all_operators", "All operators"),
             state.operator
         );
@@ -508,7 +512,7 @@ import {
         }
         const rows = ranking.items.map((item) => {
             const tableRow = element("tr");
-            const label = ranking.dimension === "operator" ? operatorLabel(item.label) : item.label;
+            const label = ranking.dimension === "operator" ? operatorLabel(item.key, item.label) : item.label;
             tableRow.append(
                 createCell(labels[0]!, label, "dimension"),
                 createCell(labels[1]!, formatAnalyticsNumber(item.arrivalSample, locale()), "sample"),
@@ -607,7 +611,7 @@ import {
 
     function renderLeaderboard(
         targetId: string,
-        items: Array<{ key: string; label: string; value: number; detail: string; comparison?: string }>
+        items: Array<{ key: string; label: string; value: number; detail: string; comparison?: string; color?: string }>
     ): void {
         const target = $(targetId);
         if (!target) return;
@@ -622,7 +626,15 @@ import {
             const rank = element("span", "statistics-leaderboard-rank", String(index + 1).padStart(2, "0"));
             const body = element("div", "statistics-leaderboard-body");
             const heading = element("div", "statistics-leaderboard-heading");
-            heading.append(element("strong", "", item.label), element("span", "", formatAnalyticsNumber(item.value, locale())));
+            const title = element("strong", "", item.label);
+            if (item.color) {
+                const marker = element("span", "statistics-leaderboard-marker");
+                marker.setAttribute("aria-hidden", "true");
+                marker.style.backgroundColor = item.color;
+                title.prepend(marker);
+                row.style.setProperty("--statistics-item-color", item.color);
+            }
+            heading.append(title, element("span", "", formatAnalyticsNumber(item.value, locale())));
             const track = element("div", "statistics-leaderboard-track");
             const fill = element("span", "statistics-leaderboard-fill");
             fill.style.width = `${Math.max(2, item.value * 100 / maximum)}%`;
@@ -642,19 +654,21 @@ import {
 
     function renderStationLeaderboard(explore: AnalyticsExplore | null): void {
         if (explore) {
-            renderLeaderboard("statisticsStationLeaderboard", explore.network.stations.map((item) => ({
+            renderLeaderboard("statisticsStationLeaderboard", explore.network.stations.map((item, index) => ({
                 key: item.key,
                 label: item.label,
                 value: item.observedServices,
+                color: statisticsStationColor(index),
                 detail: `${tr("statistics_roles_arrival", "Arrivals")} ${formatAnalyticsPercent(item.roles.arrivalPercent, locale())} · ${tr("statistics_roles_departure", "Departures")} ${formatAnalyticsPercent(item.roles.departurePercent, locale())} · ${tr("statistics_roles_transit", "Transit")} ${formatAnalyticsPercent(item.roles.transitPercent, locale())}`,
                 comparison: metricChange(item.observedServices, item.previousObservedServices)
             })));
             return;
         }
-        renderLeaderboard("statisticsStationLeaderboard", dashboardRankingItems("station").map((item) => ({
+        renderLeaderboard("statisticsStationLeaderboard", dashboardRankingItems("station").map((item, index) => ({
             key: item.key,
             label: item.label,
             value: item.observedServices,
+            color: statisticsStationColor(index),
             detail: `${tr("statistics_metric_punctuality_5", "Within 5 min")} ${formatAnalyticsPercent(item.punctuality.within5.percent, locale())} · ${tr("statistics_arrival_sample", "Arrival sample")} ${formatAnalyticsNumber(item.arrivalSample, locale())}`
         })));
     }
@@ -777,7 +791,7 @@ import {
     }
 
     function renderExploreTables(explore: AnalyticsExplore): void {
-        renderDataTable("statisticsOperatorMixTable", [tr("statistics_operator", "Operator"), tr("statistics_observed_services", "Observed services"), tr("statistics_share", "Share")], explore.composition.operators.map((item) => [operatorLabel(item.label), formatAnalyticsNumber(item.observedServices, locale()), formatAnalyticsPercent(item.sharePercent, locale())]));
+        renderDataTable("statisticsOperatorMixTable", [tr("statistics_operator", "Operator"), tr("statistics_observed_services", "Observed services"), tr("statistics_share", "Share")], explore.composition.operators.map((item) => [operatorLabel(item.key, item.label), formatAnalyticsNumber(item.observedServices, locale()), formatAnalyticsPercent(item.sharePercent, locale())]));
         renderDataTable("statisticsCategoryMixTable", [tr("statistics_category", "Category"), tr("statistics_observed_services", "Observed services"), tr("statistics_share", "Share")], explore.composition.categories.map((item) => [item.label, formatAnalyticsNumber(item.observedServices, locale()), formatAnalyticsPercent(item.sharePercent, locale())]));
         renderDataTable("statisticsOperatorCategoryTable", [tr("statistics_operator", "Operator"), tr("statistics_category", "Category"), tr("statistics_observed_services", "Observed services")], explore.composition.matrix.map((item) => [operatorLabel(item.operator), item.category, formatAnalyticsNumber(item.observedServices, locale())]));
         renderDataTable("statisticsNetworkRhythmTable", [tr("statistics_weekday", "Weekday"), tr("statistics_hour", "Hour"), tr("statistics_observed_services", "Observed services")], explore.rhythm.map((item) => [chartLabels().weekdays[item.weekday] ?? String(item.weekday), `${String(item.hour).padStart(2, "0")}:00`, formatAnalyticsNumber(item.observedServices, locale())]));
@@ -798,7 +812,7 @@ import {
             const activeOperators = state.meta?.dimensions.operator.filter((item) => item.key !== "unknown" && item.sample > 0).length
                 ?? operatorItems.filter((item) => item.key !== "unknown" && item.observedServices > 0).length;
             if (active) active.textContent = `${formatAnalyticsNumber(activeOperators, locale())} ${tr("statistics_active_operators", "active operators")}`;
-            renderDataTable("statisticsOperatorMixTable", [tr("statistics_operator", "Operator"), tr("statistics_observed_services", "Observed services"), tr("statistics_share", "Share")], operatorItems.map((item) => [operatorLabel(item.label), formatAnalyticsNumber(item.observedServices, locale()), formatAnalyticsPercent(total > 0 ? item.observedServices * 100 / total : null, locale())]));
+            renderDataTable("statisticsOperatorMixTable", [tr("statistics_operator", "Operator"), tr("statistics_observed_services", "Observed services"), tr("statistics_share", "Share")], operatorItems.map((item) => [operatorLabel(item.key, item.label), formatAnalyticsNumber(item.observedServices, locale()), formatAnalyticsPercent(total > 0 ? item.observedServices * 100 / total : null, locale())]));
             renderDataTable("statisticsCategoryMixTable", [tr("statistics_category", "Category"), tr("statistics_observed_services", "Observed services"), tr("statistics_share", "Share")], categoryItems.map((item) => [item.label, formatAnalyticsNumber(item.observedServices, locale()), formatAnalyticsPercent(total > 0 ? item.observedServices * 100 / total : null, locale())]));
             const unavailable = tr("statistics_extended_model_pending", "This view becomes available after the latest analytical model is published.");
             for (const id of ["statisticsOperatorCategoryTable", "statisticsNetworkRhythmTable", "statisticsCategoryRhythmTable", "statisticsStationRhythmTable", "statisticsDisruptionTable"]) {
@@ -931,7 +945,7 @@ import {
             if (state.topic === "stations") Object.assign(fallbackContainers, { stationScatter: $("statisticsStationScatterChart") });
             const operatorRanking = state.rankings.operator;
             state.charts.renderRankingFallbackCharts(fallbackContainers, {
-                operator: operatorRanking ? { ...operatorRanking, items: operatorRanking.items.map((item) => ({ ...item, label: operatorLabel(item.label) })) } : undefined,
+                operator: operatorRanking ? { ...operatorRanking, items: operatorRanking.items.map((item) => ({ ...item, label: operatorLabel(item.key, item.label) })) } : undefined,
                 category: state.rankings.category,
                 station: state.rankings.station
             }, state.overview.current.observedServices, exploreLabels);
@@ -947,7 +961,7 @@ import {
             ...state.explore,
             composition: {
                 ...state.explore.composition,
-                operators: state.explore.composition.operators.map((item) => ({ ...item, label: operatorLabel(item.label) }))
+                operators: state.explore.composition.operators.map((item) => ({ ...item, label: operatorLabel(item.key, item.label) }))
             }
         };
         state.charts.renderExploreCharts(exploreContainers, chartExplore, exploreLabels);

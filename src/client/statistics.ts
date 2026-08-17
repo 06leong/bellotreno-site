@@ -1,9 +1,15 @@
 import { onBelloLanguageChanged } from "./language-events.js";
 import {
+    CATEGORY_ORDER,
+    categoryCode,
+    categorySortIndex,
+    chartCategoryCode,
     compareStatisticsMetric,
     normalizeStatisticsDaysResponse,
     normalizeStatisticsNumber,
     selectStatisticsComparisonBaseline,
+    statisticsCategoryColor,
+    statisticsOperatorLabel,
     type StatisticsComparisonBaseline,
     type StatisticsCoverage,
     type StatisticsCoverageDay
@@ -157,7 +163,6 @@ import {
 
     const API_BASE = "/api/statistics";
     const PAGE_SIZE = 25;
-    const CATEGORY_ORDER = ["REG", "MET", "FR", "EC FR", "FA", "FB", "IC", "ICN", "EC", "EN", "EXP", "NCL", "IR", "TS"];
     const CATEGORY_OPTIONS = [...CATEGORY_ORDER];
 
     const state: StatisticsState = {
@@ -180,27 +185,9 @@ import {
         tableRequestSerial: 0
     };
 
-    const palette = ["#65bfc0", "#5b9ee4", "#ec6685", "#f4b35d", "#83c77f", "#a78bfa", "#f78fb3", "#7dd3fc"];
-    const CATEGORY_COLORS: Record<string, string> = {
-        REG: "#70a84a",
-        RE: "#70a84a",
-        RV: "#70a84a",
-        MET: "#70a84a",
-        NCL: "#d9dee7",
-        FR: "#bc3433",
-        "EC FR": "#bc3433",
-        FB: "#bc3433",
-        FA: "#bc3433",
-        IC: "#008ad8",
-        ICN: "#008ad8",
-        EC: "#3c8149",
-        EN: "#3c8149",
-        TS: "#827654",
-        EXP: "#35556b",
-        IR: "#69737f"
-    };
     type StatisticsChartModule = typeof import("./statistics-echarts.js");
     let chartModulePromise: Promise<StatisticsChartModule> | null = null;
+    let themeObserver: MutationObserver | null = null;
 
     function tr(key: string, fallback?: string): string {
         const dict = window.translations;
@@ -269,28 +256,6 @@ import {
         }).format(date);
     }
 
-    function categoryCode(value: unknown): string {
-        const raw = String(value || "").trim().toUpperCase();
-        if (!raw) return "";
-        if (raw === "ECFR" || raw.replace(/[-_]+/g, " ") === "EC FR") return "EC FR";
-        return raw;
-    }
-
-    function chartCategoryCode(value: unknown): string {
-        const cat = categoryCode(value);
-        if (cat === "RV" || cat === "RE") return "REG";
-        return cat;
-    }
-
-    function categoryColor(value: unknown): string {
-        return CATEGORY_COLORS[categoryCode(value)] || palette[0];
-    }
-
-    function categorySortIndex(value: unknown): number {
-        const index = CATEGORY_ORDER.indexOf(categoryCode(value));
-        return index === -1 ? Number.MAX_SAFE_INTEGER : index;
-    }
-
     function categoryBadgeElement(value: unknown): Text | HTMLSpanElement {
         const cat = categoryCode(value);
         if (!cat || cat === "--") return document.createTextNode("--");
@@ -306,9 +271,7 @@ import {
     function operatorName(value: unknown): string {
         const raw = String(value ?? "").trim();
         if (!raw) return "--";
-        const map = window.CLIENT_MAP || {};
-        const mapped = map[raw] || map[Number(raw)];
-        return mapped || raw;
+        return statisticsOperatorLabel(raw) || raw;
     }
 
     function buildTrainHref(item: StatisticsTableItem): string {
@@ -941,7 +904,7 @@ import {
                 ],
                 categories: categories.map((item) => ({
                     ...item,
-                    color: categoryColor(item.label),
+                    color: statisticsCategoryColor(item.label),
                     percent: categoryTotal > 0 ? item.value * 100 / categoryTotal : 0
                 }))
             }, {
@@ -1383,6 +1346,9 @@ import {
 
     function initStatisticsPage(): void {
         if (!$("statisticsMetrics")) return;
+        themeObserver?.disconnect();
+        themeObserver = new MutationObserver(() => void renderCharts());
+        themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
         state.date = todayRome();
         bindEvents();
         fillCategorySelect();
@@ -1396,6 +1362,8 @@ import {
     });
 
     document.addEventListener("astro:before-swap", () => {
+        themeObserver?.disconnect();
+        themeObserver = null;
         void chartModulePromise?.then((charts) => charts.disposeLiveCharts());
         chartModulePromise = null;
     });

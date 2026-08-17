@@ -13,6 +13,11 @@ import {
 import { SVGRenderer } from "echarts/renderers";
 import type { ECharts, EChartsCoreOption } from "echarts/core";
 import type { AnalyticsExplore, AnalyticsOverview, AnalyticsRankingPayload } from "../lib/normalizers/statistics-analytics.js";
+import {
+    statisticsCategoryColor,
+    statisticsOperatorColor,
+    statisticsStationColor
+} from "../lib/normalizers/statistics.js";
 
 echarts.use([
     LineChart,
@@ -178,7 +183,7 @@ function baseOption(theme: ChartTheme): EChartsCoreOption {
         animation: !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
         animationDuration: 350,
         textStyle: { color: theme.text, fontFamily: "inherit" },
-        aria: { enabled: true, decal: { show: true } },
+        aria: { enabled: true, decal: { show: false } },
         tooltip: {
             trigger: "axis",
             renderMode: "richText",
@@ -371,7 +376,13 @@ function emptyOption(theme: ChartTheme, label: string): EChartsCoreOption {
     };
 }
 
-function renderHorizontalShare(container: HTMLElement, items: Array<{ label: string; observedServices: number; sharePercent: number | null }>, labels: AnalyticsExploreChartLabels, theme: ChartTheme): void {
+function renderHorizontalShare(
+    container: HTMLElement,
+    items: Array<{ key?: string; label: string; observedServices: number; sharePercent: number | null }>,
+    labels: AnalyticsExploreChartLabels,
+    theme: ChartTheme,
+    colorForItem: (item: { key?: string; label: string }, index: number) => string
+): void {
     const visible = items.filter((item) => item.observedServices > 0).slice(0, 12).reverse();
     if (!visible.length) {
         chartFor(container).setOption(emptyOption(theme, labels.noData), { notMerge: true });
@@ -391,42 +402,86 @@ function renderHorizontalShare(container: HTMLElement, items: Array<{ label: str
         series: [{
             name: labels.services,
             type: "bar",
-            data: visible.map((item) => item.sharePercent),
+            data: visible.map((item, index) => ({
+                value: item.sharePercent,
+                itemStyle: {
+                    color: colorForItem(item, visible.length - index - 1),
+                    borderRadius: [0, 6, 6, 0]
+                }
+            })),
             barMaxWidth: 20,
-            itemStyle: { color: theme.blue, borderRadius: [0, 6, 6, 0] },
             label: { show: true, position: "right", color: theme.text, formatter: "{c}%" }
         }]
     }, { notMerge: true });
 }
 
+function readableTextColor(color: string): string {
+    const match = /^#([0-9a-f]{6})$/i.exec(color);
+    if (!match) return "#ffffff";
+    const value = Number.parseInt(match[1]!, 16);
+    const red = (value >> 16) & 255;
+    const green = (value >> 8) & 255;
+    const blue = value & 255;
+    const luminance = (red * 0.299 + green * 0.587 + blue * 0.114) / 255;
+    return luminance > 0.66 ? "#172235" : "#ffffff";
+}
+
 function renderMixMatrix(container: HTMLElement, explore: AnalyticsExplore, labels: AnalyticsExploreChartLabels, theme: ChartTheme): void {
     const operators = explore.composition.operators.filter((item) => item.observedServices > 0).slice(0, 10).map((item) => item.key);
     const categories = explore.composition.categories.filter((item) => item.observedServices > 0).slice(0, 12).map((item) => item.key);
-    const cells = explore.composition.matrix
+    const sourceCells = explore.composition.matrix
         .filter((item) => operators.includes(item.operator) && categories.includes(item.category))
-        .map((item) => [categories.indexOf(item.category), operators.indexOf(item.operator), item.observedServices]);
-    if (!cells.length) {
+        .map((item) => ({
+            category: item.category,
+            operator: item.operator,
+            x: categories.indexOf(item.category),
+            y: operators.indexOf(item.operator),
+            value: item.observedServices
+        }));
+    if (!sourceCells.length) {
         chartFor(container).setOption(emptyOption(theme, labels.noData), { notMerge: true });
         return;
     }
-    const maximum = Math.max(...cells.map((item) => Number(item[2])), 1);
+    const maximum = Math.max(...sourceCells.map((item) => item.value), 1);
+    const operatorLabels = new Map(explore.composition.operators.map((item) => [item.key, item.label]));
+    const cells = sourceCells.map((item) => {
+        const color = statisticsCategoryColor(item.category);
+        return {
+            value: [item.x, item.y, item.value],
+            category: item.category,
+            operator: operatorLabels.get(item.operator) ?? item.operator,
+            itemStyle: {
+                color,
+                opacity: 0.32 + 0.68 * Math.sqrt(item.value / maximum),
+                borderColor: theme.surface,
+                borderWidth: 2
+            },
+            label: { color: readableTextColor(color) }
+        };
+    });
     chartFor(container).setOption({
         ...baseOption(theme),
-        tooltip: { ...baseOption(theme).tooltip as object, trigger: "item" },
-        grid: { top: 24, right: 24, bottom: 58, left: 118 },
+        tooltip: {
+            ...baseOption(theme).tooltip as object,
+            trigger: "item",
+            formatter: (parameters: { data?: { operator?: string; category?: string; value?: unknown[] } }) => {
+                const data = parameters.data;
+                return `${data?.operator ?? ""} × ${data?.category ?? ""}\n${numberFormatter().format(Number(data?.value?.[2] ?? 0))} ${labels.services}`;
+            }
+        },
+        grid: { top: 24, right: 24, bottom: 58, left: 150 },
         xAxis: { type: "category", data: categories, axisLabel: { color: theme.muted, rotate: 28 }, axisLine: { lineStyle: { color: theme.border } } },
         yAxis: {
             type: "category",
             data: operators,
             axisLabel: {
                 color: theme.muted,
-                width: 102,
+                width: 134,
                 overflow: "truncate",
-                formatter: (value: string) => explore.composition.operators.find((item) => item.key === value)?.label ?? value
+                formatter: (value: string) => operatorLabels.get(value) ?? value
             },
             axisLine: { show: false }
         },
-        visualMap: { min: 0, max: maximum, show: false, inRange: { color: [theme.surface, theme.blue, theme.teal] } },
         series: [{ type: "heatmap", data: cells, label: { show: true, color: theme.text }, emphasis: { itemStyle: { borderColor: theme.text, borderWidth: 1 } } }]
     }, { notMerge: true });
 }
@@ -462,13 +517,21 @@ function renderCategoryRhythm(container: HTMLElement, explore: AnalyticsExplore,
         grid: { top: 54, right: 16, bottom: 34, left: 48 },
         xAxis: { type: "category", data: Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, "0")), axisLabel: { color: theme.muted, interval: 2 }, axisLine: { lineStyle: { color: theme.border } } },
         yAxis: axis(theme),
+        color: categories.map((category) => statisticsCategoryColor(category)),
         series: categories.map((category, index) => ({
             name: category,
             type: "line",
             showSymbol: false,
+            symbol: ["circle", "rect", "diamond", "triangle", "roundRect", "pin"][index % 6],
             smooth: 0.2,
             data: Array.from({ length: 24 }, (_, hour) => explore.categoryRhythm.filter((item) => item.category === category && item.hour === hour).reduce((sum, item) => sum + item.observedServices, 0)),
-            lineStyle: { width: index < 3 ? 2.5 : 1.5 }
+            lineStyle: {
+                width: index < 3 ? 2.5 : 1.8,
+                color: statisticsCategoryColor(category),
+                type: index >= 3 ? "dashed" : "solid"
+            },
+            itemStyle: { color: statisticsCategoryColor(category) },
+            emphasis: { focus: "series", lineStyle: { width: 4 } }
         }))
     }, { notMerge: true });
 }
@@ -477,21 +540,51 @@ function renderStationScatter(container: HTMLElement, explore: AnalyticsExplore,
     renderStationScatterItems(container, explore.network.stations, labels, theme);
 }
 
-function renderStationScatterItems(container: HTMLElement, stations: Array<{ label: string; observedServices: number; arrivalSample: number; punctuality: { within5: { percent: number | null } } }>, labels: AnalyticsExploreChartLabels, theme: ChartTheme): void {
+function renderStationScatterItems(container: HTMLElement, stations: Array<{ key?: string; label: string; observedServices: number; arrivalSample: number; punctuality: { within5: { percent: number | null } } }>, labels: AnalyticsExploreChartLabels, theme: ChartTheme): void {
     const values = stations
         .filter((item) => item.punctuality.within5.percent !== null)
-        .map((item) => [item.observedServices, item.punctuality.within5.percent, item.label, item.arrivalSample]);
+        .map((item, index) => {
+            const color = index < 10 ? statisticsStationColor(index) : theme.muted;
+            return {
+                value: [item.observedServices, item.punctuality.within5.percent, item.label, item.arrivalSample],
+                itemStyle: {
+                    color,
+                    opacity: index < 10 ? 0.84 : 0.3,
+                    borderColor: theme.surface,
+                    borderWidth: index < 10 ? 2 : 1
+                },
+                label: index < 6
+                    ? {
+                        show: true,
+                        position: "top",
+                        color: theme.text,
+                        fontSize: 10,
+                        formatter: item.label.length > 18 ? `${item.label.slice(0, 17)}…` : item.label
+                    }
+                    : { show: false }
+            };
+        });
     if (!values.length) {
         chartFor(container).setOption(emptyOption(theme, labels.noData), { notMerge: true });
         return;
     }
     chartFor(container).setOption({
         ...baseOption(theme),
-        tooltip: { ...baseOption(theme).tooltip as object, trigger: "item", formatter: (parameters: { value?: unknown[] }) => `${parameters.value?.[2] ?? ""}<br>${labels.services}: ${parameters.value?.[0] ?? "—"}<br>${labels.punctuality}: ${parameters.value?.[1] ?? "—"}%` },
+        tooltip: { ...baseOption(theme).tooltip as object, trigger: "item", formatter: (parameters: { value?: unknown[] }) => `${parameters.value?.[2] ?? ""}\n${labels.services}: ${parameters.value?.[0] ?? "—"}\n${labels.punctuality}: ${parameters.value?.[1] ?? "—"}%` },
         grid: { top: 20, right: 20, bottom: 42, left: 58 },
         xAxis: { ...axis(theme), name: labels.services, nameTextStyle: { color: theme.muted } },
         yAxis: { ...axis(theme, true), name: labels.punctuality, nameTextStyle: { color: theme.muted } },
-        series: [{ type: "scatter", data: values, symbolSize: (value: unknown[]) => Math.max(8, Math.min(30, Math.sqrt(Number(value[3] ?? 0)) / 2)), itemStyle: { color: theme.blue, opacity: 0.72 } }]
+        series: [{
+            type: "scatter",
+            data: values,
+            symbolSize: (value: unknown[]) => Math.max(8, Math.min(28, Math.sqrt(Number(value[3] ?? 0)) / 2.2)),
+            labelLayout: { hideOverlap: true, moveOverlap: "shiftY" },
+            emphasis: {
+                focus: "self",
+                scale: 1.35,
+                label: { show: true, color: theme.text, fontWeight: 700 }
+            }
+        }]
     }, { notMerge: true });
 }
 
@@ -625,7 +718,7 @@ function renderLiveRegularity(container: HTMLElement, data: LiveChartDatum[], la
         tooltip: {
             ...baseOption(theme).tooltip as object,
             trigger: "item",
-            formatter: (parameters: { name?: string; value?: unknown; percent?: number }) => `${parameters.name ?? ""}<br><strong>${formatter.format(Number(parameters.value))}</strong> · ${(parameters.percent ?? 0).toFixed(1)}%`
+            formatter: (parameters: { name?: string; value?: unknown; percent?: number }) => `${parameters.name ?? ""}\n${formatter.format(Number(parameters.value))} · ${(parameters.percent ?? 0).toFixed(1)}%`
         },
         legend: {
             orient: compact ? "horizontal" : "vertical",
@@ -707,7 +800,7 @@ function renderLiveCategories(container: HTMLElement, data: LiveChartDatum[], la
         tooltip: {
             ...baseOption(theme).tooltip as object,
             trigger: "item",
-            formatter: (parameters: { name?: string; value?: unknown; data?: LiveChartDatum }) => `${parameters.name ?? ""}<br><strong>${formatter.format(Number(parameters.value))}</strong> · ${(parameters.data?.percent ?? 0).toFixed(1)}%`
+            formatter: (parameters: { name?: string; value?: unknown; data?: LiveChartDatum }) => `${parameters.name ?? ""}\n${formatter.format(Number(parameters.value))} · ${(parameters.data?.percent ?? 0).toFixed(1)}%`
         },
         grid: { top: 8, right: 72, bottom: 24, left: 58 },
         xAxis: axis(theme),
@@ -746,8 +839,8 @@ export function renderAnalyticsCharts(containers: AnalyticsChartContainers, over
 
 export function renderExploreCharts(containers: AnalyticsExploreChartContainers, explore: AnalyticsExplore, labels: AnalyticsExploreChartLabels): void {
     const theme = readTheme();
-    if (containers.operatorMix) renderHorizontalShare(containers.operatorMix, explore.composition.operators, labels, theme);
-    if (containers.categoryMix) renderHorizontalShare(containers.categoryMix, explore.composition.categories, labels, theme);
+    if (containers.operatorMix) renderHorizontalShare(containers.operatorMix, explore.composition.operators, labels, theme, (item) => statisticsOperatorColor(item.key ?? item.label));
+    if (containers.categoryMix) renderHorizontalShare(containers.categoryMix, explore.composition.categories, labels, theme, (item) => statisticsCategoryColor(item.key ?? item.label));
     if (containers.operatorCategory) renderMixMatrix(containers.operatorCategory, explore, labels, theme);
     if (containers.networkRhythm) renderRhythmHeatmap(containers.networkRhythm, explore.rhythm, labels, theme);
     if (containers.categoryRhythm) renderCategoryRhythm(containers.categoryRhythm, explore, labels, theme);
@@ -766,12 +859,13 @@ export function renderRankingFallbackCharts(
 ): void {
     const theme = readTheme();
     const mix = (ranking?: AnalyticsRankingPayload) => (ranking?.items ?? []).map((item) => ({
+        key: item.key,
         label: item.label,
         observedServices: item.observedServices,
         sharePercent: observedServices > 0 ? Math.round(item.observedServices * 1000 / observedServices) / 10 : null
     }));
-    if (containers.operatorMix) renderHorizontalShare(containers.operatorMix, mix(rankings.operator), labels, theme);
-    if (containers.categoryMix) renderHorizontalShare(containers.categoryMix, mix(rankings.category), labels, theme);
+    if (containers.operatorMix) renderHorizontalShare(containers.operatorMix, mix(rankings.operator), labels, theme, (item) => statisticsOperatorColor(item.key ?? item.label));
+    if (containers.categoryMix) renderHorizontalShare(containers.categoryMix, mix(rankings.category), labels, theme, (item) => statisticsCategoryColor(item.key ?? item.label));
     if (containers.stationScatter) renderStationScatterItems(containers.stationScatter, rankings.station?.items ?? [], labels, theme);
 }
 
