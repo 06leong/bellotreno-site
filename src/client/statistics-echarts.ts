@@ -1,11 +1,12 @@
 import * as echarts from "echarts/core";
-import { BarChart, HeatmapChart, LineChart, ScatterChart } from "echarts/charts";
+import { BarChart, HeatmapChart, LineChart, PieChart, ScatterChart } from "echarts/charts";
 import {
     AriaComponent,
     CalendarComponent,
     DataZoomComponent,
     GridComponent,
     LegendComponent,
+    TitleComponent,
     TooltipComponent,
     VisualMapComponent
 } from "echarts/components";
@@ -18,11 +19,13 @@ echarts.use([
     BarChart,
     HeatmapChart,
     ScatterChart,
+    PieChart,
     AriaComponent,
     CalendarComponent,
     DataZoomComponent,
     GridComponent,
     LegendComponent,
+    TitleComponent,
     TooltipComponent,
     VisualMapComponent,
     SVGRenderer
@@ -77,9 +80,45 @@ export interface AnalyticsExploreChartContainers {
     lifecycle?: HTMLElement | null;
 }
 
+export interface LiveChartDatum {
+    label: string;
+    value: number;
+    color?: string;
+    percent?: number;
+}
+
+export interface LivePunctualityGroup {
+    label: string;
+    segments: LiveChartDatum[];
+}
+
+export interface LiveChartData {
+    running: LiveChartDatum[];
+    regularity: LiveChartDatum[];
+    punctuality: LivePunctualityGroup[];
+    categories: LiveChartDatum[];
+}
+
+export interface LiveChartLabels {
+    running: string;
+    trains: string;
+    noData: string;
+    share: string;
+}
+
+export interface LiveChartContainers {
+    running: HTMLElement;
+    regularity: HTMLElement;
+    punctuality: HTMLElement;
+    categories: HTMLElement;
+}
+
 interface ChartTheme {
     accent: string;
     blue: string;
+    green: string;
+    red: string;
+    purple: string;
     teal: string;
     orange: string;
     text: string;
@@ -89,6 +128,7 @@ interface ChartTheme {
 }
 
 const chartInstances = new Map<HTMLElement, ECharts>();
+const chartScopes = new Map<HTMLElement, "analytics" | "live">();
 let resizeObserver: ResizeObserver | null = null;
 
 function cssValue(styles: CSSStyleDeclaration, name: string, fallback: string): string {
@@ -98,26 +138,27 @@ function cssValue(styles: CSSStyleDeclaration, name: string, fallback: string): 
 function readTheme(): ChartTheme {
     const page = document.querySelector<HTMLElement>(".statistics-page") ?? document.documentElement;
     const styles = getComputedStyle(page);
-    const selectedTheme = document.documentElement.dataset.theme;
-    const dark = selectedTheme === "dark"
-        || (selectedTheme !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
     return {
         accent: cssValue(styles, "--statistics-accent", "#d71920"),
         blue: cssValue(styles, "--statistics-blue", "#1769d2"),
+        green: cssValue(styles, "--statistics-green", "#41d69b"),
+        red: cssValue(styles, "--statistics-red", "#ff6673"),
+        purple: cssValue(styles, "--statistics-purple", "#9b8cff"),
         teal: cssValue(styles, "--statistics-teal", "#078d91"),
         orange: cssValue(styles, "--statistics-orange", "#e8750a"),
-        text: dark ? "#f3f4f6" : "#172033",
-        muted: dark ? "rgba(229, 231, 235, 0.62)" : "rgba(23, 32, 51, 0.58)",
-        border: dark ? "rgba(229, 231, 235, 0.14)" : "rgba(23, 32, 51, 0.13)",
-        surface: dark ? "#111722" : "#ffffff"
+        text: cssValue(styles, "--statistics-chart-text", "#edf7ff"),
+        muted: cssValue(styles, "--statistics-chart-muted", "rgba(200, 218, 232, 0.66)"),
+        border: cssValue(styles, "--statistics-chart-grid", "rgba(149, 180, 202, 0.16)"),
+        surface: cssValue(styles, "--statistics-chart-tooltip", "#0d1b29")
     };
 }
 
-function chartFor(container: HTMLElement): ECharts {
+function chartFor(container: HTMLElement, scope: "analytics" | "live" = "analytics"): ECharts {
     const existing = chartInstances.get(container);
     if (existing && !existing.isDisposed()) return existing;
     const chart = echarts.init(container, undefined, { renderer: "svg" });
     chartInstances.set(container, chart);
+    chartScopes.set(container, scope);
     if (!resizeObserver) {
         resizeObserver = new ResizeObserver((entries) => {
             for (const entry of entries) chartInstances.get(entry.target as HTMLElement)?.resize();
@@ -125,6 +166,11 @@ function chartFor(container: HTMLElement): ECharts {
     }
     resizeObserver.observe(container);
     return chart;
+}
+
+function numberFormatter(): Intl.NumberFormat {
+    const language = document.documentElement.lang || "en";
+    return new Intl.NumberFormat(language, { maximumFractionDigits: 1 });
 }
 
 function baseOption(theme: ChartTheme): EChartsCoreOption {
@@ -516,6 +562,179 @@ function renderLifecycle(container: HTMLElement, explore: AnalyticsExplore, labe
     }, { notMerge: true });
 }
 
+function renderLiveRunning(container: HTMLElement, data: LiveChartDatum[], labels: LiveChartLabels, theme: ChartTheme): void {
+    if (!data.length) {
+        chartFor(container, "live").setOption(emptyOption(theme, labels.noData), { notMerge: true });
+        return;
+    }
+    const formatter = numberFormatter();
+    const compact = window.matchMedia("(max-width: 560px)").matches;
+    chartFor(container, "live").setOption({
+        ...baseOption(theme),
+        tooltip: {
+            ...baseOption(theme).tooltip as object,
+            valueFormatter: (value: unknown) => `${formatter.format(Number(value))} ${labels.trains}`
+        },
+        grid: { top: 18, right: compact ? 10 : 28, bottom: 34, left: compact ? 42 : 54 },
+        xAxis: {
+            type: "category",
+            boundaryGap: false,
+            data: data.map((item) => item.label),
+            axisLabel: { color: theme.muted, hideOverlap: true, interval: "auto" },
+            axisLine: { lineStyle: { color: theme.border } },
+            axisTick: { show: false }
+        },
+        yAxis: { ...axis(theme), min: (value: { min: number }) => Math.max(0, Math.floor(value.min * 0.9)) },
+        series: [{
+            name: labels.running,
+            type: "line",
+            data: data.map((item, index) => ({
+                value: item.value,
+                label: index === data.length - 1
+                    ? { show: true, position: "top", color: theme.text, fontWeight: 700, formatter: formatter.format(item.value) }
+                    : { show: false }
+            })),
+            showSymbol: data.length <= 18,
+            symbol: "circle",
+            symbolSize: 7,
+            smooth: 0.24,
+            lineStyle: { width: 3, color: theme.blue },
+            itemStyle: { color: theme.blue, borderColor: theme.surface, borderWidth: 2 },
+            areaStyle: {
+                color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                    { offset: 0, color: "rgba(83, 168, 255, 0.38)" },
+                    { offset: 1, color: "rgba(83, 168, 255, 0.02)" }
+                ])
+            },
+            emphasis: { focus: "series" }
+        }]
+    }, { notMerge: true });
+}
+
+function renderLiveRegularity(container: HTMLElement, data: LiveChartDatum[], labels: LiveChartLabels, theme: ChartTheme): void {
+    const visible = data.filter((item) => item.value > 0);
+    if (!visible.length) {
+        chartFor(container, "live").setOption(emptyOption(theme, labels.noData), { notMerge: true });
+        return;
+    }
+    const total = visible.reduce((sum, item) => sum + item.value, 0);
+    const compact = window.matchMedia("(max-width: 560px)").matches;
+    const formatter = numberFormatter();
+    chartFor(container, "live").setOption({
+        ...baseOption(theme),
+        tooltip: {
+            ...baseOption(theme).tooltip as object,
+            trigger: "item",
+            formatter: (parameters: { name?: string; value?: unknown; percent?: number }) => `${parameters.name ?? ""}<br><strong>${formatter.format(Number(parameters.value))}</strong> · ${(parameters.percent ?? 0).toFixed(1)}%`
+        },
+        legend: {
+            orient: compact ? "horizontal" : "vertical",
+            left: compact ? "center" : "58%",
+            right: compact ? 0 : 8,
+            bottom: compact ? 0 : "auto",
+            top: compact ? "auto" : "middle",
+            textStyle: { color: theme.muted, fontSize: 11 },
+            itemWidth: 9,
+            itemHeight: 9
+        },
+        graphic: [{
+            type: "group",
+            left: compact ? "center" : "28%",
+            top: compact ? "35%" : "middle",
+            children: [
+                { type: "text", y: -14, style: { text: formatter.format(total), fill: theme.text, font: "700 25px sans-serif", textAlign: "center" } },
+                { type: "text", y: 18, style: { text: labels.trains, fill: theme.muted, font: "12px sans-serif", textAlign: "center" } }
+            ]
+        }],
+        series: [{
+            type: "pie",
+            radius: compact ? ["48%", "68%"] : ["50%", "72%"],
+            center: compact ? ["50%", "37%"] : ["29%", "50%"],
+            avoidLabelOverlap: true,
+            itemStyle: { borderColor: theme.surface, borderWidth: 3, borderRadius: 4 },
+            label: { show: false },
+            emphasis: { label: { show: true, color: theme.text, fontWeight: 700, formatter: "{d}%" }, scaleSize: 6 },
+            data: visible.map((item) => ({ value: item.value, name: item.label, itemStyle: { color: item.color ?? theme.blue } }))
+        }]
+    }, { notMerge: true });
+}
+
+function renderLivePunctuality(container: HTMLElement, groups: LivePunctualityGroup[], labels: LiveChartLabels, theme: ChartTheme): void {
+    if (!groups.some((group) => group.segments.some((item) => (item.percent ?? 0) > 0))) {
+        chartFor(container, "live").setOption(emptyOption(theme, labels.noData), { notMerge: true });
+        return;
+    }
+    const segmentNames = [...new Set(groups.flatMap((group) => group.segments.map((item) => item.label)))];
+    const colorByName = new Map(groups.flatMap((group) => group.segments.map((item) => [item.label, item.color ?? theme.blue] as const)));
+    chartFor(container, "live").setOption({
+        ...baseOption(theme),
+        tooltip: {
+            ...baseOption(theme).tooltip as object,
+            valueFormatter: (value: unknown) => `${Number(value).toFixed(1)}%`
+        },
+        legend: { top: 0, left: 0, textStyle: { color: theme.muted, fontSize: 11 }, itemWidth: 10, itemHeight: 10 },
+        grid: { top: 52, right: 22, bottom: 26, left: 84 },
+        xAxis: { ...axis(theme, true), axisLabel: { color: theme.muted, formatter: "{value}%" } },
+        yAxis: {
+            type: "category",
+            data: groups.map((group) => group.label),
+            axisLabel: { color: theme.text, fontWeight: 650 },
+            axisLine: { show: false },
+            axisTick: { show: false }
+        },
+        series: segmentNames.map((name) => ({
+            name,
+            type: "bar",
+            stack: "total",
+            barMaxWidth: 30,
+            data: groups.map((group) => group.segments.find((item) => item.label === name)?.percent ?? 0),
+            itemStyle: { color: colorByName.get(name) ?? theme.blue, borderColor: theme.surface, borderWidth: 1 },
+            label: { show: true, position: "inside", color: "#ffffff", fontSize: 10, fontWeight: 700, formatter: (parameters: { value?: unknown }) => Number(parameters.value) >= 7 ? `${Number(parameters.value).toFixed(0)}%` : "" },
+            emphasis: { focus: "series" }
+        }))
+    }, { notMerge: true });
+}
+
+function renderLiveCategories(container: HTMLElement, data: LiveChartDatum[], labels: LiveChartLabels, theme: ChartTheme): void {
+    const visible = data.filter((item) => item.value > 0).sort((a, b) => b.value - a.value).slice(0, 12).reverse();
+    if (!visible.length) {
+        chartFor(container, "live").setOption(emptyOption(theme, labels.noData), { notMerge: true });
+        return;
+    }
+    const formatter = numberFormatter();
+    chartFor(container, "live").setOption({
+        ...baseOption(theme),
+        tooltip: {
+            ...baseOption(theme).tooltip as object,
+            trigger: "item",
+            formatter: (parameters: { name?: string; value?: unknown; data?: LiveChartDatum }) => `${parameters.name ?? ""}<br><strong>${formatter.format(Number(parameters.value))}</strong> · ${(parameters.data?.percent ?? 0).toFixed(1)}%`
+        },
+        grid: { top: 8, right: 72, bottom: 24, left: 58 },
+        xAxis: axis(theme),
+        yAxis: {
+            type: "category",
+            data: visible.map((item) => item.label),
+            axisLabel: { color: theme.text, fontWeight: 700 },
+            axisLine: { show: false },
+            axisTick: { show: false }
+        },
+        series: [{
+            type: "bar",
+            barMaxWidth: 18,
+            data: visible.map((item) => ({ value: item.value, percent: item.percent, itemStyle: { color: item.color ?? theme.purple, borderRadius: [0, 5, 5, 0] } })),
+            label: { show: true, position: "right", color: theme.muted, fontSize: 10, formatter: (parameters: { data?: LiveChartDatum }) => `${(parameters.data?.percent ?? 0).toFixed(1)}%` }
+        }]
+    }, { notMerge: true });
+}
+
+export function renderLiveCharts(containers: LiveChartContainers, data: LiveChartData, labels: LiveChartLabels): void {
+    const theme = readTheme();
+    renderLiveRunning(containers.running, data.running, labels, theme);
+    renderLiveRegularity(containers.regularity, data.regularity, labels, theme);
+    renderLivePunctuality(containers.punctuality, data.punctuality, labels, theme);
+    renderLiveCategories(containers.categories, data.categories, labels, theme);
+}
+
 export function renderAnalyticsCharts(containers: AnalyticsChartContainers, overview: AnalyticsOverview, labels: AnalyticsChartLabels): void {
     const theme = readTheme();
     renderPunctuality(containers.punctuality, overview, labels, theme);
@@ -557,11 +776,23 @@ export function renderRankingFallbackCharts(
 }
 
 export function disposeAnalyticsCharts(): void {
-    for (const [container, chart] of chartInstances) {
+    disposeChartScope("analytics");
+}
+
+export function disposeLiveCharts(): void {
+    disposeChartScope("live");
+}
+
+function disposeChartScope(scope: "analytics" | "live"): void {
+    for (const [container, chart] of [...chartInstances]) {
+        if (chartScopes.get(container) !== scope) continue;
         resizeObserver?.unobserve(container);
         if (!chart.isDisposed()) chart.dispose();
+        chartInstances.delete(container);
+        chartScopes.delete(container);
     }
-    chartInstances.clear();
-    resizeObserver?.disconnect();
-    resizeObserver = null;
+    if (!chartInstances.size) {
+        resizeObserver?.disconnect();
+        resizeObserver = null;
+    }
 }
