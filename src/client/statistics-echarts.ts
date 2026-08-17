@@ -183,7 +183,7 @@ function baseOption(theme: ChartTheme): EChartsCoreOption {
         animation: !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
         animationDuration: 350,
         textStyle: { color: theme.text, fontFamily: "inherit" },
-        aria: { enabled: true, decal: { show: true } },
+        aria: { enabled: true, decal: { show: false } },
         tooltip: {
             trigger: "axis",
             renderMode: "richText",
@@ -466,7 +466,7 @@ function renderMixMatrix(container: HTMLElement, explore: AnalyticsExplore, labe
             trigger: "item",
             formatter: (parameters: { data?: { operator?: string; category?: string; value?: unknown[] } }) => {
                 const data = parameters.data;
-                return `${data?.operator ?? ""} × ${data?.category ?? ""}<br><strong>${numberFormatter().format(Number(data?.value?.[2] ?? 0))}</strong> ${labels.services}`;
+                return `${data?.operator ?? ""} × ${data?.category ?? ""}\n${numberFormatter().format(Number(data?.value?.[2] ?? 0))} ${labels.services}`;
             }
         },
         grid: { top: 24, right: 24, bottom: 58, left: 150 },
@@ -570,7 +570,7 @@ function renderStationScatterItems(container: HTMLElement, stations: Array<{ key
     }
     chartFor(container).setOption({
         ...baseOption(theme),
-        tooltip: { ...baseOption(theme).tooltip as object, trigger: "item", formatter: (parameters: { value?: unknown[] }) => `${parameters.value?.[2] ?? ""}<br>${labels.services}: ${parameters.value?.[0] ?? "—"}<br>${labels.punctuality}: ${parameters.value?.[1] ?? "—"}%` },
+        tooltip: { ...baseOption(theme).tooltip as object, trigger: "item", formatter: (parameters: { value?: unknown[] }) => `${parameters.value?.[2] ?? ""}\n${labels.services}: ${parameters.value?.[0] ?? "—"}\n${labels.punctuality}: ${parameters.value?.[1] ?? "—"}%` },
         grid: { top: 20, right: 20, bottom: 42, left: 58 },
         xAxis: { ...axis(theme), name: labels.services, nameTextStyle: { color: theme.muted } },
         yAxis: { ...axis(theme, true), name: labels.punctuality, nameTextStyle: { color: theme.muted } },
@@ -718,7 +718,7 @@ function renderLiveRegularity(container: HTMLElement, data: LiveChartDatum[], la
         tooltip: {
             ...baseOption(theme).tooltip as object,
             trigger: "item",
-            formatter: (parameters: { name?: string; value?: unknown; percent?: number }) => `${parameters.name ?? ""}<br><strong>${formatter.format(Number(parameters.value))}</strong> · ${(parameters.percent ?? 0).toFixed(1)}%`
+            formatter: (parameters: { name?: string; value?: unknown; percent?: number }) => `${parameters.name ?? ""}\n${formatter.format(Number(parameters.value))} · ${(parameters.percent ?? 0).toFixed(1)}%`
         },
         legend: {
             orient: compact ? "horizontal" : "vertical",
@@ -800,7 +800,7 @@ function renderLiveCategories(container: HTMLElement, data: LiveChartDatum[], la
         tooltip: {
             ...baseOption(theme).tooltip as object,
             trigger: "item",
-            formatter: (parameters: { name?: string; value?: unknown; data?: LiveChartDatum }) => `${parameters.name ?? ""}<br><strong>${formatter.format(Number(parameters.value))}</strong> · ${(parameters.data?.percent ?? 0).toFixed(1)}%`
+            formatter: (parameters: { name?: string; value?: unknown; data?: LiveChartDatum }) => `${parameters.name ?? ""}\n${formatter.format(Number(parameters.value))} · ${(parameters.data?.percent ?? 0).toFixed(1)}%`
         },
         grid: { top: 8, right: 72, bottom: 24, left: 58 },
         xAxis: axis(theme),
