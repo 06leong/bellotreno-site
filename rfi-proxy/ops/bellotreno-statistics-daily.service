@@ -1,0 +1,27 @@
+[Unit]
+Description=BelloTreno daily statistics archive and analytics build
+Documentation=https://github.com/06leong/bellotreno-site/blob/main/rfi-proxy/README.md
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+ConditionPathExists=/home/docker_apps/rfi-proxy/docker-compose.yml
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/home/docker_apps/rfi-proxy
+EnvironmentFile=-/etc/default/bellotreno-statistics-daily
+ExecStart=/usr/local/sbin/bellotreno-statistics-daily run
+StateDirectory=bellotreno-statistics-daily
+StateDirectoryMode=0700
+RuntimeDirectory=bellotreno-statistics-daily
+UMask=0077
+TimeoutStartSec=3h
+TimeoutStopSec=5min
+KillMode=control-group
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bellotreno-statistics-daily

@@ -1,0 +1,482 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+IFS=$'\n\t'
+umask 077
+
+COMPOSE_DIR="${BELLOTRENO_COMPOSE_DIR:-/home/docker_apps/rfi-proxy}"
+STATE_DIR="${BELLOTRENO_STATE_DIR:-/var/lib/bellotreno-statistics-daily}"
+COLLECTOR_WAIT_SECONDS="${BELLOTRENO_COLLECTOR_WAIT_SECONDS:-1800}"
+MODE="${1:-run}"
+
+snapshot_id=""
+snapshot_released=0
+run_dir=""
+active_container=""
+archive_container_name="bellotreno-statistics-archive-daily"
+analytics_container_name="bellotreno-statistics-analytics-daily"
+
+log() {
+  printf '[bellotreno-statistics-daily] %s\n' "$*" >&2
+}
+
+die() {
+  log "failed: $*"
+  return 1
+}
+
+finish() {
+  local exit_code=$?
+  trap - EXIT
+  if [[ -n "$active_container" ]]; then
+    log "stopping unfinished one-shot container $active_container"
+    docker rm -f "$active_container" >/dev/null 2>&1 || true
+    active_container=""
+  fi
+  if (( exit_code != 0 )); then
+    if [[ -n "$snapshot_id" && "$snapshot_released" -eq 0 ]]; then
+      log "snapshot $snapshot_id was retained; inspect and release only after the archive is verified"
+    fi
+    [[ -n "$run_dir" ]] && log "diagnostics: $run_dir"
+  fi
+  exit "$exit_code"
+}
+trap finish EXIT
+trap 'exit 143' TERM
+trap 'exit 130' INT
+
+usage() {
+  cat <<'EOF'
+Usage: bellotreno-statistics-daily [run|preflight]
+
+  run        create one snapshot, archive and verify it, release it, then
+             atomically rebuild the analytics read model (default)
+  preflight  verify host prerequisites, pinned images, collector health,
+             snapshot handoff state, and the latest archive without writing data
+EOF
+}
+
+case "$MODE" in
+  run | preflight) ;;
+  -h | --help)
+    usage
+    exit 0
+    ;;
+  *)
+    usage >&2
+    die "unsupported mode $MODE"
+    ;;
+esac
+
+for command in date docker flock python3; do
+  command -v "$command" >/dev/null 2>&1 || die "required command is missing: $command"
+done
+
+[[ "$COLLECTOR_WAIT_SECONDS" =~ ^[0-9]+$ ]] ||
+  die "BELLOTRENO_COLLECTOR_WAIT_SECONDS must be a non-negative integer"
+
+mkdir -p "$STATE_DIR/runs"
+exec 9>"$STATE_DIR/pipeline.lock"
+if ! flock -n 9; then
+  log "another daily statistics pipeline already holds $STATE_DIR/pipeline.lock"
+  exit 75
+fi
+
+[[ -d "$COMPOSE_DIR" ]] || die "Compose directory does not exist: $COMPOSE_DIR"
+cd "$COMPOSE_DIR"
+[[ -f docker-compose.yml ]] || die "docker-compose.yml is missing from $COMPOSE_DIR"
+[[ -f .env ]] || die ".env is missing from $COMPOSE_DIR"
+
+for directory in statistics-archive statistics-analytics statistics-snapshot-handoff; do
+  [[ -d "$directory" ]] || die "required directory is missing: $COMPOSE_DIR/$directory"
+done
+
+run_tag="$(date -u +%Y%m%dT%H%M%SZ)"
+run_dir="$STATE_DIR/runs/$run_tag"
+mkdir "$run_dir"
+
+resolve_pinned_images() {
+  local configured_images running_statistics_image_id statistics_image_id
+  configured_images="$(
+    docker compose --profile archive --profile analytics config --images
+  )"
+
+  mapfile -t statistics_images < <(
+    printf '%s\n' "$configured_images" |
+      grep -E '^ghcr\.io/06leong/bellotreno-statistics:sha-[0-9a-f]{40}$' |
+      sort -u
+  )
+  mapfile -t archive_images < <(
+    printf '%s\n' "$configured_images" |
+      grep -E '^ghcr\.io/06leong/bellotreno-statistics-archive:sha-[0-9a-f]{40}$' |
+      sort -u
+  )
+
+  (( ${#statistics_images[@]} == 1 )) ||
+    die "expected exactly one full-SHA statistics image"
+  (( ${#archive_images[@]} == 1 )) ||
+    die "expected exactly one full-SHA archive/analytics image"
+
+  statistics_image="${statistics_images[0]}"
+  archive_image="${archive_images[0]}"
+  statistics_revision="$(
+    docker image inspect "$statistics_image" \
+      --format '{{index .Config.Labels "org.opencontainers.image.revision"}}'
+  )"
+  archive_revision="$(
+    docker image inspect "$archive_image" \
+      --format '{{index .Config.Labels "org.opencontainers.image.revision"}}'
+  )"
+
+  [[ -n "$statistics_revision" ]] || die "statistics image has no revision label"
+  [[ "$statistics_revision" == "$archive_revision" ]] ||
+    die "statistics and archive image revisions differ"
+  [[ "$statistics_image" == "ghcr.io/06leong/bellotreno-statistics:sha-$statistics_revision" ]] ||
+    die "statistics image tag does not match its full revision"
+  [[ "$archive_image" == "ghcr.io/06leong/bellotreno-statistics-archive:sha-$archive_revision" ]] ||
+    die "archive image tag does not match its full revision"
+
+  statistics_image_id="$(
+    docker image inspect "$statistics_image" --format '{{.Id}}'
+  )"
+  running_statistics_image_id="$(
+    docker inspect bellotreno-statistics --format '{{.Image}}'
+  )"
+  [[ -n "$statistics_image_id" && "$running_statistics_image_id" == "$statistics_image_id" ]] ||
+    die "running statistics container does not use the configured pinned image"
+
+  log "using pinned statistics/archive revision $statistics_revision"
+}
+
+validate_analytics_resources() {
+  docker compose --profile analytics config --format json \
+    >"$run_dir/compose-config.json"
+  python3 - "$run_dir/compose-config.json" <<'PY'
+import json
+import re
+import sys
+
+
+def byte_size(value):
+    if isinstance(value, int):
+        return value
+    if not isinstance(value, str):
+        raise SystemExit("analytics container memory limit is missing")
+    text = value.strip().lower()
+    if text.isdigit():
+        return int(text)
+    match = re.fullmatch(r"([0-9]+(?:\.[0-9]+)?)\s*([kmgt])(?:i?b)?", text)
+    if not match:
+        raise SystemExit(f"unsupported analytics memory limit: {value}")
+    powers = {"k": 1, "m": 2, "g": 3, "t": 4}
+    return int(float(match.group(1)) * 1024 ** powers[match.group(2)])
+
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    value = json.load(handle)
+try:
+    service = value["services"]["bellotreno-statistics-analytics"]
+except (KeyError, TypeError):
+    raise SystemExit("analytics Compose service is missing")
+
+if byte_size(service.get("mem_limit")) < 800 * 1024**2:
+    raise SystemExit("analytics container memory limit must be at least 800 MiB")
+if byte_size(service.get("memswap_limit")) < 2 * 1024**3:
+    raise SystemExit("analytics memory-plus-swap limit must be at least 2 GiB")
+
+environment = service.get("environment") or {}
+if isinstance(environment, list):
+    environment = dict(
+        item.split("=", 1) for item in environment if isinstance(item, str) and "=" in item
+    )
+if not isinstance(environment, dict):
+    raise SystemExit("analytics Compose environment is invalid")
+if str(environment.get("ANALYTICS_DUCKDB_MEMORY_LIMIT", "")).upper() != "256MB":
+    raise SystemExit("analytics DuckDB memory limit must be 256MB on this VPS")
+if str(environment.get("ANALYTICS_DUCKDB_THREADS", "")) != "1":
+    raise SystemExit("analytics DuckDB thread count must be 1 on this VPS")
+PY
+}
+
+run_archive_job() {
+  active_container="$archive_container_name"
+  docker compose --profile archive run --rm \
+    --name "$active_container" \
+    bellotreno-statistics-archive "$@"
+  active_container=""
+}
+
+run_analytics_job() {
+  active_container="$analytics_container_name"
+  docker compose --profile analytics run --rm \
+    --name "$active_container" \
+    bellotreno-statistics-analytics "$@"
+  active_container=""
+}
+
+collector_state() {
+  docker compose exec -T bellotreno-statistics python -c \
+    'import json,urllib.request; d=json.load(urllib.request.urlopen("http://127.0.0.1:8081/health",timeout=15)); assert d.get("ok") is True; active=d.get("collectorActive"); assert isinstance(active,bool); status=(d.get("lastCollectorRun") or {}).get("status") or "unknown"; print(str(int(active))+"\t"+status)'
+}
+
+wait_for_collector_idle() {
+  local active deadline state status
+  deadline=$((SECONDS + COLLECTOR_WAIT_SECONDS))
+  while true; do
+    if ! state="$(collector_state)"; then
+      die "statistics health endpoint is unavailable"
+    fi
+    IFS=$'\t' read -r active status <<<"$state"
+    [[ "$active" == "0" || "$active" == "1" ]] ||
+      die "statistics health endpoint returned an invalid collector-active state"
+
+    if [[ "$active" == "1" ]]; then
+      if (( SECONDS >= deadline )); then
+        die "collector remained active for more than $COLLECTOR_WAIT_SECONDS seconds"
+      fi
+      log "collector is active (latest status: $status); waiting 60 seconds"
+      sleep 60
+      continue
+    fi
+
+    case "$status" in
+      success | failed | skipped)
+        log "collector is idle (last status: $status)"
+        return 0
+        ;;
+      running)
+        die "collector reports a stale running row while its live lock is idle"
+        ;;
+      *)
+        die "unexpected collector status: $status"
+        ;;
+    esac
+  done
+}
+
+validate_snapshot_json() {
+  python3 - "$1" <<'PY'
+import json
+import re
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    value = json.load(handle)
+if value.get("mode") != "prepare" or value.get("status") != "success":
+    raise SystemExit("snapshot command did not report success")
+snapshot_id = value.get("snapshotId")
+if not isinstance(snapshot_id, str) or not re.fullmatch(
+    r"[0-9]{8}T[0-9]{6}Z-[0-9a-f]{12}", snapshot_id
+):
+    raise SystemExit("snapshot command returned an invalid snapshot ID")
+print(snapshot_id)
+PY
+}
+
+prepared_snapshot_id() {
+  python3 - "$1" <<'PY'
+import json
+import re
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    value = json.load(handle)
+if value.get("mode") != "list" or value.get("status") != "success":
+    raise SystemExit("snapshot list did not report success")
+snapshots = value.get("snapshots")
+if not isinstance(snapshots, list):
+    raise SystemExit("snapshot list returned an invalid payload")
+if len(snapshots) > 1:
+    raise SystemExit("more than one prepared snapshot requires operator review")
+if not snapshots:
+    print("")
+    raise SystemExit(0)
+snapshot_id = snapshots[0].get("snapshotId")
+if not isinstance(snapshot_id, str) or not re.fullmatch(
+    r"[0-9]{8}T[0-9]{6}Z-[0-9a-f]{12}", snapshot_id
+):
+    raise SystemExit("snapshot list returned an invalid snapshot ID")
+print(snapshot_id)
+PY
+}
+
+validate_plan_json() {
+  python3 - "$1" "$2" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    value = json.load(handle)
+if value.get("mode") != "plan":
+    raise SystemExit("archive plan returned an unexpected mode")
+if value.get("snapshotId") != sys.argv[2]:
+    raise SystemExit("archive plan used a different snapshot")
+if value.get("capacityOk") is not True:
+    raise SystemExit("archive plan capacity gate did not pass")
+print(
+    "plan pendingPartitions={pending} continuityOk={continuity} historicalGaps={gaps}".format(
+        pending=value.get("pendingPartitions"),
+        continuity=value.get("continuityOk"),
+        gaps=value.get("historicalPartitionGapCount"),
+    )
+)
+PY
+}
+
+validate_archive_run_json() {
+  python3 - "$1" "$2" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    value = json.load(handle)
+if value.get("mode") != "run" or value.get("status") not in {"success", "noop"}:
+    raise SystemExit("archive run did not report success or noop")
+if value.get("snapshotId") != sys.argv[2]:
+    raise SystemExit("archive run used a different snapshot")
+print(
+    "archive status={status} publishedPartitions={partitions} manifest={manifest}".format(
+        status=value.get("status"),
+        partitions=value.get("publishedPartitions"),
+        manifest=value.get("manifest"),
+    )
+)
+PY
+}
+
+validate_archive_verify_json() {
+  python3 - "$1" "${2:-}" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    value = json.load(handle)
+if value.get("mode") != "verify" or value.get("status") != "success":
+    raise SystemExit("archive verification did not report success")
+if not isinstance(value.get("verifiedManifests"), int) or value["verifiedManifests"] < 1:
+    raise SystemExit("archive verification did not verify a manifest")
+if sys.argv[2]:
+    with open(sys.argv[2], encoding="utf-8") as handle:
+        archive_run = json.load(handle)
+    expected = archive_run.get("manifest")
+    manifests = value.get("manifests")
+    if expected is not None:
+        if not isinstance(manifests, list) or len(manifests) != 1:
+            raise SystemExit("daily verification did not select exactly one manifest")
+        if manifests[0].get("manifest") != expected:
+            raise SystemExit("daily verification did not select the newly published manifest")
+print(
+    "verify manifests={manifests} partitions={partitions} bytes={bytes}".format(
+        manifests=value.get("verifiedManifests"),
+        partitions=value.get("verifiedPartitions"),
+        bytes=value.get("verifiedBytes"),
+    )
+)
+PY
+}
+
+resolve_pinned_images
+validate_analytics_resources
+wait_for_collector_idle
+
+docker compose exec -T bellotreno-statistics \
+  python snapshot_statistics.py list >"$run_dir/snapshot-list.json"
+snapshot_id="$(prepared_snapshot_id "$run_dir/snapshot-list.json")"
+
+if [[ "$MODE" == "preflight" ]]; then
+  if [[ -n "$snapshot_id" ]]; then
+    log "preflight found resumable snapshot $snapshot_id"
+  else
+    log "preflight found an empty snapshot handoff"
+  fi
+  run_archive_job verify >"$run_dir/archive-verify.json"
+  validate_archive_verify_json "$run_dir/archive-verify.json"
+  log "preflight completed successfully"
+  exit 0
+fi
+
+if [[ -n "$snapshot_id" ]]; then
+  log "resuming prepared snapshot $snapshot_id"
+else
+  log "creating a consistent SQLite handoff snapshot"
+  docker compose exec -T bellotreno-statistics \
+    python snapshot_statistics.py create >"$run_dir/snapshot-create.json"
+  snapshot_id="$(validate_snapshot_json "$run_dir/snapshot-create.json")"
+  log "created snapshot $snapshot_id"
+fi
+
+log "planning archive from snapshot $snapshot_id"
+run_archive_job plan --snapshot-id "$snapshot_id" \
+  >"$run_dir/archive-plan.json"
+validate_plan_json "$run_dir/archive-plan.json" "$snapshot_id"
+
+log "publishing immutable Parquet partitions"
+run_archive_job run --snapshot-id "$snapshot_id" \
+  >"$run_dir/archive-run.json"
+validate_archive_run_json "$run_dir/archive-run.json" "$snapshot_id"
+
+log "verifying the newest completed archive manifest"
+run_archive_job verify \
+  >"$run_dir/archive-verify.json"
+validate_archive_verify_json "$run_dir/archive-verify.json" "$run_dir/archive-run.json"
+
+log "releasing verified snapshot $snapshot_id"
+docker compose exec -T bellotreno-statistics \
+  python snapshot_statistics.py release --snapshot-id "$snapshot_id" \
+  >"$run_dir/snapshot-release.json"
+snapshot_released=1
+python3 - "$run_dir/snapshot-release.json" "$snapshot_id" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    value = json.load(handle)
+if value.get("mode") != "release" or value.get("status") != "success":
+    raise SystemExit("snapshot release did not report success")
+if value.get("snapshotId") != sys.argv[2]:
+    raise SystemExit("snapshot release returned unexpected output")
+PY
+
+wait_for_collector_idle
+log "rebuilding the disposable analytics read model"
+run_analytics_job build >"$run_dir/analytics-build.json"
+
+build_id="$(python3 - "$run_dir/analytics-build.json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    value = json.load(handle)
+if value.get("mode") != "build" or value.get("status") != "success":
+    raise SystemExit("analytics build did not report success")
+build_id = value.get("buildId")
+if not isinstance(build_id, str) or not build_id:
+    raise SystemExit("analytics build returned no build ID")
+print(build_id)
+PY
+)"
+
+visible_build_id="$(
+  docker compose exec -T bellotreno-statistics python -c \
+    'import json,urllib.request; d=json.load(urllib.request.urlopen("http://127.0.0.1:8081/health",timeout=15)); print((d.get("analytics") or {}).get("buildId") or "")'
+)"
+[[ "$visible_build_id" == "$build_id" ]] ||
+  die "statistics API did not expose analytics build $build_id"
+
+python3 - "$run_dir/summary.json.partial" "$run_tag" "$snapshot_id" "$build_id" <<'PY'
+import json
+import sys
+
+payload = {
+    "status": "success",
+    "runTag": sys.argv[2],
+    "snapshotId": sys.argv[3],
+    "analyticsBuildId": sys.argv[4],
+}
+with open(sys.argv[1], "w", encoding="utf-8", newline="\n") as handle:
+    json.dump(payload, handle, ensure_ascii=False, indent=2)
+    handle.write("\n")
+PY
+mv "$run_dir/summary.json.partial" "$run_dir/summary.json"
+ln -sfn "$run_dir" "$STATE_DIR/latest-success"
+log "completed successfully with analytics build $build_id"

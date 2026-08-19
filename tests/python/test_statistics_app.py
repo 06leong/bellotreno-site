@@ -211,6 +211,14 @@ class StatisticsAppIntegrationTest(unittest.TestCase):
         APP.today_rome = self.original_today_rome
         APP.request.args = self.original_request_args
 
+    def test_health_reports_the_live_collector_lock(self):
+        self.assertFalse(APP.health()["collectorActive"])
+        self.assertTrue(APP.collector_lock.acquire(blocking=False))
+        try:
+            self.assertTrue(APP.health()["collectorActive"])
+        finally:
+            APP.collector_lock.release()
+
     def test_analytics_csv_cells_neutralize_spreadsheet_formulas(self):
         self.assertEqual(APP.analytics_csv_cell("=HYPERLINK('bad')"), "'=HYPERLINK('bad')")
         self.assertEqual(APP.analytics_csv_cell("@SUM(1,1)"), "'@SUM(1,1)")
