@@ -97,6 +97,12 @@ jobs:
             --entrypoint python bellotreno-statistics-archive:ci \
             -c 'import duckdb,os; from statistics_snapshot import assert_prepared_snapshot_unchanged,load_prepared_snapshot,snapshot_consumer_lock; lock=snapshot_consumer_lock("/snapshot-handoff"); lock.__enter__(); s=load_prepared_snapshot("/snapshot-handoff",os.environ["SNAPSHOT_ID"]); p=s.database_path.as_posix(); c=duckdb.connect(); c.execute("LOAD sqlite"); c.execute("ATTACH '\''"+p+"'\'' AS source (TYPE sqlite, READ_ONLY)"); assert c.execute("SELECT value FROM source.sample").fetchone()[0] == 42; c.execute("DETACH source"); c.close(); assert_prepared_snapshot_unchanged(s); lock.__exit__(None,None,None); print("cross_container_snapshot_ok",s.snapshot_id)'
 
+      - name: Validate daily statistics automation
+        shell: bash
+        run: |
+          bash -n rfi-proxy/ops/bellotreno-statistics-daily
+          bash tests/ops/test-statistics-daily.sh
+
       - name: Build frontend
         run: npm run build
 

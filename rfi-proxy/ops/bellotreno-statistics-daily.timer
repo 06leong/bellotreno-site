@@ -1,0 +1,12 @@
+[Unit]
+Description=Run BelloTreno statistics archive and analytics daily
+
+[Timer]
+OnCalendar=*-*-* 03:20:00 Europe/Rome
+Persistent=true
+AccuracySec=1min
+RandomizedDelaySec=0
+Unit=bellotreno-statistics-daily.service
+
+[Install]
+WantedBy=timers.target

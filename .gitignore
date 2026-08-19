@@ -20,6 +20,7 @@ __pycache__/
 rfi-proxy/statistics-data/
 rfi-proxy/statistics-snapshot-handoff/
 rfi-proxy/statistics-archive/
+rfi-proxy/statistics-analytics/
 
 # environment variables
 .env*

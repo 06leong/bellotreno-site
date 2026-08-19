@@ -86,10 +86,14 @@ STATISTICS_ARCHIVE_DUCKDB_MAX_TEMP_DIRECTORY_SIZE=4GB
 STATISTICS_ARCHIVE_INCLUDE_RAW_PAYLOADS=false
 
 # Optional professional analytics tuning
-STATISTICS_ANALYTICS_DUCKDB_MEMORY_LIMIT=384MB
+STATISTICS_ANALYTICS_DUCKDB_MEMORY_LIMIT=256MB
 STATISTICS_ANALYTICS_DUCKDB_THREADS=1
 STATISTICS_ANALYTICS_HISTORY_DAYS=730
 STATISTICS_ANALYTICS_MIN_RANKING_SAMPLE=100
+# Docker treats this as an 800-MiB RAM ceiling and a 2-GiB combined
+# RAM-plus-swap ceiling, not 2 GiB of additional swap.
+STATISTICS_ANALYTICS_CONTAINER_MEMORY_LIMIT=800m
+STATISTICS_ANALYTICS_CONTAINER_MEMORY_SWAP_LIMIT=2g
 ```
 
 Do not commit `.env`. Use `.env.example` as the template.
@@ -350,6 +354,150 @@ backup. The immutable Parquet partitions and completed manifests remain the
 source of truth. Rebuild analytics after each successful Parquet run; a failed
 analytics build must not block snapshot release once the Parquet archive itself
 has passed the applicable local or remote verification policy.
+
+### Daily archive and analytics automation
+
+After one manual snapshot, archive, verification, release, and analytics build
+has succeeded on the production VPS, install the repository-owned host script
+and systemd units from `rfi-proxy/ops/`. The timer runs at 03:20
+`Europe/Rome`, after the archive ready-hour boundary, and remains daylight-
+saving-time aware without scheduling inside the repeated or missing 02:00 DST
+hour. A missed run is started after the next boot because the timer is
+persistent.
+
+The script preserves the same safety boundaries as the manual runbook:
+
+- one host `flock` prevents manual/timer overlap through this entry point;
+- the collector must be idle before snapshot and analytics work begins;
+- one valid snapshot retained by an interrupted run is resumed by exact ID;
+  multiple, stale, malformed, or unreadable snapshots fail closed for review;
+- collector and archive images must use the same full-SHA revision;
+- the running collector must use that configured image, and its health payload
+  must expose the live collector-lock state from the same release;
+- `plan` capacity must pass before export;
+- the newly completed manifest is verified before the exact snapshot is
+  released; `verify --all` remains the periodic/manual deep audit;
+- an archive failure retains the exact snapshot and diagnostics instead of
+  guessing that partial output is safe;
+- analytics runs with an 800-MiB memory ceiling, 2-GiB memory-plus-swap limit,
+  one CPU, and a 256-MiB DuckDB limit validated on the 1-GiB production VPS;
+- analytics publishes atomically, so a failed build leaves the previous read
+  model available; a successful build ID must also be visible through the
+  always-on service health endpoint.
+
+Install after the files are merged to `main`:
+
+The statistics and archive images from that same merged commit must be pinned,
+pulled, and the always-on statistics container safely recreated before
+`preflight`; an older collector does not expose the `collectorActive` health
+field required to avoid competing with a real in-progress collection.
+
+```bash
+(
+set -Eeuo pipefail
+cd /home/docker_apps/rfi-proxy
+
+AUTOMATION_REVISION='<full-40-character-merged-commit>'
+[[ "$AUTOMATION_REVISION" =~ ^[0-9a-f]{40}$ ]]
+BASE_URL="https://raw.githubusercontent.com/06leong/bellotreno-site/$AUTOMATION_REVISION/rfi-proxy"
+TMP_DIR=$(mktemp -d)
+trap 'rm -rf -- "$TMP_DIR"' EXIT
+
+curl -fsSL "$BASE_URL/docker-compose.yml" \
+  -o "$TMP_DIR/docker-compose.yml"
+curl -fsSL "$BASE_URL/ops/bellotreno-statistics-daily" \
+  -o "$TMP_DIR/bellotreno-statistics-daily"
+curl -fsSL "$BASE_URL/ops/bellotreno-statistics-daily.service" \
+  -o "$TMP_DIR/bellotreno-statistics-daily.service"
+curl -fsSL "$BASE_URL/ops/bellotreno-statistics-daily.timer" \
+  -o "$TMP_DIR/bellotreno-statistics-daily.timer"
+
+DEPLOY_TAG=$(date -u +%Y%m%dT%H%M%SZ)
+cp -a .env ".env.pre-daily-$DEPLOY_TAG"
+if grep -q '^STATISTICS_IMAGE_TAG=' .env; then
+  sed -i \
+    "s/^STATISTICS_IMAGE_TAG=.*/STATISTICS_IMAGE_TAG=sha-$AUTOMATION_REVISION/" \
+    .env
+else
+  printf '\nSTATISTICS_IMAGE_TAG=sha-%s\n' "$AUTOMATION_REVISION" >> .env
+fi
+
+docker compose \
+  --project-directory "$PWD" \
+  --env-file "$PWD/.env" \
+  -f "$TMP_DIR/docker-compose.yml" \
+  --profile archive \
+  --profile analytics \
+  config --quiet
+
+cp -a docker-compose.yml \
+  "docker-compose.yml.pre-daily-$(date -u +%Y%m%dT%H%M%SZ)"
+install -o root -g root -m 0644 \
+  "$TMP_DIR/docker-compose.yml" docker-compose.yml
+install -o root -g root -m 0755 \
+  "$TMP_DIR/bellotreno-statistics-daily" \
+  /usr/local/sbin/bellotreno-statistics-daily
+install -o root -g root -m 0644 \
+  "$TMP_DIR/bellotreno-statistics-daily.service" \
+  /etc/systemd/system/bellotreno-statistics-daily.service
+install -o root -g root -m 0644 \
+  "$TMP_DIR/bellotreno-statistics-daily.timer" \
+  /etc/systemd/system/bellotreno-statistics-daily.timer
+
+docker compose --profile archive --profile analytics pull \
+  bellotreno-statistics \
+  bellotreno-statistics-archive
+
+# Do not interrupt an active collection. The old image may not yet expose
+# collectorActive, so use its persisted run state and require five minutes
+# before the next scheduled slot before recreating it.
+until docker compose exec -T bellotreno-statistics python -c \
+  'import json,os,sqlite3,urllib.request; p=os.environ["SQLITE_PATH"]; c=sqlite3.connect("file:"+p+"?mode=ro",uri=True,timeout=30); active=c.execute("SELECT COUNT(*) FROM collector_runs WHERE status='"'"'running'"'"' AND finished_at IS NULL").fetchone()[0]; c.close(); d=json.load(urllib.request.urlopen("http://127.0.0.1:8081/health",timeout=15)); from datetime import datetime,timezone; remaining=(datetime.fromisoformat(d["nextScheduledAt"].replace("Z","+00:00"))-datetime.now(timezone.utc)).total_seconds(); print("open_runs=",active,"seconds_to_next=",round(remaining)); raise SystemExit(0 if active==0 and remaining>=300 else 1)'
+do
+  sleep 60
+done
+
+docker compose up -d --no-deps --force-recreate bellotreno-statistics
+sleep 8
+docker compose exec -T bellotreno-statistics python -c \
+  'import json,urllib.request; d=json.load(urllib.request.urlopen("http://127.0.0.1:8081/health",timeout=15)); assert d.get("ok") is True and isinstance(d.get("collectorActive"),bool); print(json.dumps({"ok":d["ok"],"collectorActive":d["collectorActive"],"next":d.get("nextScheduledAt")},ensure_ascii=False))'
+
+/usr/local/sbin/bellotreno-statistics-daily preflight
+systemd-analyze verify \
+  /etc/systemd/system/bellotreno-statistics-daily.service \
+  /etc/systemd/system/bellotreno-statistics-daily.timer
+systemd-analyze calendar '*-*-* 03:20:00 Europe/Rome'
+
+systemctl daemon-reload
+systemctl enable --now bellotreno-statistics-daily.timer
+systemctl list-timers bellotreno-statistics-daily.timer --all
+)
+```
+
+Do not start the oneshot service merely to test its installation: `preflight`
+is the read-only installation check, while starting the service performs a real
+snapshot and archive cycle. Because `Persistent=true`, first activation after
+the day's 03:20 occurrence may immediately run one safe catch-up cycle. Watch
+the service journal when enabling the timer; the already completed manual run
+means this catch-up is unnecessary but harmless (`run` may publish no new
+partitions and analytics remains atomically replaceable).
+
+Inspect timer state and the latest run without opening the database:
+
+```bash
+systemctl status bellotreno-statistics-daily.timer --no-pager
+systemctl status bellotreno-statistics-daily.service --no-pager
+journalctl -u bellotreno-statistics-daily.service -n 200 --no-pager
+cat /var/lib/bellotreno-statistics-daily/latest-success/summary.json
+```
+
+If the service fails before archive verification, do not delete the retained
+handoff snapshot. Read the journal and the exact JSON files under the reported
+`/var/lib/bellotreno-statistics-daily/runs/<UTC-run-tag>/` directory. After the
+cause is understood, either resume the manual runbook with that exact snapshot
+ID or explicitly release it. If only analytics fails, the snapshot has already
+been released, the Parquet archive remains valid, and the previous
+`analytics.db` continues serving requests.
 
 ### Off-VPS copy through Cloudreve
 

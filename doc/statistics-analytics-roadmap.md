@@ -44,6 +44,15 @@ The foundation is now usable rather than hypothetical:
   provider detail per service when explicitly enabled. It is not a complete
   request log and remains disabled until local or off-VPS long-term capacity is
   intentionally allocated.
+- the fourth production archive completed on 19 August with 320 verified
+  partitions and 60,636,006 bytes. The derived read model was rebuilt to
+  `asOfDate=2026-08-11` as build `20260819T132622Z-e2b54354`; this expected
+  eight-day distance reflects the seven-day service-stabilization window, not
+  a failed refresh;
+- a repository-owned daily systemd workflow is ready for deployment. It runs
+  at 03:20 Europe/Rome, resumes an exact retained snapshot, verifies Parquet
+  before release, then atomically rebuilds analytics with the memory limits
+  proven on the production VPS.
 
 The first archive is evidence that normalized Parquet is compact, but it is not
 a fair 9.5-GiB-to-35-MiB compression comparison. The live SQLite file contains
@@ -71,6 +80,7 @@ status and acceptance evidence in the same pull request that changes a stage.
 | Immutable Parquet archive | Completed | Completed manifests are additive, `verify --all` passes, and normalized grains remain distinct. |
 | Professional semantic layer | Completed | `quality_day`, stabilized service/stop facts, daily metrics, and exact 7/28/90-day windows are built from completed manifests into an atomic derived SQLite model. |
 | Analytics query API | Completed | Versioned metadata, overview, ranking, outlier, and formula-safe CSV endpoints read only the derived analytics database and preserve the last good model when a rebuild fails. |
+| Daily archive and analytics refresh | Ready for deployment | The 03:20 Europe/Rome systemd run completes snapshot, capacity gate, incremental archive, latest-manifest verification, exact release, and atomic analytics rebuild; first unattended production success is the remaining acceptance evidence. |
 | Public professional dashboard | Completed | Live remains the default; historical performance is lazy-loaded, mobile-first, multilingual, accessible, source-backed, and visibly qualified. |
 | Professional dashboard explorer | In progress | The v2 read model and `/v1/analytics/explore` power service-mix, rhythm, station, route, and exact-service views with the same evidence rules on desktop and mobile. |
 | Private analyst workbench | Deferred | A dedicated read model and authenticated workbench are deployed without access to the live collector database. |

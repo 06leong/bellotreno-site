@@ -1989,6 +1989,7 @@ def health() -> Response:
     return jsonify({
         "ok": True,
         "collectorEnabled": COLLECTOR_ENABLED,
+        "collectorActive": collector_lock.locked(),
         "cadenceMinutes": COLLECTOR_INTERVAL_MINUTES,
         "scheduleOffsetMinutes": COLLECTOR_SCHEDULE_OFFSET_MINUTES,
         "finalizeTime": COLLECTOR_FINALIZE_TIME,
