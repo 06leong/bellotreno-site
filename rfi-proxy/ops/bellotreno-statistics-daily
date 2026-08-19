@@ -149,9 +149,7 @@ resolve_pinned_images() {
 }
 
 validate_analytics_resources() {
-  docker compose --profile analytics config --format json \
-    >"$run_dir/compose-config.json"
-  python3 - "$run_dir/compose-config.json" <<'PY'
+  docker compose --profile analytics config --format json | python3 -c '
 import json
 import re
 import sys
@@ -172,17 +170,16 @@ def byte_size(value):
     return int(float(match.group(1)) * 1024 ** powers[match.group(2)])
 
 
-with open(sys.argv[1], encoding="utf-8") as handle:
-    value = json.load(handle)
+value = json.load(sys.stdin)
 try:
     service = value["services"]["bellotreno-statistics-analytics"]
 except (KeyError, TypeError):
     raise SystemExit("analytics Compose service is missing")
 
-if byte_size(service.get("mem_limit")) < 800 * 1024**2:
-    raise SystemExit("analytics container memory limit must be at least 800 MiB")
-if byte_size(service.get("memswap_limit")) < 2 * 1024**3:
-    raise SystemExit("analytics memory-plus-swap limit must be at least 2 GiB")
+if byte_size(service.get("mem_limit")) != 800 * 1024**2:
+    raise SystemExit("analytics container memory limit must be exactly 800 MiB on this VPS")
+if byte_size(service.get("memswap_limit")) != 2 * 1024**3:
+    raise SystemExit("analytics memory-plus-swap limit must be exactly 2 GiB on this VPS")
 
 environment = service.get("environment") or {}
 if isinstance(environment, list):
@@ -195,7 +192,7 @@ if str(environment.get("ANALYTICS_DUCKDB_MEMORY_LIMIT", "")).upper() != "256MB":
     raise SystemExit("analytics DuckDB memory limit must be 256MB on this VPS")
 if str(environment.get("ANALYTICS_DUCKDB_THREADS", "")) != "1":
     raise SystemExit("analytics DuckDB thread count must be 1 on this VPS")
-PY
+'
 }
 
 run_archive_job() {
