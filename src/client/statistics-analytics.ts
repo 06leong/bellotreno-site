@@ -256,6 +256,10 @@ import {
         return Number.isNaN(parsed.getTime()) ? value : new Intl.DateTimeFormat(locale(), { dateStyle: "medium", timeStyle: "short", timeZone: "Europe/Rome" }).format(parsed);
     }
 
+    function displayOptionalTimestamp(value: string | null | undefined): string {
+        return value ? displayTimestamp(value) : "--";
+    }
+
     function operatorLabel(value: string | null, fallback?: string | null): string {
         const label = statisticsOperatorLabel(value, fallback);
         return label || tr("statistics_unknown", "Unknown");
@@ -741,6 +745,7 @@ import {
 
     function renderSpotlight(explore: AnalyticsExplore): void {
         const service = explore.services.spotlight.service;
+        const stops = explore.services.spotlight.stops;
         const title = $("statisticsSpotlightTitle");
         const observations = $("statisticsSpotlightObservations");
         const facts = $("statisticsSpotlightFacts");
@@ -753,11 +758,21 @@ import {
         if (title) title.textContent = `${service.category ? `${service.category} ` : ""}${service.train_number} · ${service.origin ?? "—"} → ${service.destination ?? "—"}`;
         if (observations) observations.textContent = `${formatAnalyticsNumber(service.observation_count, locale())} ${tr("statistics_observations", "observations")}`;
         if (facts) {
+            const originStop = stops[0];
+            const destinationStop = stops.at(-1);
+            const departureLabel = tr("departure", "Departure");
+            const arrivalLabel = tr("arrival", "Arrival");
+            const scheduledLabel = tr("scheduled", "Scheduled");
+            const actualLabel = tr("actual", "Actual");
             const values = [
                 [tr("statistics_service_date", "Service date"), displayDate(service.service_date)],
                 [tr("statistics_operator", "Operator"), operatorLabel(service.operator)],
                 [tr("statistics_arrival_delay", "Arrival delay"), service.cancelled ? tr("statistics_status_cancelled", "Cancelled") : `${formatAnalyticsNumber(service.final_arrival_delay, locale(), 0)} ${tr("statistics_minutes_short", "min")}`],
-                [tr("statistics_station_count", "Stops"), formatAnalyticsNumber(explore.services.spotlight.stops.length, locale())]
+                [tr("statistics_station_count", "Stops"), formatAnalyticsNumber(stops.length, locale())],
+                [`${departureLabel} · ${scheduledLabel}`, displayOptionalTimestamp(originStop?.departure_expected ?? service.scheduled_departure)],
+                [`${departureLabel} · ${actualLabel}`, displayOptionalTimestamp(originStop?.departure_actual)],
+                [`${arrivalLabel} · ${scheduledLabel}`, displayOptionalTimestamp(destinationStop?.arrival_expected ?? service.scheduled_arrival)],
+                [`${arrivalLabel} · ${actualLabel}`, displayOptionalTimestamp(destinationStop?.arrival_actual)]
             ];
             facts.replaceChildren(...values.map(([label, value]) => {
                 const item = element("div");
@@ -791,14 +806,45 @@ import {
     }
 
     function renderExploreTables(explore: AnalyticsExplore): void {
+        const matrixOperatorOrder = ["1", "4", "2", "63", "18", "910", "64"];
+        const matrixCategoryOrder = ["REG", "MET", "FR", "FA", "FB", "IC", "ICN", "EC", "EN", "EXP", "NCL", "unknown"];
+        const matrixRows = explore.composition.matrix
+            .filter((item) => matrixOperatorOrder.includes(item.operator) && matrixCategoryOrder.includes(item.category))
+            .sort((left, right) => {
+                const operatorDifference = matrixOperatorOrder.indexOf(left.operator) - matrixOperatorOrder.indexOf(right.operator);
+                return operatorDifference || matrixCategoryOrder.indexOf(left.category) - matrixCategoryOrder.indexOf(right.category);
+            });
         renderDataTable("statisticsOperatorMixTable", [tr("statistics_operator", "Operator"), tr("statistics_observed_services", "Observed services"), tr("statistics_share", "Share")], explore.composition.operators.map((item) => [operatorLabel(item.key, item.label), formatAnalyticsNumber(item.observedServices, locale()), formatAnalyticsPercent(item.sharePercent, locale())]));
         renderDataTable("statisticsCategoryMixTable", [tr("statistics_category", "Category"), tr("statistics_observed_services", "Observed services"), tr("statistics_share", "Share")], explore.composition.categories.map((item) => [item.label, formatAnalyticsNumber(item.observedServices, locale()), formatAnalyticsPercent(item.sharePercent, locale())]));
-        renderDataTable("statisticsOperatorCategoryTable", [tr("statistics_operator", "Operator"), tr("statistics_category", "Category"), tr("statistics_observed_services", "Observed services")], explore.composition.matrix.map((item) => [operatorLabel(item.operator), item.category, formatAnalyticsNumber(item.observedServices, locale())]));
+        renderDataTable("statisticsOperatorCategoryTable", [tr("statistics_operator", "Operator"), tr("statistics_category", "Category"), tr("statistics_observed_services", "Observed services")], matrixRows.map((item) => [operatorLabel(item.operator), item.category === "unknown" ? "UNKNOWN" : item.category, formatAnalyticsNumber(item.observedServices, locale())]));
         renderDataTable("statisticsNetworkRhythmTable", [tr("statistics_weekday", "Weekday"), tr("statistics_hour", "Hour"), tr("statistics_observed_services", "Observed services")], explore.rhythm.map((item) => [chartLabels().weekdays[item.weekday] ?? String(item.weekday), `${String(item.hour).padStart(2, "0")}:00`, formatAnalyticsNumber(item.observedServices, locale())]));
         renderDataTable("statisticsCategoryRhythmTable", [tr("statistics_category", "Category"), tr("statistics_hour", "Hour"), tr("statistics_observed_services", "Observed services")], explore.categoryRhythm.map((item) => [item.category, `${String(item.hour).padStart(2, "0")}:00`, formatAnalyticsNumber(item.observedServices, locale())]));
         renderDataTable("statisticsStationScatterTable", [tr("statistics_station", "Station"), tr("statistics_observed_services", "Observed services"), tr("statistics_metric_punctuality_5", "Within 5 min")], explore.network.stations.map((item) => [item.label, formatAnalyticsNumber(item.observedServices, locale()), formatAnalyticsPercent(item.punctuality.within5.percent, locale())]));
         renderDataTable("statisticsStationRhythmTable", [tr("statistics_weekday", "Weekday"), tr("statistics_hour", "Hour"), tr("statistics_observed_services", "Observed services")], explore.network.stationRhythm.items.map((item) => [chartLabels().weekdays[item.weekday] ?? String(item.weekday), `${String(item.hour).padStart(2, "0")}:00`, formatAnalyticsNumber(item.observed_services, locale())]));
         renderDataTable("statisticsDisruptionTable", [tr("statistics_route", "Route"), tr("statistics_metric_over_60", "Arrivals over 60 min"), tr("statistics_cumulative_share", "Cumulative share")], explore.services.disruptionConcentration.items.map((item) => [item.label, formatAnalyticsNumber(item.events, locale()), formatAnalyticsPercent(item.cumulativePercent, locale())]));
+        const finalStopIndex = explore.services.spotlight.stops.length - 1;
+        renderDataTable("statisticsServiceLifecycleTable", [
+            tr("statistics_station", "Station"),
+            `${tr("arrival", "Arrival")} · ${tr("scheduled", "Scheduled")}`,
+            `${tr("arrival", "Arrival")} · ${tr("actual", "Actual")}`,
+            tr("statistics_arrival_delay", "Arrival delay"),
+            `${tr("departure", "Departure")} · ${tr("scheduled", "Scheduled")}`,
+            `${tr("departure", "Departure")} · ${tr("actual", "Actual")}`,
+            `${tr("statistics_roles_departure", "Departures")} · ${tr("statistics_delay_minutes", "Delay minutes")}`
+        ], explore.services.spotlight.stops.map((stop, index) => {
+            const isOrigin = index === 0;
+            const isDestination = index === finalStopIndex;
+            const delay = (value: number | null) => value === null ? "--" : `${formatAnalyticsNumber(value, locale(), 0)} ${tr("statistics_minutes_short", "min")}`;
+            return [
+                stop.station_name ?? stop.station_code ?? String(stop.stop_number),
+                displayOptionalTimestamp(isOrigin ? null : stop.arrival_expected),
+                displayOptionalTimestamp(isOrigin ? null : stop.arrival_actual),
+                delay(isOrigin ? null : stop.arrival_delay),
+                displayOptionalTimestamp(isDestination ? null : stop.departure_expected),
+                displayOptionalTimestamp(isDestination ? null : stop.departure_actual),
+                delay(isDestination ? null : stop.departure_delay)
+            ];
+        }));
     }
 
     function renderExplore(explore: AnalyticsExplore | null): void {
@@ -815,7 +861,7 @@ import {
             renderDataTable("statisticsOperatorMixTable", [tr("statistics_operator", "Operator"), tr("statistics_observed_services", "Observed services"), tr("statistics_share", "Share")], operatorItems.map((item) => [operatorLabel(item.key, item.label), formatAnalyticsNumber(item.observedServices, locale()), formatAnalyticsPercent(total > 0 ? item.observedServices * 100 / total : null, locale())]));
             renderDataTable("statisticsCategoryMixTable", [tr("statistics_category", "Category"), tr("statistics_observed_services", "Observed services"), tr("statistics_share", "Share")], categoryItems.map((item) => [item.label, formatAnalyticsNumber(item.observedServices, locale()), formatAnalyticsPercent(total > 0 ? item.observedServices * 100 / total : null, locale())]));
             const unavailable = tr("statistics_extended_model_pending", "This view becomes available after the latest analytical model is published.");
-            for (const id of ["statisticsOperatorCategoryTable", "statisticsNetworkRhythmTable", "statisticsCategoryRhythmTable", "statisticsStationRhythmTable", "statisticsDisruptionTable"]) {
+            for (const id of ["statisticsOperatorCategoryTable", "statisticsNetworkRhythmTable", "statisticsCategoryRhythmTable", "statisticsStationRhythmTable", "statisticsDisruptionTable", "statisticsServiceLifecycleTable"]) {
                 $(id)?.replaceChildren(element("p", "statistics-dashboard-empty", unavailable));
             }
             const stationSelect = $<HTMLSelectElement>("statisticsAnalyticsStation");
@@ -870,17 +916,19 @@ import {
     }
 
     function chartLabels(): import("./statistics-echarts.js").AnalyticsChartLabels {
-        const weekdayFormatter = new Intl.DateTimeFormat(locale(), { weekday: "narrow", timeZone: "UTC" });
+        const weekdayFormatter = new Intl.DateTimeFormat(locale(), { weekday: "short", timeZone: "UTC" });
         return {
             within5: tr("statistics_metric_punctuality_5", "Within 5 min"),
             within15: tr("statistics_metric_punctuality_15", "Within 15 min"),
-            p50: tr("statistics_metric_p50", "P50"),
-            p90: tr("statistics_metric_p90", "P90"),
-            p95: tr("statistics_metric_p95", "P95"),
+            p50: tr("statistics_metric_p50", "Typical delay (P50)"),
+            p90: tr("statistics_metric_p90", "90% arrive within (P90)"),
+            p95: tr("statistics_metric_p95", "95% arrive within (P95)"),
             over30: tr("statistics_metric_over_30", "Over 30 min"),
             over60: tr("statistics_metric_over_60", "Over 60 min"),
             over120: tr("statistics_metric_over_120", "Over 120 min"),
             noData: tr("statistics_no_chart_data", "No chart data"),
+            minutes: tr("statistics_minutes_short", "min"),
+            percentileExplanation: tr("statistics_percentile_explainer", "The typical value is the middle observed arrival; the 90% and 95% thresholds reveal long-tail delays."),
             weekdays: Array.from({ length: 7 }, (_, index) => weekdayFormatter.format(new Date(Date.UTC(2026, 0, 5 + index)))),
             delayBuckets: {
                 early: tr("statistics_bucket_early", "Early"),
@@ -920,9 +968,13 @@ import {
                     { label: tr("statistics_arrival_sample", "Arrival sample"), value: (metric) => formatAnalyticsNumber(metric.arrivalSample, locale()) }
                 ]);
                 renderAccessibleChartTable("statisticsDelayPercentileTable", state.overview, [
-                    { label: tr("statistics_metric_p50", "P50"), value: (metric) => formatAnalyticsNumber(metric.delayMinutes.p50, locale(), 1) },
-                    { label: tr("statistics_metric_p90", "P90"), value: (metric) => formatAnalyticsNumber(metric.delayMinutes.p90, locale(), 1) },
-                    { label: tr("statistics_metric_p95", "P95"), value: (metric) => formatAnalyticsNumber(metric.delayMinutes.p95, locale(), 1) }
+                    { label: tr("statistics_metric_p50", "Typical delay (P50)"), value: (metric) => metric.delayMinutes.p50 === null ? "--" : `${formatAnalyticsNumber(metric.delayMinutes.p50, locale(), 1)} ${tr("statistics_minutes_short", "min")}` },
+                    { label: tr("statistics_metric_p90", "90% arrive within (P90)"), value: (metric) => metric.delayMinutes.p90 === null ? "--" : `${formatAnalyticsNumber(metric.delayMinutes.p90, locale(), 1)} ${tr("statistics_minutes_short", "min")}` },
+                    { label: tr("statistics_metric_p95", "95% arrive within (P95)"), value: (metric) => metric.delayMinutes.p95 === null ? "--" : `${formatAnalyticsNumber(metric.delayMinutes.p95, locale(), 1)} ${tr("statistics_minutes_short", "min")}` }
+                ]);
+                renderAccessibleChartTable("statisticsPunctualityCalendarTable", state.overview, [
+                    { label: tr("statistics_metric_punctuality_5", "Within 5 min"), value: (metric) => formatAnalyticsPercent(metric.punctuality.within5.percent, locale()) },
+                    { label: tr("statistics_arrival_sample", "Arrival sample"), value: (metric) => formatAnalyticsNumber(metric.arrivalSample, locale()) }
                 ]);
             }
         }
@@ -931,11 +983,17 @@ import {
             punctuality: tr("statistics_metric_punctuality_5", "Within 5 min"),
             cumulative: tr("statistics_cumulative_share", "Cumulative share"),
             delayMinutes: tr("statistics_delay_minutes", "Delay minutes"),
+            minutes: tr("statistics_minutes_short", "min"),
             recovered: tr("statistics_recovered", "Recovered"),
             gained: tr("statistics_gained", "Gained"),
             arrivals: tr("statistics_roles_arrival", "Arrivals"),
             departures: tr("statistics_roles_departure", "Departures"),
             transits: tr("statistics_roles_transit", "Transit"),
+            share: tr("statistics_share", "Share"),
+            scheduledTime: tr("scheduled", "Scheduled"),
+            actualTime: tr("actual", "Actual"),
+            arrivalTime: tr("arrival", "Arrival"),
+            departureTime: tr("departure", "Departure"),
             noData: tr("statistics_no_chart_data", "No chart data"),
             weekdays: chartLabels().weekdays
         };

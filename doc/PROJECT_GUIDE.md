@@ -201,7 +201,7 @@ Collector behavior:
 7. Uses the scheduled collection slot date as the reporting `collection_date`
    while keeping the original train `service_date`.
 8. Uses a short one-day discovery lookback but continues known unfinished
-   services for `STATISTICS_ACTIVE_SERVICE_TTL_DAYS` (seven days by default),
+   services for `STATISTICS_ACTIVE_SERVICE_TTL_DAYS` (three days by default),
    covering D+2 and later arrivals without accepting arbitrary old board rows.
    During the additive rollout, legacy and v2 completion state are merged and
    any completed observation wins, allowing old active keys to self-bootstrap.
@@ -276,7 +276,7 @@ The relevant VPS settings are:
 
 ```env
 STATISTICS_SERVICE_DATE_LOOKBACK_DAYS=1
-STATISTICS_ACTIVE_SERVICE_TTL_DAYS=7
+STATISTICS_ACTIVE_SERVICE_TTL_DAYS=3
 STATISTICS_DETAIL_LIMIT_PER_RUN=750
 STATISTICS_DETAIL_RETRY_BASE_MINUTES=60
 STATISTICS_DETAIL_RETRY_MAX_MINUTES=720

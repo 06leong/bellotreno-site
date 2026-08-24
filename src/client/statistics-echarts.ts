@@ -12,8 +12,14 @@ import {
 } from "echarts/components";
 import { SVGRenderer } from "echarts/renderers";
 import type { ECharts, EChartsCoreOption } from "echarts/core";
-import type { AnalyticsExplore, AnalyticsOverview, AnalyticsRankingPayload } from "../lib/normalizers/statistics-analytics.js";
+import type {
+    AnalyticsExplore,
+    AnalyticsOverview,
+    AnalyticsRankingPayload,
+    AnalyticsSpotlightStop
+} from "../lib/normalizers/statistics-analytics.js";
 import {
+    STATISTICS_OPERATOR_LABELS,
     statisticsCategoryColor,
     statisticsOperatorColor,
     statisticsStationColor
@@ -46,6 +52,8 @@ export interface AnalyticsChartLabels {
     over60: string;
     over120: string;
     noData: string;
+    minutes: string;
+    percentileExplanation: string;
     weekdays: string[];
     delayBuckets: Record<string, string>;
 }
@@ -63,11 +71,17 @@ export interface AnalyticsExploreChartLabels {
     punctuality: string;
     cumulative: string;
     delayMinutes: string;
+    minutes: string;
     recovered: string;
     gained: string;
     arrivals: string;
     departures: string;
     transits: string;
+    share: string;
+    scheduledTime: string;
+    actualTime: string;
+    arrivalTime: string;
+    departureTime: string;
     noData: string;
     weekdays: string[];
 }
@@ -132,6 +146,77 @@ interface ChartTheme {
     surface: string;
 }
 
+export const ANALYTICS_MATRIX_CATEGORY_ORDER = Object.freeze([
+    "REG",
+    "MET",
+    "FR",
+    "FA",
+    "FB",
+    "IC",
+    "ICN",
+    "EC",
+    "EN",
+    "EXP",
+    "NCL",
+    "unknown"
+] as const);
+
+// ECharts renders the first y-axis category at the bottom. Keep this order
+// aligned with the visual reading order requested by the dashboard design.
+export const ANALYTICS_MATRIX_OPERATOR_ORDER = Object.freeze([
+    "1",
+    "4",
+    "2",
+    "63",
+    "18",
+    "910",
+    "64"
+] as const);
+
+export interface AnalyticsLifecyclePoint {
+    stop: AnalyticsSpotlightStop;
+    station: string;
+    arrivalExpected: string | null;
+    arrivalActual: string | null;
+    arrivalDelay: number | null;
+    departureExpected: string | null;
+    departureActual: string | null;
+    departureDelay: number | null;
+}
+
+export function analyticsCalendarDayLabel(value: unknown): string {
+    const raw = Array.isArray(value) ? value[0] : value;
+    if (typeof raw !== "string") return "";
+    const match = /^\d{4}-\d{2}-(\d{2})$/.exec(raw);
+    return match ? String(Number(match[1])) : "";
+}
+
+export function analyticsCalendarNameMap(weekdays: string[]): string[] {
+    return weekdays.length === 7
+        ? [weekdays[6]!, ...weekdays.slice(0, 6)]
+        : [...weekdays];
+}
+
+export function analyticsMatrixCategoryLabel(value: string): string {
+    return value === "unknown" ? "UNKNOWN" : value;
+}
+
+export function buildAnalyticsLifecyclePoints(stops: AnalyticsSpotlightStop[]): AnalyticsLifecyclePoint[] {
+    const finalIndex = stops.length - 1;
+    return stops.map((stop, index) => ({
+        stop,
+        station: stop.station_name ?? stop.station_code ?? String(stop.stop_number),
+        // An origin has no arrival event and a destination has no departure
+        // event. Preserve every other null instead of converting it to zero.
+        arrivalExpected: index === 0 ? null : stop.arrival_expected,
+        arrivalActual: index === 0 ? null : stop.arrival_actual,
+        arrivalDelay: index === 0 ? null : stop.arrival_delay,
+        departureExpected: index === finalIndex ? null : stop.departure_expected,
+        departureActual: index === finalIndex ? null : stop.departure_actual,
+        departureDelay: index === finalIndex ? null : stop.departure_delay
+    }));
+}
+
 const chartInstances = new Map<HTMLElement, ECharts>();
 const chartScopes = new Map<HTMLElement, "analytics" | "live">();
 let resizeObserver: ResizeObserver | null = null;
@@ -176,6 +261,45 @@ function chartFor(container: HTMLElement, scope: "analytics" | "live" = "analyti
 function numberFormatter(): Intl.NumberFormat {
     const language = document.documentElement.lang || "en";
     return new Intl.NumberFormat(language, { maximumFractionDigits: 1 });
+}
+
+function formatNumericValue(value: unknown, fractionDigits = 1): string {
+    if (value === null || value === undefined || value === "") return "--";
+    const number = Number(value);
+    if (!Number.isFinite(number)) return "--";
+    return new Intl.NumberFormat(document.documentElement.lang || "en", {
+        minimumFractionDigits: fractionDigits,
+        maximumFractionDigits: fractionDigits
+    }).format(number);
+}
+
+function formatPercentValue(value: unknown): string {
+    const formatted = formatNumericValue(value, 1);
+    return formatted === "--" ? formatted : `${formatted}%`;
+}
+
+function formatCalendarDate(value: unknown): string {
+    const raw = Array.isArray(value) ? value[0] : value;
+    if (typeof raw !== "string") return "--";
+    const parsed = new Date(`${raw}T12:00:00Z`);
+    if (Number.isNaN(parsed.getTime())) return raw;
+    return new Intl.DateTimeFormat(document.documentElement.lang || "en", {
+        dateStyle: "full",
+        timeZone: "UTC"
+    }).format(parsed);
+}
+
+function formatServiceTime(value: string | null): string {
+    if (!value) return "--";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return value;
+    return new Intl.DateTimeFormat(document.documentElement.lang || "en", {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: "Europe/Rome"
+    }).format(parsed);
 }
 
 function baseOption(theme: ChartTheme): EChartsCoreOption {
@@ -258,6 +382,16 @@ function renderPercentiles(container: HTMLElement, overview: AnalyticsOverview, 
     const dates = overview.series.map((item) => item.date);
     chartFor(container).setOption({
         ...baseOption(theme),
+        tooltip: {
+            ...baseOption(theme).tooltip as object,
+            trigger: "axis",
+            formatter: (parameters: Array<{ axisValue?: unknown; seriesName?: string; value?: unknown }> | { axisValue?: unknown; seriesName?: string; value?: unknown }) => {
+                const points = Array.isArray(parameters) ? parameters : [parameters];
+                const date = formatCalendarDate(points[0]?.axisValue);
+                const values = points.map((point) => `${point.seriesName ?? ""}: ${formatNumericValue(point.value)} ${labels.minutes}`);
+                return [date, ...values, "", labels.percentileExplanation].join("\n");
+            }
+        },
         color: [theme.teal, theme.orange, theme.accent],
         legend: { top: 0, left: 0, textStyle: { color: theme.muted } },
         grid: { top: 48, right: 18, bottom: dates.length > 31 ? 50 : 30, left: 48 },
@@ -304,7 +438,11 @@ function renderSevereDelay(container: HTMLElement, overview: AnalyticsOverview, 
     ];
     chartFor(container).setOption({
         ...baseOption(theme),
-        tooltip: { ...baseOption(theme).tooltip as object, trigger: "item", valueFormatter: (value: unknown) => `${Number(value).toFixed(1)}%` },
+        tooltip: {
+            ...baseOption(theme).tooltip as object,
+            trigger: "item",
+            formatter: (parameters: { name?: string; value?: unknown }) => `${parameters.name ?? ""}\n${formatPercentValue(parameters.value)}`
+        },
         grid: { top: 12, right: 24, bottom: 26, left: 80 },
         xAxis: axis(theme, true),
         yAxis: {
@@ -336,7 +474,15 @@ function renderCalendar(container: HTMLElement, overview: AnalyticsOverview, lab
     const maximum = percentages.length ? Math.ceil(Math.max(...percentages)) : 100;
     chartFor(container).setOption({
         ...baseOption(theme),
-        tooltip: { ...baseOption(theme).tooltip as object, trigger: "item", valueFormatter: (value: unknown) => `${Number(value).toFixed(1)}%` },
+        tooltip: {
+            ...baseOption(theme).tooltip as object,
+            trigger: "item",
+            formatter: (parameters: { value?: unknown }) => {
+                const value = parameters.value;
+                const percentage = Array.isArray(value) ? value[1] : null;
+                return `${formatCalendarDate(value)}\n${labels.within5}: ${formatPercentValue(percentage)}`;
+            }
+        },
         visualMap: {
             min: minimum,
             max: Math.max(minimum + 1, maximum),
@@ -358,11 +504,31 @@ function renderCalendar(container: HTMLElement, overview: AnalyticsOverview, lab
             cellSize: ["auto", 18],
             splitLine: { show: false },
             itemStyle: { color: "transparent", borderColor: theme.border, borderWidth: 2 },
-            dayLabel: { color: theme.muted, firstDay: 1, nameMap: labels.weekdays },
+            dayLabel: {
+                color: theme.muted,
+                firstDay: 1,
+                // Calendar nameMap is always indexed Sunday first, even when
+                // firstDay moves Monday to the first visible column.
+                nameMap: analyticsCalendarNameMap(labels.weekdays)
+            },
             monthLabel: { color: theme.muted },
             yearLabel: { show: false }
         },
-        series: [{ type: "heatmap", coordinateSystem: "calendar", data: values }]
+        series: [{
+            type: "heatmap",
+            coordinateSystem: "calendar",
+            data: values,
+            label: {
+                show: true,
+                color: theme.text,
+                fontSize: 11,
+                fontWeight: 700,
+                textBorderColor: theme.surface,
+                textBorderWidth: 3,
+                formatter: (parameters: { value?: unknown }) => analyticsCalendarDayLabel(parameters.value)
+            },
+            emphasis: { itemStyle: { borderColor: theme.text, borderWidth: 1 } }
+        }]
     }, { notMerge: true });
 }
 
@@ -388,9 +554,22 @@ function renderHorizontalShare(
         chartFor(container).setOption(emptyOption(theme, labels.noData), { notMerge: true });
         return;
     }
+    const compact = window.matchMedia("(max-width: 560px)").matches;
     chartFor(container).setOption({
         ...baseOption(theme),
-        grid: { top: 8, right: 68, bottom: 24, left: 118 },
+        tooltip: {
+            ...baseOption(theme).tooltip as object,
+            trigger: "item",
+            formatter: (parameters: { name?: string; data?: { observedServices?: number; sharePercent?: number | null } }) => {
+                const data = parameters.data;
+                return [
+                    parameters.name ?? "",
+                    `${labels.share}: ${formatPercentValue(data?.sharePercent)}`,
+                    `${labels.services}: ${formatNumericValue(data?.observedServices, 0)}`
+                ].join("\n");
+            }
+        },
+        grid: { top: 8, right: compact ? 118 : 156, bottom: 24, left: compact ? 92 : 118 },
         xAxis: axis(theme, true),
         yAxis: {
             type: "category",
@@ -404,13 +583,24 @@ function renderHorizontalShare(
             type: "bar",
             data: visible.map((item, index) => ({
                 value: item.sharePercent,
+                observedServices: item.observedServices,
+                sharePercent: item.sharePercent,
                 itemStyle: {
                     color: colorForItem(item, visible.length - index - 1),
                     borderRadius: [0, 6, 6, 0]
                 }
             })),
             barMaxWidth: 20,
-            label: { show: true, position: "right", color: theme.text, formatter: "{c}%" }
+            label: {
+                show: true,
+                position: "right",
+                color: theme.text,
+                fontSize: compact ? 9 : 11,
+                formatter: (parameters: { data?: { observedServices?: number; sharePercent?: number | null } }) => {
+                    const data = parameters.data;
+                    return `${formatPercentValue(data?.sharePercent)} · ${formatNumericValue(data?.observedServices, 0)}`;
+                }
+            }
         }]
     }, { notMerge: true });
 }
@@ -427,8 +617,8 @@ function readableTextColor(color: string): string {
 }
 
 function renderMixMatrix(container: HTMLElement, explore: AnalyticsExplore, labels: AnalyticsExploreChartLabels, theme: ChartTheme): void {
-    const operators = explore.composition.operators.filter((item) => item.observedServices > 0).slice(0, 10).map((item) => item.key);
-    const categories = explore.composition.categories.filter((item) => item.observedServices > 0).slice(0, 12).map((item) => item.key);
+    const operators: string[] = [...ANALYTICS_MATRIX_OPERATOR_ORDER];
+    const categories: string[] = [...ANALYTICS_MATRIX_CATEGORY_ORDER];
     const sourceCells = explore.composition.matrix
         .filter((item) => operators.includes(item.operator) && categories.includes(item.category))
         .map((item) => ({
@@ -443,7 +633,10 @@ function renderMixMatrix(container: HTMLElement, explore: AnalyticsExplore, labe
         return;
     }
     const maximum = Math.max(...sourceCells.map((item) => item.value), 1);
-    const operatorLabels = new Map(explore.composition.operators.map((item) => [item.key, item.label]));
+    const operatorLabels = new Map<string, string>(Object.entries(STATISTICS_OPERATOR_LABELS));
+    for (const item of explore.composition.operators) {
+        if (!operatorLabels.has(item.key)) operatorLabels.set(item.key, item.label);
+    }
     const cells = sourceCells.map((item) => {
         const color = statisticsCategoryColor(item.category);
         return {
@@ -466,11 +659,21 @@ function renderMixMatrix(container: HTMLElement, explore: AnalyticsExplore, labe
             trigger: "item",
             formatter: (parameters: { data?: { operator?: string; category?: string; value?: unknown[] } }) => {
                 const data = parameters.data;
-                return `${data?.operator ?? ""} × ${data?.category ?? ""}\n${numberFormatter().format(Number(data?.value?.[2] ?? 0))} ${labels.services}`;
+                return `${data?.operator ?? ""} × ${data?.category ?? ""}\n${formatNumericValue(data?.value?.[2], 0)} ${labels.services}`;
             }
         },
-        grid: { top: 24, right: 24, bottom: 58, left: 150 },
-        xAxis: { type: "category", data: categories, axisLabel: { color: theme.muted, rotate: 28 }, axisLine: { lineStyle: { color: theme.border } } },
+        grid: { top: 24, right: 24, bottom: 64, left: 166 },
+        xAxis: {
+            type: "category",
+            data: categories,
+            axisLabel: {
+                color: theme.muted,
+                rotate: 32,
+                interval: 0,
+                formatter: analyticsMatrixCategoryLabel
+            },
+            axisLine: { lineStyle: { color: theme.border } }
+        },
         yAxis: {
             type: "category",
             data: operators,
@@ -642,15 +845,40 @@ function renderLifecycle(container: HTMLElement, explore: AnalyticsExplore, labe
         chartFor(container).setOption(emptyOption(theme, labels.noData), { notMerge: true });
         return;
     }
+    const points = buildAnalyticsLifecyclePoints(stops);
+    const formatDelay = (value: number | null) => value === null
+        ? "--"
+        : `${formatNumericValue(value, 0)} ${labels.minutes}`;
     chartFor(container).setOption({
         ...baseOption(theme),
+        tooltip: {
+            ...baseOption(theme).tooltip as object,
+            trigger: "axis",
+            formatter: (parameters: Array<{ dataIndex?: number }> | { dataIndex?: number }) => {
+                const entries = Array.isArray(parameters) ? parameters : [parameters];
+                const index = entries[0]?.dataIndex;
+                const point = typeof index === "number" ? points[index] : undefined;
+                if (!point) return labels.noData;
+                return [
+                    point.station,
+                    labels.arrivalTime,
+                    `  ${labels.scheduledTime}: ${formatServiceTime(point.arrivalExpected)}`,
+                    `  ${labels.actualTime}: ${formatServiceTime(point.arrivalActual)}`,
+                    `  ${labels.delayMinutes}: ${formatDelay(point.arrivalDelay)}`,
+                    labels.departureTime,
+                    `  ${labels.scheduledTime}: ${formatServiceTime(point.departureExpected)}`,
+                    `  ${labels.actualTime}: ${formatServiceTime(point.departureActual)}`,
+                    `  ${labels.delayMinutes}: ${formatDelay(point.departureDelay)}`
+                ].join("\n");
+            }
+        },
         legend: { top: 0, left: 0, textStyle: { color: theme.muted } },
         grid: { top: 48, right: 16, bottom: 58, left: 48 },
-        xAxis: { type: "category", data: stops.map((item) => item.station_name ?? item.station_code ?? String(item.stop_number)), axisLabel: { color: theme.muted, rotate: 30, hideOverlap: true }, axisLine: { lineStyle: { color: theme.border } } },
+        xAxis: { type: "category", data: points.map((item) => item.station), axisLabel: { color: theme.muted, rotate: 30, hideOverlap: true }, axisLine: { lineStyle: { color: theme.border } } },
         yAxis: { ...axis(theme), name: labels.delayMinutes, nameTextStyle: { color: theme.muted } },
         series: [
-            lineSeries(labels.arrivals, stops.map((item) => item.arrival_delay), theme.blue),
-            lineSeries(labels.departures, stops.map((item) => item.departure_delay), theme.teal, true)
+            lineSeries(labels.arrivals, points.map((item) => item.arrivalDelay), theme.blue),
+            lineSeries(labels.departures, points.map((item) => item.departureDelay), theme.teal, true)
         ]
     }, { notMerge: true });
 }

@@ -70,6 +70,9 @@ class StatisticsSnapshotTests(unittest.TestCase):
         self.assertFalse((self.handoff / "snapshots").exists())
         self.assertFalse((self.handoff / "receipts").exists())
 
+    def test_default_policy_uses_three_complete_service_days(self):
+        self.assertEqual(self.policy.active_service_ttl_days, 3)
+
     def test_list_rejects_an_uninitialized_root_with_unexpected_artifacts(self):
         self.handoff.mkdir()
         (self.handoff / "unexpected.txt").write_text("unexpected", encoding="utf-8")

@@ -353,6 +353,11 @@ class StatisticsAppIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(configured.V2_SERVICE_RETENTION_DAYS, 9)
 
+    def test_active_service_ttl_defaults_to_three_days(self):
+        configured = load_statistics_app()
+
+        self.assertEqual(configured.COLLECTOR_ACTIVE_SERVICE_TTL_DAYS, 3)
+
     def test_completion_slots_allow_the_finalization_overlap(self):
         slots = APP.required_completion_slots_for_day(
             datetime.fromisoformat("2026-07-18").date()

@@ -62,7 +62,7 @@ STATISTICS_DETAIL_RETRY_BASE_MINUTES=60
 STATISTICS_DETAIL_RETRY_MAX_MINUTES=720
 STATISTICS_DETAIL_SUCCESS_REFRESH_MINUTES=120
 STATISTICS_SERVICE_DATE_LOOKBACK_DAYS=1
-STATISTICS_ACTIVE_SERVICE_TTL_DAYS=7
+STATISTICS_ACTIVE_SERVICE_TTL_DAYS=3
 STATISTICS_RETENTION_DAYS=30
 STATISTICS_V2_SERVICE_RETENTION_DAYS=90
 STATISTICS_V2_OBSERVATION_RETENTION_DAYS=30
@@ -86,7 +86,7 @@ STATISTICS_ARCHIVE_DUCKDB_MAX_TEMP_DIRECTORY_SIZE=4GB
 STATISTICS_ARCHIVE_INCLUDE_RAW_PAYLOADS=false
 
 # Optional professional analytics tuning
-STATISTICS_ANALYTICS_DUCKDB_MEMORY_LIMIT=256MB
+STATISTICS_ANALYTICS_DUCKDB_MEMORY_LIMIT=192MB
 STATISTICS_ANALYTICS_DUCKDB_THREADS=1
 STATISTICS_ANALYTICS_HISTORY_DAYS=730
 STATISTICS_ANALYTICS_MIN_RANKING_SAMPLE=100
@@ -143,9 +143,10 @@ The archive keeps the service-day and observation-day grains separate:
 
 - `train_observations`, collector runs, snapshots, and station/relation daily
   aggregates are published only after their collection day has ended (D+1);
-- `train_services` and `train_stop_events` are published only after the active
-  service window has elapsed (D+8 with the default seven-day TTL), so an
-  overnight or severely delayed train can finish updating first;
+- `train_services` and `train_stop_events` are published only after three
+  complete service-stabilization days have elapsed (D+4 with the default
+  three-day TTL), so an overnight or severely delayed train can finish updating
+  first;
 - `train_raw_payloads` can optionally be published at the same stable-service
   boundary. It preserves the latest accepted, already zlib-compressed
   ViaggiaTreno detail payload for each service, not every response or every
@@ -156,7 +157,7 @@ The archive keeps the service-day and observation-day grains separate:
 Raw-payload export is deliberately disabled by default. Enable it with
 `STATISTICS_ARCHIVE_INCLUDE_RAW_PAYLOADS=true` only after increasing
 `STATISTICS_RAW_PAYLOAD_RETENTION_DAYS` beyond
-`STATISTICS_ACTIVE_SERVICE_TTL_DAYS`; otherwise a D+8 service can expire before
+`STATISTICS_ACTIVE_SERVICE_TTL_DAYS`; otherwise a D+4 service can expire before
 it becomes eligible. `plan` fails closed on that unsafe combination. It reports
 the pending compressed payload bytes and adds the larger of 1 MiB or 110% of
 that value to the normal free-space requirement. This is an additional guard,
@@ -178,7 +179,7 @@ repeated runs idempotent.
 Published partitions are immutable. If a still-retained live partition later
 has a different row count, `plan` and `run` fail instead of silently ignoring
 the late rows. The normal collector contract does not backfill ended collection
-days or services after the D+8 stability boundary; an intentional historical
+days or services after the D+4 stability boundary; an intentional historical
 repair therefore requires an explicit future archive-revision workflow rather
 than overwriting a schema-v1 file.
 
@@ -355,6 +356,13 @@ source of truth. Rebuild analytics after each successful Parquet run; a failed
 analytics build must not block snapshot release once the Parquet archive itself
 has passed the applicable local or remote verification policy.
 
+The professional historical-performance page uses one stabilized service
+layer; it does not mix live or still-mutable service outcomes into historical
+KPIs. The default policy waits for three complete days and applies the strict
+cutoff `service_date < asOfDate - 3 days`. For example, an archive whose
+`asOfDate` is 24 August can expose service dates through 20 August, not 21 or
+24 August. The live-operations page remains the place for the current day.
+
 ### Daily archive and analytics automation
 
 After one manual snapshot, archive, verification, release, and analytics build
@@ -369,6 +377,10 @@ The script preserves the same safety boundaries as the manual runbook:
 
 - one host `flock` prevents manual/timer overlap through this entry point;
 - the collector must be idle before snapshot and analytics work begins;
+- immediately before analytics, the health endpoint's `nextScheduledAt` must
+  also leave at least 15 minutes before the next collector slot; when it does
+  not, the runner waits across that slot and retries after collection rather
+  than competing for memory;
 - one valid snapshot retained by an interrupted run is resumed by exact ID;
   multiple, stale, malformed, or unreadable snapshots fail closed for review;
 - collector and archive images must use the same full-SHA revision;
@@ -380,10 +392,18 @@ The script preserves the same safety boundaries as the manual runbook:
 - an archive failure retains the exact snapshot and diagnostics instead of
   guessing that partial output is safe;
 - analytics runs with an 800-MiB memory ceiling, 2-GiB memory-plus-swap limit,
-  one CPU, and a 256-MiB DuckDB limit validated on the 1-GiB production VPS;
+  one CPU, one DuckDB thread, and a 192-MiB DuckDB limit for the 1-GiB
+  production VPS; neither container ceiling is raised;
 - analytics publishes atomically, so a failed build leaves the previous read
   model available; a successful build ID must also be visible through the
   always-on service health endpoint.
+
+The analytics safety interval defaults to 900 seconds. Override it only on the
+host, not in Compose, by setting
+`BELLOTRENO_ANALYTICS_SAFE_WINDOW_SECONDS=<seconds>` in
+`/etc/default/bellotreno-statistics-daily`. Every collector decision is appended
+to `collector-state-snapshot.tsv` or `collector-state-analytics.tsv` in that
+run's diagnostics directory.
 
 Install after the files are merged to `main`:
 
@@ -414,13 +434,22 @@ curl -fsSL "$BASE_URL/ops/bellotreno-statistics-daily.timer" \
 
 DEPLOY_TAG=$(date -u +%Y%m%dT%H%M%SZ)
 cp -a .env ".env.pre-daily-$DEPLOY_TAG"
-if grep -q '^STATISTICS_IMAGE_TAG=' .env; then
-  sed -i \
-    "s/^STATISTICS_IMAGE_TAG=.*/STATISTICS_IMAGE_TAG=sha-$AUTOMATION_REVISION/" \
-    .env
-else
-  printf '\nSTATISTICS_IMAGE_TAG=sha-%s\n' "$AUTOMATION_REVISION" >> .env
-fi
+set_env() {
+  key="$1"
+  value="$2"
+  if grep -q "^${key}=" .env; then
+    sed -i "s|^${key}=.*|${key}=${value}|" .env
+  else
+    printf '%s=%s\n' "$key" "$value" >> .env
+  fi
+}
+
+set_env STATISTICS_IMAGE_TAG "sha-$AUTOMATION_REVISION"
+set_env STATISTICS_ACTIVE_SERVICE_TTL_DAYS 3
+set_env STATISTICS_ANALYTICS_DUCKDB_MEMORY_LIMIT 192MB
+set_env STATISTICS_ANALYTICS_DUCKDB_THREADS 1
+set_env STATISTICS_ANALYTICS_CONTAINER_MEMORY_LIMIT 800m
+set_env STATISTICS_ANALYTICS_CONTAINER_MEMORY_SWAP_LIMIT 2g
 
 docker compose \
   --project-directory "$PWD" \
@@ -460,7 +489,7 @@ done
 docker compose up -d --no-deps --force-recreate bellotreno-statistics
 sleep 8
 docker compose exec -T bellotreno-statistics python -c \
-  'import json,urllib.request; d=json.load(urllib.request.urlopen("http://127.0.0.1:8081/health",timeout=15)); assert d.get("ok") is True and isinstance(d.get("collectorActive"),bool); print(json.dumps({"ok":d["ok"],"collectorActive":d["collectorActive"],"next":d.get("nextScheduledAt")},ensure_ascii=False))'
+  'import json,urllib.request; d=json.load(urllib.request.urlopen("http://127.0.0.1:8081/health",timeout=15)); assert d.get("ok") is True and isinstance(d.get("collectorActive"),bool) and d.get("activeServiceTtlDays")==3; print(json.dumps({"ok":d["ok"],"collectorActive":d["collectorActive"],"activeServiceTtlDays":d.get("activeServiceTtlDays"),"next":d.get("nextScheduledAt")},ensure_ascii=False))'
 
 /usr/local/sbin/bellotreno-statistics-daily preflight
 systemd-analyze verify \
@@ -629,7 +658,7 @@ The statistics service follows the same broad model as `railway-opendata`:
   service, observation, stop-event, and raw-payload tables;
 - it uses aligned collection slots instead of sleeping after each run. With the default settings, it samples at `HH:05`, `HH:35`, and one final daily slot at `23:55` Europe/Rome time.
 - every station board in one run uses the same scheduled slot time, so a single snapshot is internally consistent even if the collection takes several minutes.
-- every collected train is stored under the scheduled slot date, with its original departure date preserved as `service_date`; ordinary discovery looks back one day, while an already-known unfinished service remains eligible for board/detail updates for the separate `STATISTICS_ACTIVE_SERVICE_TTL_DAYS` window (seven days by default). During the additive rollout, active keys merge legacy and v2 completion state, with any completed observation taking precedence. This lets a D-day train self-bootstrap into v2 through a D+2 or later extreme delay without admitting arbitrary old services from current boards.
+- every collected train is stored under the scheduled slot date, with its original departure date preserved as `service_date`; ordinary discovery looks back one day, while an already-known unfinished service remains eligible for board/detail updates for the separate `STATISTICS_ACTIVE_SERVICE_TTL_DAYS` window (three days by default). During the additive rollout, active keys merge legacy and v2 completion state, with any completed observation taking precedence. This lets a D-day train self-bootstrap into v2 through a D+2 or D+3 extreme delay without admitting arbitrary old services from current boards.
 - each configured station board type is fetched as its own concurrent task. With `STATISTICS_BOARD_TYPES=partenze,arrivi`, each station still fetches both departures and arrivals, but those two requests no longer wait on each other inside one station worker.
 - board, train-detail, and station-registry lookups have separate concurrency controls. The current default is `24` board requests, `12` detail workers, and `6` region workers under a `680m` memory limit.
 - detail failures use persisted exponential retry delays of `60`, `120`, `240`, `480`, then at most `720` minutes. A successful but unfinished service is refreshed after `120` minutes; completed services leave the queue. The default per-run budget is `750`, with space reserved for already-due backlog so current boards cannot permanently starve older extreme-delay services. Non-zero limits are clamped to at least `2`; set the limit to `0` only when an intentionally unlimited queue has been capacity-tested.

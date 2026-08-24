@@ -46,13 +46,17 @@ The foundation is now usable rather than hypothetical:
   intentionally allocated.
 - the fourth production archive completed on 19 August with 320 verified
   partitions and 60,636,006 bytes. The derived read model was rebuilt to
-  `asOfDate=2026-08-11` as build `20260819T132622Z-e2b54354`; this expected
-  eight-day distance reflects the seven-day service-stabilization window, not
-  a failed refresh;
-- a repository-owned daily systemd workflow is ready for deployment. It runs
-  at 03:20 Europe/Rome, resumes an exact retained snapshot, verifies Parquet
-  before release, then atomically rebuilds analytics with the memory limits
-  proven on the production VPS.
+  `asOfDate=2026-08-11` as build `20260819T132622Z-e2b54354`;
+- the repository-owned daily systemd workflow is deployed at 03:20
+  Europe/Rome. It resumes an exact retained snapshot, verifies Parquet before
+  release, then atomically rebuilds analytics. The 23 August unattended run
+  completed end to end; the 24 August run published and verified its archive
+  but the disposable analytics build was killed under memory pressure while a
+  collector slot was starting. The previous read model remained available;
+- the current hardening increment adopts one public historical layer with a
+  three-complete-day stabilization period, reduces analytics query fan-out and
+  memory pressure, and requires a safe interval before the next collector slot
+  before starting the derived-model build.
 
 The first archive is evidence that normalized Parquet is compact, but it is not
 a fair 9.5-GiB-to-35-MiB compression comparison. The live SQLite file contains
@@ -80,7 +84,7 @@ status and acceptance evidence in the same pull request that changes a stage.
 | Immutable Parquet archive | Completed | Completed manifests are additive, `verify --all` passes, and normalized grains remain distinct. |
 | Professional semantic layer | Completed | `quality_day`, stabilized service/stop facts, daily metrics, and exact 7/28/90-day windows are built from completed manifests into an atomic derived SQLite model. |
 | Analytics query API | Completed | Versioned metadata, overview, ranking, outlier, and formula-safe CSV endpoints read only the derived analytics database and preserve the last good model when a rebuild fails. |
-| Daily archive and analytics refresh | Ready for deployment | The 03:20 Europe/Rome systemd run completes snapshot, capacity gate, incremental archive, latest-manifest verification, exact release, and atomic analytics rebuild; first unattended production success is the remaining acceptance evidence. |
+| Daily archive and analytics refresh | Deployed; hardening | The 03:20 Europe/Rome systemd run completes snapshot, capacity gate, incremental archive, latest-manifest verification, exact release, and atomic analytics rebuild. It must also avoid collector overlap and preserve the last good read model on resource failure. |
 | Public professional dashboard | Completed | Live remains the default; historical performance is lazy-loaded, mobile-first, multilingual, accessible, source-backed, and visibly qualified. |
 | Professional dashboard explorer | In progress | The v2 read model and `/v1/analytics/explore` power service-mix, rhythm, station, route, and exact-service views with the same evidence rules on desktop and mobile. |
 | Private analyst workbench | Deferred | A dedicated read model and authenticated workbench are deployed without access to the live collector database. |
@@ -129,10 +133,33 @@ views rather than another score:
   stop order. Equal train numbers on RFI/FNM or different departures are never
   merged.
 
+### Visualization contract for the current increment
+
+The user-approved direction keeps the existing BelloTreno page shell and theme,
+uses the same evidence on desktop and mobile, and keeps ECharts as the lazy
+historical renderer. Exact values, caveats and data-table alternatives remain
+editable data-bound layers rather than raster artwork or hover-only content.
+
+| Visual layer | Analytical job and encoding | Interaction, fallback and QA |
+| --- | --- | --- |
+| Punctuality and delay trend | Lines compare daily threshold rates and typical/tail arrival delay. P50 is labelled as the typical median; P90/P95 are labelled as the delay not exceeded by 90%/95% of eligible arrivals. | Direct legend text and a concise method note explain the percentiles; tooltip and accessible table retain date, minutes and sample context. |
+| Punctuality calendar | A Monday-first calendar heatmap shows daily within-five-minute arrival rate without treating missing days as zero. | Each cell visibly shows the day number, the tooltip gives the full date and percentage, and a date/value table provides the non-colour path. |
+| Operator and category composition | Horizontal bars use the shared operator/category colour ledger and encode share of distinct observable services. | Labels and tooltips show both a percent sign and the distinct service count; the table remains the precise lookup surface. |
+| Operator × category matrix | A fixed railway-domain order makes the sparse matrix comparable between windows instead of re-sorting by current volume. Categories are `REG, MET, FR, FA, FB, IC, ICN, EC, EN, EXP, NCL, unknown`; the operator axis runs bottom-up from Trenitalia AV through Trenitalia IC, Trenitalia REG, Trenord, Trenitalia TPER, Ferrovie del Sud Est and ÖBB. | Cell count remains visible, tooltip repeats operator/category/count, and the underlying table preserves every returned cell. |
+| Exact-service stop lifecycle | Two lines show eligible arrival/departure delay through ordered stops for one exact service identity. | The origin has no invented arrival point and the destination has no invented departure point. Planned/actual local timestamps accompany delay values; missing events render as null/`--`, never zero. |
+
+Fresh specialist passes cover statistical wording, typed chart contracts,
+accessible fallbacks and deterministic sort/null invariants. Cloudflare Preview
+remains the human visual review surface for light/dark themes and mobile/desktop
+layout.
+
 Implemented constraints are deliberate and visible in the product:
 
 - stabilized service outcomes trail live operations by the configured active
-  service TTL, currently seven days, so the UI labels the latest archived
+  service TTL, now three complete days. The archive cutoff is exclusive: a run
+  on calendar date D can publish service dates earlier than D-3, so the latest
+  selectable stable date normally appears as D-4. This is one stable public
+  layer, not a provisional/final split; the UI labels the latest archived
   service date separately from the read-model build time;
 - a selected 28/90-day window may initially contain fewer actual service days;
   `serviceDays / windowDays` is displayed and the previous-window delta remains

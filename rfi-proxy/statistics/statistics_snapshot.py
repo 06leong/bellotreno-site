@@ -81,7 +81,7 @@ class SnapshotPolicy:
             )
 
         active_ttl = _bounded_int(
-            env.get("COLLECTOR_ACTIVE_SERVICE_TTL_DAYS", "7"),
+            env.get("COLLECTOR_ACTIVE_SERVICE_TTL_DAYS", "3"),
             name="COLLECTOR_ACTIVE_SERVICE_TTL_DAYS",
             minimum=1,
             maximum=31,
