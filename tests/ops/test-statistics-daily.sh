@@ -60,7 +60,7 @@ if [[ "$joined" == *" config --format json "* ]]; then
   printf '{"services":{"bellotreno-statistics-analytics":{"mem_limit":"%s","memswap_limit":"%s","environment":{"ANALYTICS_DUCKDB_MEMORY_LIMIT":"%s","ANALYTICS_DUCKDB_THREADS":"1"}}}}\n' \
     "${FAKE_ANALYTICS_MEMORY_LIMIT:-838860800}" \
     "${FAKE_ANALYTICS_MEMORY_SWAP_LIMIT:-2147483648}" \
-    "${FAKE_ANALYTICS_DUCKDB_MEMORY_LIMIT:-256MB}"
+    "${FAKE_ANALYTICS_DUCKDB_MEMORY_LIMIT:-192MB}"
 elif [[ "$joined" == *" config --images "* ]]; then
   printf '%s\n' \
     "ghcr.io/06leong/bellotreno-statistics-archive:sha-$revision" \
@@ -78,7 +78,20 @@ elif [[ "$joined" == *" inspect bellotreno-statistics "* ]]; then
     printf '%s\n' 'sha256:configured-statistics-image'
   fi
 elif [[ "$joined" == *"collectorActive"* ]]; then
-  printf '%s\t%s\n' "${FAKE_COLLECTOR_ACTIVE:-0}" "${FAKE_COLLECTOR_STATUS:-success}"
+  if [[ -n "${FAKE_COLLECTOR_STATE_FILE:-}" && -s "$FAKE_COLLECTOR_STATE_FILE" ]]; then
+    IFS='|' read -r collector_active collector_status seconds_to_next next_at \
+      <"$FAKE_COLLECTOR_STATE_FILE"
+    tail -n +2 "$FAKE_COLLECTOR_STATE_FILE" \
+      >"$FAKE_COLLECTOR_STATE_FILE.next"
+    mv "$FAKE_COLLECTOR_STATE_FILE.next" "$FAKE_COLLECTOR_STATE_FILE"
+  else
+    collector_active="${FAKE_COLLECTOR_ACTIVE:-0}"
+    collector_status="${FAKE_COLLECTOR_STATUS:-success}"
+    seconds_to_next="${FAKE_COLLECTOR_SECONDS_TO_NEXT:-3600}"
+    next_at="${FAKE_COLLECTOR_NEXT_AT:-2026-08-24T02:05:00Z}"
+  fi
+  printf '%s\t%s\t%s\t%s\n' \
+    "$collector_active" "$collector_status" "$seconds_to_next" "$next_at"
 elif [[ "$joined" == *" bellotreno-statistics python -c "* && "$joined" == *"buildId"* ]]; then
   printf '%s\n' "build-1"
 elif [[ "$joined" == *" snapshot_statistics.py list "* ]]; then
@@ -131,6 +144,14 @@ set -euo pipefail
 exec python "$@"
 FAKE_PYTHON3
   chmod 0755 "$BIN_ROOT/python3"
+
+  cat >"$BIN_ROOT/sleep" <<'FAKE_SLEEP'
+#!/usr/bin/env bash
+set -euo pipefail
+
+printf 'sleep %s\n' "$*" >>"$FAKE_DOCKER_LOG"
+FAKE_SLEEP
+  chmod 0755 "$BIN_ROOT/sleep"
 }
 
 run_pipeline() {
@@ -140,6 +161,9 @@ run_pipeline() {
     FAKE_EXISTING_SNAPSHOT="${FAKE_EXISTING_SNAPSHOT:-0}" \
     FAKE_COLLECTOR_ACTIVE="${FAKE_COLLECTOR_ACTIVE:-0}" \
     FAKE_COLLECTOR_STATUS="${FAKE_COLLECTOR_STATUS:-success}" \
+    FAKE_COLLECTOR_SECONDS_TO_NEXT="${FAKE_COLLECTOR_SECONDS_TO_NEXT:-3600}" \
+    FAKE_COLLECTOR_NEXT_AT="${FAKE_COLLECTOR_NEXT_AT:-2026-08-24T02:05:00Z}" \
+    FAKE_COLLECTOR_STATE_FILE="${FAKE_COLLECTOR_STATE_FILE:-}" \
     FAKE_CAPACITY_OK="${FAKE_CAPACITY_OK:-true}" \
     FAKE_VERIFY_FAIL="${FAKE_VERIFY_FAIL:-0}" \
     FAKE_ANALYTICS_FAIL="${FAKE_ANALYTICS_FAIL:-0}" \
@@ -147,10 +171,11 @@ run_pipeline() {
     FAKE_FLOCK_FAIL="${FAKE_FLOCK_FAIL:-0}" \
     FAKE_ANALYTICS_MEMORY_LIMIT="${FAKE_ANALYTICS_MEMORY_LIMIT:-838860800}" \
     FAKE_ANALYTICS_MEMORY_SWAP_LIMIT="${FAKE_ANALYTICS_MEMORY_SWAP_LIMIT:-2147483648}" \
-    FAKE_ANALYTICS_DUCKDB_MEMORY_LIMIT="${FAKE_ANALYTICS_DUCKDB_MEMORY_LIMIT:-256MB}" \
+    FAKE_ANALYTICS_DUCKDB_MEMORY_LIMIT="${FAKE_ANALYTICS_DUCKDB_MEMORY_LIMIT:-192MB}" \
     BELLOTRENO_COMPOSE_DIR="$COMPOSE_ROOT" \
     BELLOTRENO_STATE_DIR="$STATE_ROOT" \
     BELLOTRENO_COLLECTOR_WAIT_SECONDS="${BELLOTRENO_COLLECTOR_WAIT_SECONDS:-1800}" \
+    BELLOTRENO_ANALYTICS_SAFE_WINDOW_SECONDS="${BELLOTRENO_ANALYTICS_SAFE_WINDOW_SECONDS:-900}" \
     "$RUNNER" run
 }
 
@@ -162,6 +187,7 @@ assert_contains "$FAKE_LOG" "bellotreno-statistics-archive run"
 assert_contains "$FAKE_LOG" "bellotreno-statistics-archive verify"
 assert_contains "$FAKE_LOG" "snapshot_statistics.py release"
 assert_contains "$FAKE_LOG" "bellotreno-statistics-analytics build"
+assert_not_contains "$FAKE_LOG" "collector_runs"
 [[ -f "$STATE_ROOT/latest-success/summary.json" ]] ||
   fail "success scenario did not publish a summary"
 
@@ -197,9 +223,49 @@ if BELLOTRENO_COLLECTOR_WAIT_SECONDS=0 \
 fi
 assert_not_contains "$FAKE_LOG" "snapshot_statistics.py create"
 
+make_scenario latest_stale_running_status
+if FAKE_COLLECTOR_ACTIVE=0 \
+  FAKE_COLLECTOR_STATUS=running \
+  run_pipeline; then
+  fail "latest stale running status with an idle live lock unexpectedly succeeded"
+fi
+assert_not_contains "$FAKE_LOG" "snapshot_statistics.py create"
+
+make_scenario analytics_safe_window_retry
+COLLECTOR_STATES="$SCENARIO_ROOT/collector-states"
+printf '%s\n' \
+  '0|success|3600|2026-08-24T02:05:00Z' \
+  '0|success|120|2026-08-24T01:35:00Z' \
+  '1|running|1500|2026-08-24T02:05:00Z' \
+  '0|success|1200|2026-08-24T02:05:00Z' \
+  >"$COLLECTOR_STATES"
+FAKE_COLLECTOR_STATE_FILE="$COLLECTOR_STATES" run_pipeline
+assert_contains "$FAKE_LOG" "sleep 60"
+assert_contains "$FAKE_LOG" "bellotreno-statistics-analytics build"
+
+make_scenario analytics_safe_window_timeout
+COLLECTOR_STATES="$SCENARIO_ROOT/collector-states"
+printf '%s\n' \
+  '0|success|3600|2026-08-24T02:05:00Z' \
+  '0|success|120|2026-08-24T01:35:00Z' \
+  >"$COLLECTOR_STATES"
+if BELLOTRENO_COLLECTOR_WAIT_SECONDS=0 \
+  FAKE_COLLECTOR_STATE_FILE="$COLLECTOR_STATES" \
+  run_pipeline; then
+  fail "analytics started without its configured collector safety window"
+fi
+assert_contains "$FAKE_LOG" "snapshot_statistics.py release"
+assert_not_contains "$FAKE_LOG" "bellotreno-statistics-analytics build"
+
 make_scenario unsafe_analytics_memory
 if FAKE_ANALYTICS_MEMORY_LIMIT=536870912 run_pipeline; then
   fail "unsafe analytics memory scenario unexpectedly succeeded"
+fi
+assert_not_contains "$FAKE_LOG" "snapshot_statistics.py create"
+
+make_scenario unsafe_analytics_duckdb_memory
+if FAKE_ANALYTICS_DUCKDB_MEMORY_LIMIT=256MB run_pipeline; then
+  fail "unsafe analytics DuckDB memory scenario unexpectedly succeeded"
 fi
 assert_not_contains "$FAKE_LOG" "snapshot_statistics.py create"
 

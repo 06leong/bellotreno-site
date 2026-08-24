@@ -6,6 +6,14 @@ import {
   normalizeAnalyticsOverview,
   percentagePointChange
 } from "../../src/lib/normalizers/statistics-analytics.ts";
+import {
+  ANALYTICS_MATRIX_CATEGORY_ORDER,
+  ANALYTICS_MATRIX_OPERATOR_ORDER,
+  analyticsCalendarDayLabel,
+  analyticsCalendarNameMap,
+  analyticsMatrixCategoryLabel,
+  buildAnalyticsLifecyclePoints
+} from "../../src/client/statistics-echarts.ts";
 
 function metric(percent = 82.5) {
   const rate = { numerator: 82, denominator: 100, percent, confidence95: { low: 74, high: 89 } };
@@ -144,4 +152,79 @@ test("analytics exploration preserves station roles, service identity and null e
   assert.equal(normalized.services.spotlight.service?.train_key, service.train_key);
   assert.equal(normalized.services.spotlight.stops[0]?.arrival_delay, null);
   assert.equal(normalized.services.crossMidnight.denominator, 100);
+});
+
+test("analytics chart dimensions keep the published railway reading order", () => {
+  assert.deepEqual(ANALYTICS_MATRIX_CATEGORY_ORDER, [
+    "REG", "MET", "FR", "FA", "FB", "IC", "ICN", "EC", "EN", "EXP", "NCL", "unknown"
+  ]);
+  assert.deepEqual(ANALYTICS_MATRIX_OPERATOR_ORDER, ["1", "4", "2", "63", "18", "910", "64"]);
+  assert.equal(analyticsCalendarDayLabel(["2026-08-24", 88.7]), "24");
+  assert.equal(analyticsCalendarDayLabel(["invalid", 88.7]), "");
+  assert.deepEqual(
+    analyticsCalendarNameMap(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]),
+    ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+  );
+  assert.equal(analyticsMatrixCategoryLabel("unknown"), "UNKNOWN");
+  assert.equal(analyticsMatrixCategoryLabel("ICN"), "ICN");
+});
+
+test("analytics lifecycle removes impossible endpoint events without inventing zeroes", () => {
+  const base = {
+    service_date: "2026-08-24",
+    train_key: "799-S00219-1783893600000",
+    platform: null,
+    stop_cancelled: 0,
+    delay_change: null
+  };
+  const points = buildAnalyticsLifecyclePoints([
+    {
+      ...base,
+      stop_number: 0,
+      station_code: "S00219",
+      station_name: "TORINO PORTA NUOVA",
+      stop_type: "origine",
+      arrival_expected: "2026-08-24T19:55:00+02:00",
+      arrival_actual: "2026-08-24T19:58:00+02:00",
+      arrival_delay: 3,
+      departure_expected: "2026-08-24T20:00:00+02:00",
+      departure_actual: "2026-08-24T20:00:00+02:00",
+      departure_delay: 0
+    },
+    {
+      ...base,
+      stop_number: 1,
+      station_code: "S05043",
+      station_name: "ASTI",
+      stop_type: "fermata",
+      arrival_expected: "2026-08-24T20:32:00+02:00",
+      arrival_actual: null,
+      arrival_delay: null,
+      departure_expected: "2026-08-24T20:34:00+02:00",
+      departure_actual: "2026-08-24T20:33:00+02:00",
+      departure_delay: -1
+    },
+    {
+      ...base,
+      stop_number: 2,
+      station_code: "S01700",
+      station_name: "SALERNO",
+      stop_type: "destinazione",
+      arrival_expected: "2026-08-25T06:00:00+02:00",
+      arrival_actual: "2026-08-25T06:12:00+02:00",
+      arrival_delay: 12,
+      departure_expected: "2026-08-25T06:05:00+02:00",
+      departure_actual: "2026-08-25T06:17:00+02:00",
+      departure_delay: 12
+    }
+  ]);
+
+  assert.equal(points[0]?.arrivalExpected, null);
+  assert.equal(points[0]?.arrivalDelay, null);
+  assert.equal(points[0]?.departureDelay, 0);
+  assert.equal(points[1]?.arrivalDelay, null);
+  assert.equal(points[1]?.departureDelay, -1);
+  assert.equal(points[2]?.arrivalDelay, 12);
+  assert.equal(points[2]?.departureExpected, null);
+  assert.equal(points[2]?.departureDelay, null);
 });

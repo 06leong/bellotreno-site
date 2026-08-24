@@ -336,6 +336,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                         </div>
                         <span class="statistics-chart-unit" data-i18n="statistics_minutes_short">min</span>
                     </div>
+                    <p class="statistics-method-note" data-i18n="statistics_percentile_explainer">P50 is the delay not exceeded by half of observed arrivals; P90 and P95 cover 90% and 95%, revealing the long tail.</p>
                     <div id="statisticsDelayPercentileChart" class="statistics-echart" role="img" aria-label="Arrival delay percentiles"></div>
                     <div id="statisticsDelayPercentileTable" class="statistics-chart-data-table"></div>
                 </article>
@@ -368,6 +369,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                         </div>
                     </div>
                     <div id="statisticsPunctualityCalendarChart" class="statistics-echart statistics-echart-compact" role="img" aria-label="Daily punctuality calendar"></div>
+                    <div id="statisticsPunctualityCalendarTable" class="statistics-chart-data-table"></div>
                 </article>
             </section>
 
@@ -524,6 +526,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                             <span id="statisticsSpotlightObservations" class="statistics-chart-unit">--</span>
                         </div>
                         <div id="statisticsServiceLifecycleChart" class="statistics-echart statistics-echart-compact" role="img" aria-label="Delay along the selected train service"></div>
+                        <div id="statisticsServiceLifecycleTable" class="statistics-chart-data-table"></div>
                         <div id="statisticsSpotlightFacts" class="statistics-spotlight-facts"></div>
                     </article>
                 </div>

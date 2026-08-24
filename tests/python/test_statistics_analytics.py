@@ -217,6 +217,52 @@ class StatisticsAnalyticsTest(unittest.TestCase):
             ).fetchall()
             self.assertEqual([(row[0], row[1]) for row in operators], [("10", 1), ("2", 2), ("4", 1)])
 
+            historical_dimension_types = connection.execute(
+                "SELECT DISTINCT dimension_type FROM dimension_window "
+                "WHERE as_of_date='2026-08-01' ORDER BY dimension_type"
+            ).fetchall()
+            self.assertEqual(
+                [row[0] for row in historical_dimension_types],
+                ["category", "operator"],
+            )
+
+            latest_dimension_types = connection.execute(
+                "SELECT DISTINCT dimension_type FROM dimension_window "
+                "WHERE as_of_date='2026-08-02' ORDER BY dimension_type"
+            ).fetchall()
+            self.assertEqual(
+                [row[0] for row in latest_dimension_types],
+                ["category", "operator", "relation", "station"],
+            )
+
+            latest_station = connection.execute(
+                "SELECT observed_services, outcome_eligible_services, "
+                "arrival_sample, within_15, delay_p90 FROM dimension_window "
+                "WHERE as_of_date='2026-08-02' AND window_days=7 "
+                "AND dimension_type='station' AND dimension_key='S010'"
+            ).fetchone()
+            self.assertEqual(tuple(latest_station[:4]), (1, 1, 1, 1))
+            self.assertEqual(latest_station[4], 10)
+
+            latest_relation = connection.execute(
+                "SELECT observed_services, outcome_eligible_services, "
+                "arrival_sample, within_15, delay_p90 FROM dimension_window "
+                "WHERE as_of_date='2026-08-02' AND window_days=7 "
+                "AND dimension_type='relation' "
+                "AND dimension_key='MILANO CENTRALE -> ROMA TERMINI'"
+            ).fetchone()
+            self.assertEqual(tuple(latest_relation[:4]), (1, 1, 1, 1))
+            self.assertEqual(latest_relation[4], 10)
+
+            daily_dimension_types = connection.execute(
+                "SELECT DISTINCT dimension_type FROM dimension_day "
+                "WHERE service_date='2026-08-01' ORDER BY dimension_type"
+            ).fetchall()
+            self.assertEqual(
+                [row[0] for row in daily_dimension_types],
+                ["category", "operator", "relation", "station"],
+            )
+
             duplicate_number = connection.execute(
                 "SELECT COUNT(*) FROM outlier_service WHERE train_number='100'"
             ).fetchone()[0]
@@ -267,6 +313,24 @@ class StatisticsAnalyticsTest(unittest.TestCase):
             self.assertEqual(metadata["schemaVersion"], "2")
             self.assertEqual(metadata["metricDefinitionVersion"], "2026-08-11-v2")
             self.assertEqual(metadata["asOfDate"], "2026-08-02")
+
+    def test_build_disables_duckdb_insertion_order_preservation(self):
+        captured_config = None
+
+        class DuckDBProxy:
+            @staticmethod
+            def connect(*args, **kwargs):
+                nonlocal captured_config
+                captured_config = kwargs.get("config")
+                return duckdb.connect(*args, **kwargs)
+
+        with patch("analytics_statistics._import_duckdb", return_value=DuckDBProxy()):
+            analytics_build(self.config)
+
+        self.assertIsNotNone(captured_config)
+        self.assertEqual(captured_config["memory_limit"], "128MB")
+        self.assertEqual(captured_config["threads"], "1")
+        self.assertEqual(captured_config["preserve_insertion_order"], "false")
 
     def test_failed_rebuild_does_not_replace_last_good_read_model(self):
         first = analytics_build(self.config)

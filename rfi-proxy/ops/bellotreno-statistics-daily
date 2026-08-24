@@ -7,6 +7,7 @@ umask 077
 COMPOSE_DIR="${BELLOTRENO_COMPOSE_DIR:-/home/docker_apps/rfi-proxy}"
 STATE_DIR="${BELLOTRENO_STATE_DIR:-/var/lib/bellotreno-statistics-daily}"
 COLLECTOR_WAIT_SECONDS="${BELLOTRENO_COLLECTOR_WAIT_SECONDS:-1800}"
+ANALYTICS_SAFE_WINDOW_SECONDS="${BELLOTRENO_ANALYTICS_SAFE_WINDOW_SECONDS:-900}"
 MODE="${1:-run}"
 
 snapshot_id=""
@@ -74,6 +75,8 @@ done
 
 [[ "$COLLECTOR_WAIT_SECONDS" =~ ^[0-9]+$ ]] ||
   die "BELLOTRENO_COLLECTOR_WAIT_SECONDS must be a non-negative integer"
+[[ "$ANALYTICS_SAFE_WINDOW_SECONDS" =~ ^[0-9]+$ ]] ||
+  die "BELLOTRENO_ANALYTICS_SAFE_WINDOW_SECONDS must be a non-negative integer"
 
 mkdir -p "$STATE_DIR/runs"
 exec 9>"$STATE_DIR/pipeline.lock"
@@ -188,8 +191,8 @@ if isinstance(environment, list):
     )
 if not isinstance(environment, dict):
     raise SystemExit("analytics Compose environment is invalid")
-if str(environment.get("ANALYTICS_DUCKDB_MEMORY_LIMIT", "")).upper() != "256MB":
-    raise SystemExit("analytics DuckDB memory limit must be 256MB on this VPS")
+if str(environment.get("ANALYTICS_DUCKDB_MEMORY_LIMIT", "")).upper() != "192MB":
+    raise SystemExit("analytics DuckDB memory limit must be 192MB on this VPS")
 if str(environment.get("ANALYTICS_DUCKDB_THREADS", "")) != "1":
     raise SystemExit("analytics DuckDB thread count must be 1 on this VPS")
 '
@@ -213,19 +216,30 @@ run_analytics_job() {
 
 collector_state() {
   docker compose exec -T bellotreno-statistics python -c \
-    'import json,urllib.request; d=json.load(urllib.request.urlopen("http://127.0.0.1:8081/health",timeout=15)); assert d.get("ok") is True; active=d.get("collectorActive"); assert isinstance(active,bool); status=(d.get("lastCollectorRun") or {}).get("status") or "unknown"; print(str(int(active))+"\t"+status)'
+    'import json,urllib.request; from datetime import datetime,timezone; d=json.load(urllib.request.urlopen("http://127.0.0.1:8081/health",timeout=15)); assert d.get("ok") is True; active=d.get("collectorActive"); assert isinstance(active,bool); status=(d.get("lastCollectorRun") or {}).get("status") or "unknown"; next_text=d.get("nextScheduledAt"); assert isinstance(next_text,str) and next_text; next_at=datetime.fromisoformat(next_text.replace("Z","+00:00")); assert next_at.tzinfo is not None; remaining=round((next_at-datetime.now(timezone.utc)).total_seconds()); print(str(int(active))+"\t"+status+"\t"+str(remaining)+"\t"+next_text)'
 }
 
 wait_for_collector_idle() {
-  local active deadline state status
+  local required_window_seconds=${1:-0}
+  local phase=${2:-operation}
+  local active deadline next_at seconds_to_next state status
   deadline=$((SECONDS + COLLECTOR_WAIT_SECONDS))
   while true; do
     if ! state="$(collector_state)"; then
       die "statistics health endpoint is unavailable"
     fi
-    IFS=$'\t' read -r active status <<<"$state"
+    IFS=$'\t' read -r active status seconds_to_next next_at <<<"$state"
     [[ "$active" == "0" || "$active" == "1" ]] ||
       die "statistics health endpoint returned an invalid collector-active state"
+    [[ "$seconds_to_next" =~ ^-?[0-9]+$ ]] ||
+      die "statistics health endpoint returned an invalid next-schedule distance"
+    [[ -n "$next_at" ]] ||
+      die "statistics health endpoint returned no next scheduled collection"
+
+    printf '%s\t%s\t%s\t%s\t%s\n' \
+      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      "$active" "$status" "$seconds_to_next" "$next_at" \
+      >>"$run_dir/collector-state-$phase.tsv"
 
     if [[ "$active" == "1" ]]; then
       if (( SECONDS >= deadline )); then
@@ -238,7 +252,15 @@ wait_for_collector_idle() {
 
     case "$status" in
       success | failed | skipped)
-        log "collector is idle (last status: $status)"
+        if (( seconds_to_next < required_window_seconds )); then
+          if (( SECONDS >= deadline )); then
+            die "collector did not provide the required $required_window_seconds-second $phase safety window within $COLLECTOR_WAIT_SECONDS seconds"
+          fi
+          log "collector is idle, but the next collection at $next_at is only $seconds_to_next seconds away; waiting across the next slot for the $required_window_seconds-second $phase safety window"
+          sleep 60
+          continue
+        fi
+        log "collector is idle (last status: $status; next collection at $next_at in $seconds_to_next seconds; required $phase window: $required_window_seconds seconds)"
         return 0
         ;;
       running)
@@ -374,7 +396,8 @@ PY
 
 resolve_pinned_images
 validate_analytics_resources
-wait_for_collector_idle
+log "analytics requires at least $ANALYTICS_SAFE_WINDOW_SECONDS seconds before the next scheduled collection"
+wait_for_collector_idle 0 snapshot
 
 docker compose exec -T bellotreno-statistics \
   python snapshot_statistics.py list >"$run_dir/snapshot-list.json"
@@ -434,7 +457,7 @@ if value.get("snapshotId") != sys.argv[2]:
     raise SystemExit("snapshot release returned unexpected output")
 PY
 
-wait_for_collector_idle
+wait_for_collector_idle "$ANALYTICS_SAFE_WINDOW_SECONDS" analytics
 log "rebuilding the disposable analytics read model"
 run_analytics_job build >"$run_dir/analytics-build.json"
 

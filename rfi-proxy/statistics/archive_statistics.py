@@ -224,7 +224,7 @@ class ArchiveConfig:
         ttl_days = _bounded_int(
             snapshot_policy.active_service_ttl_days
             if snapshot_policy
-            else os.environ.get("ARCHIVE_ACTIVE_SERVICE_TTL_DAYS", "7"),
+            else os.environ.get("ARCHIVE_ACTIVE_SERVICE_TTL_DAYS", "3"),
             name="ARCHIVE_ACTIVE_SERVICE_TTL_DAYS",
             minimum=1,
             maximum=31,
@@ -414,7 +414,7 @@ def configured_datasets(config: ArchiveConfig) -> tuple[DatasetSpec, ...]:
     if config.raw_payload_retention_days <= config.active_service_ttl_days:
         raise ValueError(
             "ARCHIVE_INCLUDE_RAW_PAYLOADS requires raw payload retention to exceed "
-            "the active service TTL so D+8 partitions remain recoverable"
+            "the active service TTL so stable-service partitions remain recoverable"
         )
     return DATASETS
 

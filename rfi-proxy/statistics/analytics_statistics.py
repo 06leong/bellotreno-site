@@ -44,7 +44,7 @@ class AnalyticsConfig:
                 or os.environ.get("ANALYTICS_ROOT", DEFAULT_ANALYTICS_ROOT)
             ),
             as_of_date=as_of,
-            memory_limit=os.environ.get("ANALYTICS_DUCKDB_MEMORY_LIMIT", "384MB"),
+            memory_limit=os.environ.get("ANALYTICS_DUCKDB_MEMORY_LIMIT", "192MB"),
             threads=_bounded_int(
                 os.environ.get("ANALYTICS_DUCKDB_THREADS", "1"),
                 name="ANALYTICS_DUCKDB_THREADS",
@@ -547,37 +547,19 @@ def build_semantic_tables(connection: Any, index: ArchiveIndex, config: Analytic
     log("building network and dimension windows")
     connection.execute(
         """
-        CREATE OR REPLACE TEMP TABLE dimension_fact AS
-        SELECT service_date, train_key, 'operator' AS dimension_type,
+        CREATE OR REPLACE TEMP TABLE rolling_dimension_fact AS
+        SELECT service_date, 'operator' AS dimension_type,
                COALESCE(operator, 'unknown') AS dimension_key,
                COALESCE(operator, 'unknown') AS dimension_label,
                outcome_eligible, arrival_eligible, cancelled, completed,
                final_arrival_delay
         FROM fact_service_outcome
         UNION ALL
-        SELECT service_date, train_key, 'category',
+        SELECT service_date, 'category',
                COALESCE(category, 'unknown'), COALESCE(category, 'unknown'),
                outcome_eligible, arrival_eligible, cancelled, completed,
                final_arrival_delay
         FROM fact_service_outcome
-        UNION ALL
-        SELECT service_date, train_key, 'relation',
-               COALESCE(NULLIF(relation_key, ''), train_key),
-               COALESCE(NULLIF(relation_key, ''), train_key),
-               outcome_eligible, arrival_eligible, cancelled, completed,
-               final_arrival_delay
-        FROM fact_service_outcome
-        UNION ALL
-        SELECT service_date, train_key, 'station',
-               COALESCE(NULLIF(station_code, ''), 'unknown'),
-               COALESCE(NULLIF(station_name, ''), NULLIF(station_code, ''), 'unknown'),
-               CASE WHEN stop_cancelled=1 OR arrival_delay IS NOT NULL THEN 1 ELSE 0 END,
-               CASE WHEN stop_cancelled=0 AND arrival_delay IS NOT NULL THEN 1 ELSE 0 END,
-               stop_cancelled,
-               CASE WHEN stop_cancelled=0 AND arrival_delay IS NOT NULL THEN 1 ELSE 0 END,
-               CASE WHEN stop_cancelled=0 THEN arrival_delay END
-        FROM fact_stop_outcome
-        WHERE station_code IS NOT NULL
         """
     )
     connection.execute(
@@ -586,9 +568,48 @@ def build_semantic_tables(connection: Any, index: ArchiveIndex, config: Analytic
         SELECT service_date, dimension_type, dimension_key,
                MAX(dimension_label) AS dimension_label,
                {METRIC_COLUMNS}
-        FROM dimension_fact
+        FROM rolling_dimension_fact
         WHERE CAST(service_date AS DATE) <= DATE '{max_date}'
         GROUP BY service_date, dimension_type, dimension_key
+        """
+    )
+    connection.execute(
+        f"""
+        INSERT INTO dimension_day
+        SELECT service_date, 'relation' AS dimension_type,
+               COALESCE(NULLIF(relation_key, ''), train_key) AS dimension_key,
+               MAX(COALESCE(NULLIF(relation_key, ''), train_key)) AS dimension_label,
+               {METRIC_COLUMNS}
+        FROM fact_service_outcome
+        WHERE CAST(service_date AS DATE) <= DATE '{max_date}'
+        GROUP BY service_date, COALESCE(NULLIF(relation_key, ''), train_key)
+        """
+    )
+    connection.execute(
+        f"""
+        INSERT INTO dimension_day
+        SELECT service_date, 'station' AS dimension_type, dimension_key,
+               MAX(dimension_label) AS dimension_label,
+               {METRIC_COLUMNS}
+        FROM (
+            SELECT service_date,
+                   COALESCE(NULLIF(station_code, ''), 'unknown') AS dimension_key,
+                   COALESCE(
+                       NULLIF(station_name, ''), NULLIF(station_code, ''), 'unknown'
+                   ) AS dimension_label,
+                   CASE WHEN stop_cancelled=1 OR arrival_delay IS NOT NULL
+                        THEN 1 ELSE 0 END AS outcome_eligible,
+                   CASE WHEN stop_cancelled=0 AND arrival_delay IS NOT NULL
+                        THEN 1 ELSE 0 END AS arrival_eligible,
+                   stop_cancelled AS cancelled,
+                   CASE WHEN stop_cancelled=0 AND arrival_delay IS NOT NULL
+                        THEN 1 ELSE 0 END AS completed,
+                   CASE WHEN stop_cancelled=0 THEN arrival_delay END AS final_arrival_delay
+            FROM fact_stop_outcome
+            WHERE station_code IS NOT NULL
+        ) AS station_fact
+        WHERE CAST(service_date AS DATE) <= DATE '{max_date}'
+        GROUP BY service_date, dimension_key
         """
     )
     windows_sql = ",".join(f"({value})" for value in DEFAULT_WINDOWS)
@@ -630,14 +651,71 @@ def build_semantic_tables(connection: Any, index: ArchiveIndex, config: Analytic
                MAX(f.dimension_label) AS dimension_label,
                {METRIC_COLUMNS}
         FROM as_of_dates a CROSS JOIN windows w
-        JOIN dimension_fact f
+        JOIN rolling_dimension_fact f
           ON CAST(f.service_date AS DATE)
              BETWEEN a.as_of_date - (w.window_days - 1) * INTERVAL 1 DAY
                  AND a.as_of_date
-        WHERE f.dimension_type IN ('operator', 'category') OR a.as_of_date=DATE '{max_date}'
         GROUP BY a.as_of_date, w.window_days, f.dimension_type, f.dimension_key
         """
     )
+    connection.execute(
+        f"""
+        INSERT INTO dimension_window
+        WITH windows(window_days) AS (VALUES {windows_sql})
+        SELECT '{max_date}' AS as_of_date,
+               w.window_days,
+               CAST(DATE '{max_date}' - (w.window_days - 1) * INTERVAL 1 DAY AS DATE)
+                   AS window_start,
+               'relation' AS dimension_type,
+               COALESCE(NULLIF(f.relation_key, ''), f.train_key) AS dimension_key,
+               MAX(COALESCE(NULLIF(f.relation_key, ''), f.train_key)) AS dimension_label,
+               {METRIC_COLUMNS}
+        FROM windows w
+        JOIN fact_service_outcome f
+          ON CAST(f.service_date AS DATE)
+             BETWEEN DATE '{max_date}' - (w.window_days - 1) * INTERVAL 1 DAY
+                 AND DATE '{max_date}'
+        GROUP BY w.window_days, COALESCE(NULLIF(f.relation_key, ''), f.train_key)
+        """
+    )
+    connection.execute(
+        f"""
+        INSERT INTO dimension_window
+        WITH windows(window_days) AS (VALUES {windows_sql}),
+        station_fact AS (
+            SELECT service_date,
+                   COALESCE(NULLIF(station_code, ''), 'unknown') AS dimension_key,
+                   COALESCE(
+                       NULLIF(station_name, ''), NULLIF(station_code, ''), 'unknown'
+                   ) AS dimension_label,
+                   CASE WHEN stop_cancelled=1 OR arrival_delay IS NOT NULL
+                        THEN 1 ELSE 0 END AS outcome_eligible,
+                   CASE WHEN stop_cancelled=0 AND arrival_delay IS NOT NULL
+                        THEN 1 ELSE 0 END AS arrival_eligible,
+                   stop_cancelled AS cancelled,
+                   CASE WHEN stop_cancelled=0 AND arrival_delay IS NOT NULL
+                        THEN 1 ELSE 0 END AS completed,
+                   CASE WHEN stop_cancelled=0 THEN arrival_delay END AS final_arrival_delay
+            FROM fact_stop_outcome
+            WHERE station_code IS NOT NULL
+        )
+        SELECT '{max_date}' AS as_of_date,
+               w.window_days,
+               CAST(DATE '{max_date}' - (w.window_days - 1) * INTERVAL 1 DAY AS DATE)
+                   AS window_start,
+               'station' AS dimension_type,
+               f.dimension_key,
+               MAX(f.dimension_label) AS dimension_label,
+               {METRIC_COLUMNS}
+        FROM windows w
+        JOIN station_fact f
+          ON CAST(f.service_date AS DATE)
+             BETWEEN DATE '{max_date}' - (w.window_days - 1) * INTERVAL 1 DAY
+                 AND DATE '{max_date}'
+        GROUP BY w.window_days, f.dimension_key
+        """
+    )
+    connection.execute("DROP TABLE rolling_dimension_fact")
     connection.execute(
         f"""
         CREATE OR REPLACE TEMP TABLE outlier_service AS
@@ -1086,6 +1164,7 @@ def analytics_build(config: AnalyticsConfig) -> dict[str, Any]:
                     "memory_limit": config.memory_limit,
                     "threads": str(config.threads),
                     "temp_directory": str(temp_root),
+                    "preserve_insertion_order": "false",
                 }
             )
             try:
