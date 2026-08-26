@@ -394,6 +394,22 @@ print(
 PY
 }
 
+validate_analytics_cleanup_json() {
+  python3 - "$1" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    value = json.load(handle)
+if value.get("mode") != "cleanup" or value.get("status") != "success":
+    raise SystemExit("analytics cleanup did not report success")
+removed = value.get("removedWorkRoots")
+if not isinstance(removed, int) or isinstance(removed, bool) or removed < 0:
+    raise SystemExit("analytics cleanup returned an invalid removal count")
+print(f"analytics cleanup removedWorkRoots={removed}")
+PY
+}
+
 resolve_pinned_images
 validate_analytics_resources
 log "analytics requires at least $ANALYTICS_SAFE_WINDOW_SECONDS seconds before the next scheduled collection"
@@ -414,6 +430,10 @@ if [[ "$MODE" == "preflight" ]]; then
   log "preflight completed successfully"
   exit 0
 fi
+
+log "cleaning abandoned Analytics work directories before the archive capacity gate"
+run_analytics_job cleanup >"$run_dir/analytics-cleanup.json"
+validate_analytics_cleanup_json "$run_dir/analytics-cleanup.json"
 
 if [[ -n "$snapshot_id" ]]; then
   log "resuming prepared snapshot $snapshot_id"

@@ -262,9 +262,12 @@ export but is not a retention policy.
 `plan` is the read-only preflight. Review its source dates, selected partitions,
 snapshot provenance, disk estimate, and free-space decision. The default safety
 reserve is 5 GiB; the capacity gate also reserves room for configured DuckDB
-spill and conservative Parquet growth. Adjust
-`STATISTICS_ARCHIVE_SAFETY_GIB` only from measured capacity, not merely to make
-a full disk pass.
+spill and conservative Parquet growth. A completed handoff snapshot is already
+allocated, so prepared-snapshot runs report `snapshotCopyReserveBytes: 0`
+instead of reserving room for a second database copy. Direct legacy runs that
+must create their own snapshot still reserve the full source database size.
+Adjust `STATISTICS_ARCHIVE_SAFETY_GIB` only from measured capacity, not merely
+to make a full disk pass.
 
 `continuityOk: false` or a non-zero `historicalPartitionGapCount` does not make
 `run` exit non-zero: the job still preserves every currently recoverable
@@ -387,6 +390,9 @@ The script preserves the same safety boundaries as the manual runbook:
 - the running collector must use that configured image, and its health payload
   must expose the live collector-lock state from the same release;
 - `plan` capacity must pass before export;
+- a real daily run removes abandoned `analytics-*` work directories under the
+  Analytics publication lock before evaluating archive capacity; `preflight`
+  remains read-only;
 - the newly completed manifest is verified before the exact snapshot is
   released; `verify --all` remains the periodic/manual deep audit;
 - an archive failure retains the exact snapshot and diagnostics instead of
@@ -395,8 +401,10 @@ The script preserves the same safety boundaries as the manual runbook:
   one CPU, one DuckDB thread, and a 192-MiB DuckDB limit for the 1-GiB
   production VPS; neither container ceiling is raised;
 - analytics publishes atomically, so a failed build leaves the previous read
-  model available; a successful build ID must also be visible through the
-  always-on service health endpoint.
+  model available; before a new build starts under the publication lock, it
+  removes `analytics-*` work directories left by an earlier SIGKILL or host
+  interruption; a successful build ID must also be visible through the always-
+  on service health endpoint.
 
 The analytics safety interval defaults to 900 seconds. Override it only on the
 host, not in Compose, by setting
