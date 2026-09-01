@@ -659,9 +659,14 @@ def duckdb_size_bytes(value: str) -> int:
     return int(number * multiplier)
 
 
+def snapshot_copy_reserve_bytes(config: ArchiveConfig, database_bytes: int) -> int:
+    """Reserve a source copy only when this process must create one itself."""
+    return database_bytes if config.prepared_snapshot is None else 0
+
+
 def required_free_bytes(config: ArchiveConfig, database_bytes: int) -> int:
     return int(
-        database_bytes
+        snapshot_copy_reserve_bytes(config, database_bytes)
         + duckdb_size_bytes(config.duckdb_max_temp_directory_size)
         + config.safety_gib * GIB
     )
@@ -1160,6 +1165,10 @@ def _build_plan_unlocked(config: ArchiveConfig) -> dict[str, Any]:
     sizes = source_sizes(config.source_db)
     config.archive_root.mkdir(parents=True, exist_ok=True)
     disk_free = shutil.disk_usage(config.archive_root).free
+    snapshot_copy_reserve = snapshot_copy_reserve_bytes(
+        config,
+        sizes["databaseBytes"],
+    )
     base_required_free = required_free_bytes(config, sizes["databaseBytes"])
     with open_archive_source(config) as conn:
         migrations = validate_source_schema(conn)
@@ -1265,6 +1274,7 @@ def _build_plan_unlocked(config: ArchiveConfig) -> dict[str, Any]:
         "includeRawPayloads": config.include_raw_payloads,
         "rawPayloadPendingBytes": raw_payload_pending_bytes,
         "rawPayloadCapacityReserveBytes": raw_payload_capacity_reserve,
+        "snapshotCopyReserveBytes": snapshot_copy_reserve,
         "coverageRolloutDate": rollout_date.isoformat() if rollout_date else None,
         "coverageRolloutSource": rollout_source,
         "dimensionSnapshotDate": (

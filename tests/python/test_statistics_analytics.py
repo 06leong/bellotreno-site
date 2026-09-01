@@ -12,7 +12,13 @@ ROOT = Path(__file__).resolve().parents[2]
 STATISTICS_DIR = ROOT / "rfi-proxy" / "statistics"
 sys.path.insert(0, str(STATISTICS_DIR))
 
-from analytics_statistics import AnalyticsConfig, analytics_build, analytics_lock  # noqa: E402
+from analytics_statistics import (  # noqa: E402
+    AnalyticsConfig,
+    analytics_build,
+    analytics_cleanup,
+    analytics_lock,
+    remove_abandoned_work_roots,
+)
 
 
 try:
@@ -346,6 +352,11 @@ class StatisticsAnalyticsTest(unittest.TestCase):
         self.assertEqual(first["status"], "success")
 
     def test_failed_build_cleans_temporary_publication_files(self):
+        abandoned = self.analytics / "analytics-abandoned"
+        abandoned.mkdir(parents=True)
+        (abandoned / "duckdb-temp").mkdir()
+        (abandoned / "duckdb-temp" / "spill.tmp").write_bytes(b"stale")
+
         with patch("analytics_statistics._create_archive_views", side_effect=RuntimeError("boom")):
             with self.assertRaisesRegex(RuntimeError, "boom"):
                 analytics_build(self.config)
@@ -355,6 +366,50 @@ class StatisticsAnalyticsTest(unittest.TestCase):
 
 
 class StatisticsAnalyticsLockTest(unittest.TestCase):
+    def test_abandoned_work_roots_are_removed_without_touching_read_model(self):
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
+            root = Path(temporary)
+            read_model = root / "analytics.db"
+            read_model.write_bytes(b"published")
+            abandoned = root / "analytics-abandoned"
+            abandoned.mkdir()
+            (abandoned / "spill.tmp").write_bytes(b"stale")
+
+            with analytics_lock(root):
+                removed = remove_abandoned_work_roots(root)
+
+            self.assertEqual(removed, 1)
+            self.assertFalse(abandoned.exists())
+            self.assertEqual(read_model.read_bytes(), b"published")
+
+    def test_cleanup_command_reports_removed_work_roots(self):
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
+            root = Path(temporary)
+            abandoned = root / "analytics-abandoned"
+            abandoned.mkdir()
+
+            result = analytics_cleanup(
+                AnalyticsConfig(
+                    archive_root=root / "archive",
+                    analytics_root=root,
+                    as_of_date=None,
+                    memory_limit="128MB",
+                    threads=1,
+                    max_history_days=730,
+                    minimum_ranking_sample=100,
+                )
+            )
+
+            self.assertEqual(
+                result,
+                {
+                    "mode": "cleanup",
+                    "status": "success",
+                    "removedWorkRoots": 1,
+                },
+            )
+            self.assertFalse(abandoned.exists())
+
     def test_concurrent_build_lock_fails_without_blocking(self):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             root = Path(temporary)

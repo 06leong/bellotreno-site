@@ -93,6 +93,30 @@ def log(message: str) -> None:
     print(f"[statistics-analytics] {message}", file=sys.stderr, flush=True)
 
 
+def remove_abandoned_work_roots(root: Path) -> int:
+    """Remove work directories left behind when a build is killed abruptly."""
+    removed = 0
+    for candidate in sorted(root.glob("analytics-*")):
+        if candidate.is_symlink() or not candidate.is_dir():
+            raise RuntimeError(
+                f"unexpected Analytics work-root entry requires review: {candidate}"
+            )
+        shutil.rmtree(candidate)
+        removed += 1
+    return removed
+
+
+def analytics_cleanup(config: AnalyticsConfig) -> dict[str, Any]:
+    config.analytics_root.mkdir(parents=True, exist_ok=True)
+    with analytics_lock(config.analytics_root):
+        removed = remove_abandoned_work_roots(config.analytics_root)
+    return {
+        "mode": "cleanup",
+        "status": "success",
+        "removedWorkRoots": removed,
+    }
+
+
 @contextmanager
 def analytics_lock(root: Path):
     """Hold a non-blocking publication lock in the writable analytics root."""
@@ -1148,6 +1172,10 @@ def analytics_build(config: AnalyticsConfig) -> dict[str, Any]:
     index = load_archive_index(config.archive_root)
     config.analytics_root.mkdir(parents=True, exist_ok=True)
     with analytics_lock(config.analytics_root):
+        removed_work_roots = remove_abandoned_work_roots(config.analytics_root)
+        if removed_work_roots:
+            unit = "directory" if removed_work_roots == 1 else "directories"
+            log(f"removed {removed_work_roots} abandoned Analytics working {unit}")
         build_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8]
         built_at = utc_now_iso()
         work_root = Path(tempfile.mkdtemp(prefix="analytics-", dir=config.analytics_root))
@@ -1208,14 +1236,19 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--archive-root", help="verified Parquet archive root")
     result.add_argument("--analytics-root", help="analytics read-model output root")
     result.add_argument("--as-of-date", help="optional maximum service date (YYYY-MM-DD)")
-    result.add_argument("command", choices=("build",))
+    result.add_argument("command", choices=("build", "cleanup"))
     return result
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
-        result = analytics_build(AnalyticsConfig.from_args(args))
+        config = AnalyticsConfig.from_args(args)
+        result = (
+            analytics_build(config)
+            if args.command == "build"
+            else analytics_cleanup(config)
+        )
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
     except Exception as exc:

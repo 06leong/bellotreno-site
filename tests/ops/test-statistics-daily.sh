@@ -114,6 +114,8 @@ elif [[ "$joined" == *" bellotreno-statistics-archive verify "* ]]; then
     exit 1
   fi
   printf '%s\n' '{"mode":"verify","status":"success","manifests":[{"manifest":"manifests/run.complete.json"}],"verifiedManifests":1,"verifiedPartitions":1,"verifiedBytes":42}'
+elif [[ "$joined" == *" bellotreno-statistics-analytics cleanup "* ]]; then
+  printf '%s\n' '{"mode":"cleanup","status":"success","removedWorkRoots":1}'
 elif [[ "$joined" == *" bellotreno-statistics-analytics build "* ]]; then
   if [[ "${FAKE_ANALYTICS_FAIL:-0}" == "1" ]]; then
     exit 137
@@ -181,6 +183,7 @@ run_pipeline() {
 
 make_scenario success
 run_pipeline
+assert_contains "$FAKE_LOG" "bellotreno-statistics-analytics cleanup"
 assert_contains "$FAKE_LOG" "snapshot_statistics.py create"
 assert_contains "$FAKE_LOG" "bellotreno-statistics-archive plan"
 assert_contains "$FAKE_LOG" "bellotreno-statistics-archive run"
@@ -193,6 +196,7 @@ assert_not_contains "$FAKE_LOG" "collector_runs"
 
 make_scenario resume
 FAKE_EXISTING_SNAPSHOT=1 run_pipeline
+assert_contains "$FAKE_LOG" "bellotreno-statistics-analytics cleanup"
 assert_not_contains "$FAKE_LOG" "snapshot_statistics.py create"
 assert_contains "$FAKE_LOG" "snapshot_statistics.py release"
 assert_contains "$FAKE_LOG" "bellotreno-statistics-analytics build"
@@ -202,6 +206,7 @@ if FAKE_CAPACITY_OK=false run_pipeline; then
   fail "capacity failure scenario unexpectedly succeeded"
 fi
 assert_contains "$FAKE_LOG" "snapshot_statistics.py create"
+assert_contains "$FAKE_LOG" "bellotreno-statistics-analytics cleanup"
 assert_contains "$FAKE_LOG" "bellotreno-statistics-archive plan"
 assert_not_contains "$FAKE_LOG" "bellotreno-statistics-archive run"
 assert_not_contains "$FAKE_LOG" "snapshot_statistics.py release"
@@ -212,6 +217,7 @@ if FAKE_RUNNING_IMAGE_MISMATCH=1 run_pipeline; then
   fail "running image mismatch scenario unexpectedly succeeded"
 fi
 assert_not_contains "$FAKE_LOG" "snapshot_statistics.py create"
+assert_not_contains "$FAKE_LOG" "bellotreno-statistics-analytics cleanup"
 assert_not_contains "$FAKE_LOG" "bellotreno-statistics-archive plan"
 
 make_scenario skipped_but_active

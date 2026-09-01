@@ -236,6 +236,7 @@ class StatisticsArchiveTest(unittest.TestCase):
             plan["requiredFreeBytes"],
             plan["databaseBytes"] + plan["duckdbMaxTempBytes"],
         )
+        self.assertEqual(plan["snapshotCopyReserveBytes"], plan["databaseBytes"])
         self.assertEqual(datasets["train_observations"]["pending"], 3)
         self.assertEqual(datasets["train_observations"]["newestPending"], "2026-08-03")
         self.assertEqual(datasets["train_observations"]["historicalGapCount"], 0)
@@ -467,6 +468,11 @@ class StatisticsArchiveTest(unittest.TestCase):
         self.assertEqual(config.timezone_name, "Europe/Rome")
         self.assertEqual(config.cadence_minutes, 30)
         self.assertEqual(config.source_db, prepared.database_path)
+        self.assertEqual(first["snapshotCopyReserveBytes"], 0)
+        self.assertEqual(
+            first["requiredFreeBytes"],
+            first["duckdbMaxTempBytes"] + config.safety_gib * 1024**3,
+        )
 
         args.as_of_date = "2026-08-03"
         with self.assertRaisesRegex(ValueError, "differs from the prepared snapshot"):
