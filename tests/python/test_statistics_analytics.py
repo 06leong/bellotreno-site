@@ -17,6 +17,7 @@ sys.path.insert(0, str(STATISTICS_DIR))
 from analytics_statistics import (  # noqa: E402
     AnalyticsConfig,
     _build_rolling_windows,
+    _build_stabilized_facts,
     analytics_build,
     analytics_cleanup,
     analytics_lock,
@@ -342,7 +343,7 @@ class StatisticsAnalyticsTest(unittest.TestCase):
         self.assertEqual(captured_config["max_temp_directory_size"], "4GB")
         self.assertEqual(captured_config["preserve_insertion_order"], "false")
 
-    def test_rolling_window_batches_preserve_exact_metrics(self):
+    def test_fact_and_rolling_batches_preserve_exact_metrics(self):
         analytics_build(replace(self.config, window_batch_days=1))
         with closing(sqlite3.connect(self.analytics / "analytics.db")) as connection:
             expected_network = connection.execute(
@@ -358,6 +359,7 @@ class StatisticsAnalyticsTest(unittest.TestCase):
             replace(
                 self.config,
                 analytics_root=batched_root,
+                fact_batch_days=2,
                 window_batch_days=2,
             )
         )
@@ -456,6 +458,104 @@ class StatisticsAnalyticsLockTest(unittest.TestCase):
 
 @unittest.skipUnless(DUCKDB_AVAILABLE, "DuckDB is required for analytics tests")
 class StatisticsAnalyticsMemoryBoundTest(unittest.TestCase):
+    def test_daily_fact_batches_complete_under_small_duckdb_limit(self):
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
+            connection = duckdb.connect(
+                config={
+                    "memory_limit": "192MB",
+                    "threads": "1",
+                    "temp_directory": str(Path(temporary) / "duckdb-temp"),
+                    "max_temp_directory_size": "1GB",
+                    "preserve_insertion_order": "false",
+                }
+            )
+            try:
+                connection.execute(
+                    """
+                    CREATE TABLE train_services AS
+                    SELECT CAST(DATE '2026-01-01' + day_number * INTERVAL 1 DAY
+                                AS VARCHAR) AS service_date,
+                           CAST(service_number AS VARCHAR) AS train_key,
+                           CAST(service_number AS VARCHAR) AS train_number,
+                           'canonical' AS identity_quality,
+                           '2' AS operator, 'REG' AS category,
+                           'ORIGIN' AS origin, 'DESTINATION' AS destination,
+                           'S001' AS origin_code, 'S002' AS destination_code,
+                           'S001|S002' AS relation_key, 'completed' AS status,
+                           0 AS cancelled, 1 AS completed, 0 AS rescheduled,
+                           0 AS not_departed,
+                           '2026-01-01T06:00:00Z' AS scheduled_departure,
+                           '2026-01-01T07:00:00Z' AS scheduled_arrival,
+                           '2026-01-01T05:00:00Z' AS first_seen,
+                           '2026-01-01T08:00:00Z' AS last_seen,
+                           '2026-01-01T08:00:00Z' AS detail_last_seen,
+                           1 AS has_details, 100 AS latest_state_quality,
+                           100 AS detail_quality,
+                           CASE WHEN service_number=0 THEN NULL ELSE 5 END
+                               AS arrival_delay,
+                           1 AS departure_delay
+                    FROM range(3) AS days(day_number)
+                    CROSS JOIN range(8000) AS services(service_number);
+
+                    CREATE TABLE train_observations AS
+                    SELECT service_date, train_key,
+                           '2026-01-01T06:30:00Z' AS observed_at,
+                           100 AS quality_score
+                    FROM train_services;
+
+                    CREATE TABLE train_stop_events AS
+                    SELECT s.service_date, s.train_key, stop_number,
+                           'S' || CAST(stop_number AS VARCHAR) AS station_code,
+                           'Station ' || CAST(stop_number AS VARCHAR) AS station_name,
+                           CASE WHEN stop_number=0 THEN 'origine'
+                                WHEN stop_number=11 THEN 'destinazione'
+                                ELSE 'fermata' END AS stop_type,
+                           '1' AS platform,
+                           '2026-01-01T06:00:00Z' AS arrival_expected,
+                           s.service_date AS arrival_expected_date,
+                           '2026-01-01T06:05:00Z' AS arrival_actual,
+                           s.service_date AS arrival_actual_date,
+                           CASE WHEN s.train_key='0' AND stop_number=11
+                                THEN NULL ELSE 5 END AS arrival_delay,
+                           '2026-01-01T06:10:00Z' AS departure_expected,
+                           s.service_date AS departure_expected_date,
+                           '2026-01-01T06:15:00Z' AS departure_actual,
+                           s.service_date AS departure_actual_date,
+                           5 AS departure_delay, 0 AS cancelled,
+                           '2026-01-01T06:30:00Z' AS detail_observed_at,
+                           100 AS detail_quality
+                    FROM train_services s
+                    CROSS JOIN range(12) AS stops(stop_number)
+                    """
+                )
+                _build_stabilized_facts(
+                    connection,
+                    max_date="2026-01-03",
+                    max_history_days=90,
+                    batch_days=1,
+                )
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM fact_service_outcome"
+                    ).fetchone()[0],
+                    24_000,
+                )
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM fact_stop_outcome"
+                    ).fetchone()[0],
+                    288_000,
+                )
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM fact_service_outcome "
+                        "WHERE train_key='0' AND final_arrival_delay IS NULL"
+                    ).fetchone()[0],
+                    3,
+                )
+            finally:
+                connection.close()
+
     def test_daily_batches_complete_under_small_duckdb_limit(self):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             connection = duckdb.connect(

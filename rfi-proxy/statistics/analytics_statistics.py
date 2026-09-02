@@ -34,6 +34,7 @@ class AnalyticsConfig:
     max_history_days: int
     minimum_ranking_sample: int
     window_batch_days: int = 7
+    fact_batch_days: int = 1
     max_temp_directory_size: str = "4GB"
 
     @classmethod
@@ -46,7 +47,7 @@ class AnalyticsConfig:
                 or os.environ.get("ANALYTICS_ROOT", DEFAULT_ANALYTICS_ROOT)
             ),
             as_of_date=as_of,
-            memory_limit=os.environ.get("ANALYTICS_DUCKDB_MEMORY_LIMIT", "128MB"),
+            memory_limit=os.environ.get("ANALYTICS_DUCKDB_MEMORY_LIMIT", "192MB"),
             threads=_bounded_int(
                 os.environ.get("ANALYTICS_DUCKDB_THREADS", "1"),
                 name="ANALYTICS_DUCKDB_THREADS",
@@ -70,6 +71,12 @@ class AnalyticsConfig:
                 name="ANALYTICS_WINDOW_BATCH_DAYS",
                 minimum=1,
                 maximum=31,
+            ),
+            fact_batch_days=_bounded_int(
+                os.environ.get("ANALYTICS_FACT_BATCH_DAYS", "1"),
+                name="ANALYTICS_FACT_BATCH_DAYS",
+                minimum=1,
+                maximum=7,
             ),
             max_temp_directory_size=os.environ.get(
                 "ANALYTICS_DUCKDB_MAX_TEMP_DIRECTORY_SIZE", "4GB"
@@ -288,31 +295,25 @@ def _create_archive_views(connection: Any, index: ArchiveIndex) -> None:
         )
 
 
-SERVICE_FACT_SQL = """
-CREATE OR REPLACE TEMP TABLE fact_service_outcome AS
-WITH terminal AS (
-    SELECT service_date, train_key, arrival_delay, arrival_actual,
-           ROW_NUMBER() OVER (
-               PARTITION BY service_date, train_key
-               ORDER BY stop_number DESC
-           ) AS position
-    FROM train_stop_events
-),
-origin_stop AS (
-    SELECT service_date, train_key, departure_delay, departure_actual,
-           ROW_NUMBER() OVER (
-               PARTITION BY service_date, train_key
-               ORDER BY stop_number ASC
-           ) AS position
-    FROM train_stop_events
+SERVICE_FACT_SELECT_SQL = """
+WITH stop_endpoints AS (
+    SELECT e.service_date, e.train_key,
+           first(e.arrival_delay ORDER BY e.stop_number DESC) AS terminal_arrival_delay,
+           first(e.arrival_actual ORDER BY e.stop_number DESC) AS terminal_arrival_actual,
+           first(e.departure_delay ORDER BY e.stop_number ASC) AS origin_departure_delay,
+           first(e.departure_actual ORDER BY e.stop_number ASC) AS origin_departure_actual
+    FROM train_stop_events e
+    JOIN analytics_service_date_batch b ON b.service_date=e.service_date
+    GROUP BY e.service_date, e.train_key
 ),
 observations AS (
-    SELECT service_date, train_key, COUNT(*) AS observation_count,
-           MIN(observed_at) AS first_observed_at,
-           MAX(observed_at) AS last_observed_at,
-           MAX(quality_score) AS observation_quality
-    FROM train_observations
-    GROUP BY service_date, train_key
+    SELECT o.service_date, o.train_key, COUNT(*) AS observation_count,
+           MIN(o.observed_at) AS first_observed_at,
+           MAX(o.observed_at) AS last_observed_at,
+           MAX(o.quality_score) AS observation_quality
+    FROM train_observations o
+    JOIN analytics_service_date_batch b ON b.service_date=o.service_date
+    GROUP BY o.service_date, o.train_key
 ),
 base AS (
     SELECT
@@ -346,21 +347,20 @@ base AS (
         CAST(COALESCE(o.observation_quality, 0) AS INTEGER) AS observation_quality,
         CASE
             WHEN COALESCE(s.cancelled, 0)=0 AND COALESCE(s.completed, 0)=1
-            THEN COALESCE(t.arrival_delay,
+            THEN COALESCE(p.terminal_arrival_delay,
                  CASE WHEN COALESCE(s.has_details, 0)=1 THEN s.arrival_delay END)
         END AS final_arrival_delay,
         CASE
             WHEN COALESCE(s.cancelled, 0)=0 AND COALESCE(s.completed, 0)=1
-            THEN COALESCE(p.departure_delay,
+            THEN COALESCE(p.origin_departure_delay,
                  CASE WHEN COALESCE(s.has_details, 0)=1 THEN s.departure_delay END)
         END AS final_departure_delay,
-        t.arrival_actual AS terminal_arrival_actual,
-        p.departure_actual AS origin_departure_actual
+        p.terminal_arrival_actual,
+        p.origin_departure_actual
     FROM train_services s
-    LEFT JOIN terminal t
-      ON t.service_date=s.service_date AND t.train_key=s.train_key AND t.position=1
-    LEFT JOIN origin_stop p
-      ON p.service_date=s.service_date AND p.train_key=s.train_key AND p.position=1
+    JOIN analytics_service_date_batch b ON b.service_date=s.service_date
+    LEFT JOIN stop_endpoints p
+      ON p.service_date=s.service_date AND p.train_key=s.train_key
     LEFT JOIN observations o
       ON o.service_date=s.service_date AND o.train_key=s.train_key
 )
@@ -377,8 +377,7 @@ FROM base
 """
 
 
-STOP_FACT_SQL = """
-CREATE OR REPLACE TEMP TABLE fact_stop_outcome AS
+STOP_FACT_SELECT_SQL = """
 WITH stops AS (
     SELECT
         e.service_date,
@@ -406,6 +405,7 @@ WITH stops AS (
             PARTITION BY e.service_date, e.train_key ORDER BY e.stop_number DESC
         ) AS reverse_position
     FROM train_stop_events e
+    JOIN analytics_service_date_batch b ON b.service_date=e.service_date
 )
 SELECT
     s.*,
@@ -494,6 +494,65 @@ def _create_quality_manifest(connection: Any, quality_days: Sequence[dict[str, A
         connection.executemany(
             "INSERT INTO quality_manifest VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows
         )
+
+
+def _build_stabilized_facts(
+    connection: Any,
+    *,
+    max_date: str,
+    max_history_days: int,
+    batch_days: int,
+) -> None:
+    """Build service and stop facts in fixed service-date batches."""
+    history_start = f"DATE '{max_date}' - INTERVAL {max_history_days - 1} DAY"
+    service_dates = [
+        row[0]
+        for row in connection.execute(
+            f"""
+            SELECT DISTINCT service_date
+            FROM train_services
+            WHERE CAST(service_date AS DATE)
+                  BETWEEN {history_start} AND DATE '{max_date}'
+            ORDER BY service_date
+            """
+        ).fetchall()
+    ]
+    if not service_dates:
+        raise RuntimeError("archive contains no stabilized train services")
+
+    batch_count = (len(service_dates) + batch_days - 1) // batch_days
+    first_batch = True
+    for offset in range(0, len(service_dates), batch_days):
+        batch = service_dates[offset : offset + batch_days]
+        batch_number = offset // batch_days + 1
+        log(
+            "building stabilized fact batch "
+            f"{batch_number}/{batch_count} ({batch[0]} through {batch[-1]})"
+        )
+        connection.execute(
+            "CREATE OR REPLACE TEMP TABLE analytics_service_date_batch(service_date VARCHAR)"
+        )
+        connection.executemany(
+            "INSERT INTO analytics_service_date_batch VALUES (?)",
+            [(value,) for value in batch],
+        )
+
+        service_operation = (
+            "CREATE OR REPLACE TEMP TABLE fact_service_outcome AS"
+            if first_batch
+            else "INSERT INTO fact_service_outcome"
+        )
+        connection.execute(f"{service_operation}\n{SERVICE_FACT_SELECT_SQL}")
+
+        stop_operation = (
+            "CREATE OR REPLACE TEMP TABLE fact_stop_outcome AS"
+            if first_batch
+            else "INSERT INTO fact_stop_outcome"
+        )
+        connection.execute(f"{stop_operation}\n{STOP_FACT_SELECT_SQL}")
+        first_batch = False
+
+    connection.execute("DROP TABLE analytics_service_date_batch")
 
 
 def _build_rolling_windows(
@@ -592,18 +651,22 @@ def _build_rolling_windows(
 
 def build_semantic_tables(connection: Any, index: ArchiveIndex, config: AnalyticsConfig) -> str:
     log("building stabilized service and stop facts")
-    connection.execute(SERVICE_FACT_SQL)
-    connection.execute(STOP_FACT_SQL)
-    _create_quality_manifest(connection, index.quality_days)
-
     max_date_value = connection.execute(
-        "SELECT MAX(CAST(service_date AS DATE)) FROM fact_service_outcome"
+        "SELECT MAX(CAST(service_date AS DATE)) FROM train_services"
     ).fetchone()[0]
     if max_date_value is None:
         raise RuntimeError("archive contains no stabilized train services")
     max_date = max_date_value.isoformat()
     if config.as_of_date and config.as_of_date.isoformat() < max_date:
         max_date = config.as_of_date.isoformat()
+
+    _build_stabilized_facts(
+        connection,
+        max_date=max_date,
+        max_history_days=config.max_history_days,
+        batch_days=config.fact_batch_days,
+    )
+    _create_quality_manifest(connection, index.quality_days)
 
     connection.execute(
         f"""

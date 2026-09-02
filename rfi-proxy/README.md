@@ -86,13 +86,14 @@ STATISTICS_ARCHIVE_DUCKDB_MAX_TEMP_DIRECTORY_SIZE=4GB
 STATISTICS_ARCHIVE_INCLUDE_RAW_PAYLOADS=false
 
 # Optional professional analytics tuning
-STATISTICS_ANALYTICS_DUCKDB_MEMORY_LIMIT=128MB
+STATISTICS_ANALYTICS_DUCKDB_MEMORY_LIMIT=192MB
 STATISTICS_ANALYTICS_DUCKDB_THREADS=1
 STATISTICS_ANALYTICS_DUCKDB_MAX_TEMP_DIRECTORY_SIZE=4GB
+STATISTICS_ANALYTICS_FACT_BATCH_DAYS=1
 STATISTICS_ANALYTICS_WINDOW_BATCH_DAYS=7
 STATISTICS_ANALYTICS_HISTORY_DAYS=730
 STATISTICS_ANALYTICS_MIN_RANKING_SAMPLE=100
-# Docker treats this as a 600-MiB RAM ceiling and a 2-GiB combined
+# Docker treats this as a 384-MiB RAM ceiling and a 2-GiB combined
 # RAM-plus-swap ceiling, not 2 GiB of additional swap.
 STATISTICS_ANALYTICS_CONTAINER_MEMORY_LIMIT=384m
 STATISTICS_ANALYTICS_CONTAINER_MEMORY_SWAP_LIMIT=2g
@@ -400,9 +401,10 @@ The script preserves the same safety boundaries as the manual runbook:
 - an archive failure retains the exact snapshot and diagnostics instead of
   guessing that partial output is safe;
 - analytics runs with a 384-MiB memory ceiling, 2-GiB memory-plus-swap limit,
-  one CPU, one DuckDB thread, and a 128-MiB DuckDB limit for the 1-GiB
-  production VPS; rolling historical windows are materialized in fixed seven-day
-  batches, and reusable dimension expansions remain non-materialized views,
+  one CPU, one DuckDB thread, and a 192-MiB DuckDB limit for the 1-GiB
+  production VPS; stabilized service and stop facts are materialized in fixed
+  one-day batches, rolling historical windows use fixed seven-day batches,
+  and reusable dimension expansions remain non-materialized views,
   so history growth does not multiply one hash aggregation across every date;
   DuckDB spill files are capped at 4 GiB, matching the archive capacity gate;
   neither container ceiling is raised;
@@ -460,9 +462,10 @@ set_env() {
 
 set_env STATISTICS_IMAGE_TAG "sha-$AUTOMATION_REVISION"
 set_env STATISTICS_ACTIVE_SERVICE_TTL_DAYS 3
-set_env STATISTICS_ANALYTICS_DUCKDB_MEMORY_LIMIT 128MB
+set_env STATISTICS_ANALYTICS_DUCKDB_MEMORY_LIMIT 192MB
 set_env STATISTICS_ANALYTICS_DUCKDB_THREADS 1
 set_env STATISTICS_ANALYTICS_DUCKDB_MAX_TEMP_DIRECTORY_SIZE 4GB
+set_env STATISTICS_ANALYTICS_FACT_BATCH_DAYS 1
 set_env STATISTICS_ANALYTICS_WINDOW_BATCH_DAYS 7
 set_env STATISTICS_ANALYTICS_CONTAINER_MEMORY_LIMIT 384m
 set_env STATISTICS_ANALYTICS_CONTAINER_MEMORY_SWAP_LIMIT 2g

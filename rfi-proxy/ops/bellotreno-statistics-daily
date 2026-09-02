@@ -191,12 +191,14 @@ if isinstance(environment, list):
     )
 if not isinstance(environment, dict):
     raise SystemExit("analytics Compose environment is invalid")
-if str(environment.get("ANALYTICS_DUCKDB_MEMORY_LIMIT", "")).upper() != "128MB":
-    raise SystemExit("analytics DuckDB memory limit must be 128MB on this VPS")
+if str(environment.get("ANALYTICS_DUCKDB_MEMORY_LIMIT", "")).upper() != "192MB":
+    raise SystemExit("analytics DuckDB memory limit must be 192MB on this VPS")
 if str(environment.get("ANALYTICS_DUCKDB_THREADS", "")) != "1":
     raise SystemExit("analytics DuckDB thread count must be 1 on this VPS")
 if str(environment.get("ANALYTICS_DUCKDB_MAX_TEMP_DIRECTORY_SIZE", "")).upper() != "4GB":
     raise SystemExit("analytics DuckDB temporary-directory limit must be 4GB on this VPS")
+if str(environment.get("ANALYTICS_FACT_BATCH_DAYS", "")) != "1":
+    raise SystemExit("analytics stabilized-fact batch size must be one day on this VPS")
 if str(environment.get("ANALYTICS_WINDOW_BATCH_DAYS", "")) != "7":
     raise SystemExit("analytics rolling-window batch size must be seven days on this VPS")
 '
