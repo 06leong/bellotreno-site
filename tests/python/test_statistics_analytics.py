@@ -3,6 +3,8 @@ import sqlite3
 import sys
 import tempfile
 import unittest
+from contextlib import closing
+from dataclasses import replace
 from unittest.mock import patch
 from datetime import date
 from pathlib import Path
@@ -14,6 +16,7 @@ sys.path.insert(0, str(STATISTICS_DIR))
 
 from analytics_statistics import (  # noqa: E402
     AnalyticsConfig,
+    _build_rolling_windows,
     analytics_build,
     analytics_cleanup,
     analytics_lock,
@@ -196,7 +199,7 @@ class StatisticsAnalyticsTest(unittest.TestCase):
 
         database = self.analytics / "analytics.db"
         self.assertTrue(database.is_file())
-        with sqlite3.connect(database) as connection:
+        with closing(sqlite3.connect(database)) as connection:
             connection.row_factory = sqlite3.Row
             august_first = connection.execute(
                 "SELECT * FROM network_day WHERE service_date='2026-08-01'"
@@ -336,7 +339,39 @@ class StatisticsAnalyticsTest(unittest.TestCase):
         self.assertIsNotNone(captured_config)
         self.assertEqual(captured_config["memory_limit"], "128MB")
         self.assertEqual(captured_config["threads"], "1")
+        self.assertEqual(captured_config["max_temp_directory_size"], "4GB")
         self.assertEqual(captured_config["preserve_insertion_order"], "false")
+
+    def test_rolling_window_batches_preserve_exact_metrics(self):
+        analytics_build(replace(self.config, window_batch_days=1))
+        with closing(sqlite3.connect(self.analytics / "analytics.db")) as connection:
+            expected_network = connection.execute(
+                "SELECT * FROM network_window ORDER BY as_of_date, window_days"
+            ).fetchall()
+            expected_dimensions = connection.execute(
+                "SELECT * FROM dimension_window "
+                "ORDER BY as_of_date, window_days, dimension_type, dimension_key"
+            ).fetchall()
+
+        batched_root = self.root / "analytics-batched"
+        analytics_build(
+            replace(
+                self.config,
+                analytics_root=batched_root,
+                window_batch_days=2,
+            )
+        )
+        with closing(sqlite3.connect(batched_root / "analytics.db")) as connection:
+            actual_network = connection.execute(
+                "SELECT * FROM network_window ORDER BY as_of_date, window_days"
+            ).fetchall()
+            actual_dimensions = connection.execute(
+                "SELECT * FROM dimension_window "
+                "ORDER BY as_of_date, window_days, dimension_type, dimension_key"
+            ).fetchall()
+
+        self.assertEqual(actual_network, expected_network)
+        self.assertEqual(actual_dimensions, expected_dimensions)
 
     def test_failed_rebuild_does_not_replace_last_good_read_model(self):
         first = analytics_build(self.config)
@@ -417,6 +452,81 @@ class StatisticsAnalyticsLockTest(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "another statistics analytics build"):
                     with analytics_lock(root):
                         pass
+
+
+@unittest.skipUnless(DUCKDB_AVAILABLE, "DuckDB is required for analytics tests")
+class StatisticsAnalyticsMemoryBoundTest(unittest.TestCase):
+    def test_daily_batches_complete_under_small_duckdb_limit(self):
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
+            connection = duckdb.connect(
+                config={
+                    "memory_limit": "32MB",
+                    "threads": "1",
+                    "temp_directory": str(Path(temporary) / "duckdb-temp"),
+                    "preserve_insertion_order": "false",
+                }
+            )
+            try:
+                connection.execute(
+                    """
+                    CREATE TEMP TABLE fact_service_outcome AS
+                    SELECT CAST(DATE '2026-01-01' + day_number * INTERVAL 1 DAY AS VARCHAR)
+                               AS service_date,
+                           CAST(service_number AS VARCHAR) AS train_key,
+                           CAST(service_number % 7 AS VARCHAR) AS operator,
+                           CASE service_number % 4
+                               WHEN 0 THEN 'REG' WHEN 1 THEN 'FR'
+                               WHEN 2 THEN 'IC' ELSE 'MET' END AS category,
+                           1 AS outcome_eligible,
+                           1 AS arrival_eligible,
+                           0 AS cancelled,
+                           1 AS completed,
+                           CAST(service_number % 181 - 30 AS INTEGER)
+                               AS final_arrival_delay
+                    FROM range(60) AS days(day_number)
+                    CROSS JOIN range(2500) AS services(service_number)
+                    """
+                )
+                connection.execute(
+                    """
+                    CREATE TEMP VIEW rolling_dimension_fact AS
+                    SELECT service_date, 'operator' AS dimension_type,
+                           operator AS dimension_key, operator AS dimension_label,
+                           outcome_eligible, arrival_eligible, cancelled, completed,
+                           final_arrival_delay
+                    FROM fact_service_outcome
+                    UNION ALL
+                    SELECT service_date, 'category', category, category,
+                           outcome_eligible, arrival_eligible, cancelled, completed,
+                           final_arrival_delay
+                    FROM fact_service_outcome
+                    """
+                )
+
+                _build_rolling_windows(
+                    connection,
+                    max_date="2026-03-01",
+                    max_history_days=90,
+                    batch_days=7,
+                )
+
+                self.assertEqual(
+                    connection.execute("SELECT COUNT(*) FROM network_window").fetchone()[0],
+                    180,
+                )
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT COUNT(DISTINCT as_of_date) FROM dimension_window"
+                    ).fetchone()[0],
+                    60,
+                )
+                latest = connection.execute(
+                    "SELECT observed_services, arrival_sample FROM network_window "
+                    "WHERE as_of_date='2026-03-01' AND window_days=7"
+                ).fetchone()
+                self.assertEqual(latest, (17500, 17500))
+            finally:
+                connection.close()
 
 
 if __name__ == "__main__":
