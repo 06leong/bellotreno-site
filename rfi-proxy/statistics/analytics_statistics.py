@@ -33,6 +33,8 @@ class AnalyticsConfig:
     threads: int
     max_history_days: int
     minimum_ranking_sample: int
+    window_batch_days: int = 7
+    max_temp_directory_size: str = "4GB"
 
     @classmethod
     def from_args(cls, args: argparse.Namespace) -> "AnalyticsConfig":
@@ -44,7 +46,7 @@ class AnalyticsConfig:
                 or os.environ.get("ANALYTICS_ROOT", DEFAULT_ANALYTICS_ROOT)
             ),
             as_of_date=as_of,
-            memory_limit=os.environ.get("ANALYTICS_DUCKDB_MEMORY_LIMIT", "192MB"),
+            memory_limit=os.environ.get("ANALYTICS_DUCKDB_MEMORY_LIMIT", "128MB"),
             threads=_bounded_int(
                 os.environ.get("ANALYTICS_DUCKDB_THREADS", "1"),
                 name="ANALYTICS_DUCKDB_THREADS",
@@ -62,6 +64,15 @@ class AnalyticsConfig:
                 name="ANALYTICS_MIN_RANKING_SAMPLE",
                 minimum=1,
                 maximum=10000,
+            ),
+            window_batch_days=_bounded_int(
+                os.environ.get("ANALYTICS_WINDOW_BATCH_DAYS", "7"),
+                name="ANALYTICS_WINDOW_BATCH_DAYS",
+                minimum=1,
+                maximum=31,
+            ),
+            max_temp_directory_size=os.environ.get(
+                "ANALYTICS_DUCKDB_MAX_TEMP_DIRECTORY_SIZE", "4GB"
             ),
         )
 
@@ -485,6 +496,100 @@ def _create_quality_manifest(connection: Any, quality_days: Sequence[dict[str, A
         )
 
 
+def _build_rolling_windows(
+    connection: Any,
+    *,
+    max_date: str,
+    max_history_days: int,
+    batch_days: int,
+) -> None:
+    """Build exact rolling metrics without one unbounded history cross join."""
+    history_start = f"DATE '{max_date}' - INTERVAL {max_history_days - 1} DAY"
+    as_of_dates = [
+        row[0]
+        for row in connection.execute(
+            f"""
+            SELECT DISTINCT CAST(service_date AS DATE) AS as_of_date
+            FROM fact_service_outcome
+            WHERE CAST(service_date AS DATE) BETWEEN {history_start} AND DATE '{max_date}'
+            ORDER BY as_of_date
+            """
+        ).fetchall()
+    ]
+    if not as_of_dates:
+        raise RuntimeError("archive contains no service dates for rolling Analytics windows")
+
+    windows_sql = ",".join(f"({value})" for value in DEFAULT_WINDOWS)
+    batch_count = (len(as_of_dates) + batch_days - 1) // batch_days
+    first_batch = True
+    for offset in range(0, len(as_of_dates), batch_days):
+        batch = as_of_dates[offset : offset + batch_days]
+        batch_number = offset // batch_days + 1
+        log(
+            "building rolling window batch "
+            f"{batch_number}/{batch_count} ({batch[0]} through {batch[-1]})"
+        )
+        connection.execute(
+            "CREATE OR REPLACE TEMP TABLE analytics_as_of_batch(as_of_date DATE)"
+        )
+        connection.executemany(
+            "INSERT INTO analytics_as_of_batch VALUES (?)",
+            [(value,) for value in batch],
+        )
+
+        network_operation = (
+            "CREATE OR REPLACE TEMP TABLE network_window AS"
+            if first_batch
+            else "INSERT INTO network_window"
+        )
+        connection.execute(
+            f"""
+            {network_operation}
+            WITH windows(window_days) AS (VALUES {windows_sql})
+            SELECT CAST(a.as_of_date AS VARCHAR) AS as_of_date,
+                   w.window_days,
+                   CAST(a.as_of_date - (w.window_days - 1) * INTERVAL 1 DAY AS DATE)
+                       AS window_start,
+                   {METRIC_COLUMNS}
+            FROM analytics_as_of_batch a CROSS JOIN windows w
+            JOIN fact_service_outcome f
+              ON CAST(f.service_date AS DATE)
+                 BETWEEN a.as_of_date - (w.window_days - 1) * INTERVAL 1 DAY
+                     AND a.as_of_date
+            GROUP BY a.as_of_date, w.window_days
+            """
+        )
+
+        dimension_operation = (
+            "CREATE OR REPLACE TEMP TABLE dimension_window AS"
+            if first_batch
+            else "INSERT INTO dimension_window"
+        )
+        connection.execute(
+            f"""
+            {dimension_operation}
+            WITH windows(window_days) AS (VALUES {windows_sql})
+            SELECT CAST(a.as_of_date AS VARCHAR) AS as_of_date,
+                   w.window_days,
+                   CAST(a.as_of_date - (w.window_days - 1) * INTERVAL 1 DAY AS DATE)
+                       AS window_start,
+                   f.dimension_type,
+                   f.dimension_key,
+                   MAX(f.dimension_label) AS dimension_label,
+                   {METRIC_COLUMNS}
+            FROM analytics_as_of_batch a CROSS JOIN windows w
+            JOIN rolling_dimension_fact f
+              ON CAST(f.service_date AS DATE)
+                 BETWEEN a.as_of_date - (w.window_days - 1) * INTERVAL 1 DAY
+                     AND a.as_of_date
+            GROUP BY a.as_of_date, w.window_days, f.dimension_type, f.dimension_key
+            """
+        )
+        first_batch = False
+
+    connection.execute("DROP TABLE analytics_as_of_batch")
+
+
 def build_semantic_tables(connection: Any, index: ArchiveIndex, config: AnalyticsConfig) -> str:
     log("building stabilized service and stop facts")
     connection.execute(SERVICE_FACT_SQL)
@@ -571,7 +676,7 @@ def build_semantic_tables(connection: Any, index: ArchiveIndex, config: Analytic
     log("building network and dimension windows")
     connection.execute(
         """
-        CREATE OR REPLACE TEMP TABLE rolling_dimension_fact AS
+        CREATE OR REPLACE TEMP VIEW rolling_dimension_fact AS
         SELECT service_date, 'operator' AS dimension_type,
                COALESCE(operator, 'unknown') AS dimension_key,
                COALESCE(operator, 'unknown') AS dimension_label,
@@ -637,50 +742,11 @@ def build_semantic_tables(connection: Any, index: ArchiveIndex, config: Analytic
         """
     )
     windows_sql = ",".join(f"({value})" for value in DEFAULT_WINDOWS)
-    history_start = f"DATE '{max_date}' - INTERVAL {config.max_history_days - 1} DAY"
-    connection.execute(
-        f"""
-        CREATE OR REPLACE TEMP TABLE network_window AS
-        WITH as_of_dates AS (
-            SELECT DISTINCT CAST(service_date AS DATE) AS as_of_date
-            FROM fact_service_outcome
-            WHERE CAST(service_date AS DATE) BETWEEN {history_start} AND DATE '{max_date}'
-        ), windows(window_days) AS (VALUES {windows_sql})
-        SELECT CAST(a.as_of_date AS VARCHAR) AS as_of_date,
-               w.window_days,
-               CAST(a.as_of_date - (w.window_days - 1) * INTERVAL 1 DAY AS DATE) AS window_start,
-               {METRIC_COLUMNS}
-        FROM as_of_dates a CROSS JOIN windows w
-        JOIN fact_service_outcome f
-          ON CAST(f.service_date AS DATE)
-             BETWEEN a.as_of_date - (w.window_days - 1) * INTERVAL 1 DAY
-                 AND a.as_of_date
-        GROUP BY a.as_of_date, w.window_days
-        ORDER BY a.as_of_date, w.window_days
-        """
-    )
-    connection.execute(
-        f"""
-        CREATE OR REPLACE TEMP TABLE dimension_window AS
-        WITH as_of_dates AS (
-            SELECT DISTINCT CAST(service_date AS DATE) AS as_of_date
-            FROM fact_service_outcome
-            WHERE CAST(service_date AS DATE) BETWEEN {history_start} AND DATE '{max_date}'
-        ), windows(window_days) AS (VALUES {windows_sql})
-        SELECT CAST(a.as_of_date AS VARCHAR) AS as_of_date,
-               w.window_days,
-               CAST(a.as_of_date - (w.window_days - 1) * INTERVAL 1 DAY AS DATE) AS window_start,
-               f.dimension_type,
-               f.dimension_key,
-               MAX(f.dimension_label) AS dimension_label,
-               {METRIC_COLUMNS}
-        FROM as_of_dates a CROSS JOIN windows w
-        JOIN rolling_dimension_fact f
-          ON CAST(f.service_date AS DATE)
-             BETWEEN a.as_of_date - (w.window_days - 1) * INTERVAL 1 DAY
-                 AND a.as_of_date
-        GROUP BY a.as_of_date, w.window_days, f.dimension_type, f.dimension_key
-        """
+    _build_rolling_windows(
+        connection,
+        max_date=max_date,
+        max_history_days=config.max_history_days,
+        batch_days=config.window_batch_days,
     )
     connection.execute(
         f"""
@@ -739,7 +805,7 @@ def build_semantic_tables(connection: Any, index: ArchiveIndex, config: Analytic
         GROUP BY w.window_days, f.dimension_key
         """
     )
-    connection.execute("DROP TABLE rolling_dimension_fact")
+    connection.execute("DROP VIEW rolling_dimension_fact")
     connection.execute(
         f"""
         CREATE OR REPLACE TEMP TABLE outlier_service AS
@@ -815,7 +881,7 @@ def build_semantic_tables(connection: Any, index: ArchiveIndex, config: Analytic
     )
     connection.execute(
         f"""
-        CREATE OR REPLACE TEMP TABLE rhythm_scope_fact AS
+        CREATE OR REPLACE TEMP VIEW rhythm_scope_fact AS
         WITH base AS (
             SELECT *,
                    CAST(EXTRACT(ISODOW FROM CAST(service_date AS DATE)) - 1 AS INTEGER) AS weekday,
@@ -846,7 +912,7 @@ def build_semantic_tables(connection: Any, index: ArchiveIndex, config: Analytic
     )
     connection.execute(
         """
-        CREATE OR REPLACE TEMP TABLE station_scope_fact AS
+        CREATE OR REPLACE TEMP VIEW station_scope_fact AS
         WITH base AS (
             SELECT *,
                    COALESCE(NULLIF(station_name, ''), station_code) AS station_label,
@@ -933,7 +999,7 @@ def build_semantic_tables(connection: Any, index: ArchiveIndex, config: Analytic
     )
     connection.execute(
         """
-        CREATE OR REPLACE TEMP TABLE relation_scope_fact AS
+        CREATE OR REPLACE TEMP VIEW relation_scope_fact AS
         WITH base AS (
             SELECT *,
                    COALESCE(NULLIF(relation_key, ''), train_key) AS relation_id,
@@ -1192,6 +1258,7 @@ def analytics_build(config: AnalyticsConfig) -> dict[str, Any]:
                     "memory_limit": config.memory_limit,
                     "threads": str(config.threads),
                     "temp_directory": str(temp_root),
+                    "max_temp_directory_size": config.max_temp_directory_size,
                     "preserve_insertion_order": "false",
                 }
             )

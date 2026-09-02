@@ -57,6 +57,18 @@ The foundation is now usable rather than hypothetical:
   three-complete-day stabilization period, reduces analytics query fan-out and
   memory pressure, and requires a safe interval before the next collector slot
   before starting the derived-model build.
+- after the retained history grew beyond the first successful unattended
+  builds, the all-dates rolling-window join reached roughly 708 MiB resident
+  memory and triggered the 907-MiB VPS global OOM before the 800-MiB container
+  ceiling. The follow-up design keeps
+  exact numerators, denominators, exclusions, and quantiles while building a
+  fixed maximum of seven as-of dates per batch, leaves operator/category/station/relation expansions as
+  non-materialized views, and lowers DuckDB's buffer allowance to 128 MiB. This
+  bounds peak fan-out without deleting Parquet history or weakening metrics.
+  The container is capped at 384 MiB to preserve host headroom, while DuckDB
+  spill files are capped at the same 4-GiB allowance used by capacity planning;
+  a 600-MiB container ceiling now also preserves host headroom instead of
+  relying on the kernel to swap quickly enough under pressure.
 
 The first archive is evidence that normalized Parquet is compact, but it is not
 a fair 9.5-GiB-to-35-MiB compression comparison. The live SQLite file contains
