@@ -673,6 +673,7 @@ def _build_dashboard_window(
     first = True
     for window in DEFAULT_WINDOWS:
         for period in periods:
+            log(f"building {table}: {window}-day {period} period")
             for scope in ("all", "operator", "category") if scope_column else (None,):
                 predicate = f"p.window_days={window} AND p.period='{period}'"
                 if scope_column:
@@ -1267,6 +1268,26 @@ def _copy_table(duck: Any, sqlite: sqlite3.Connection, table: str) -> int:
     return inserted
 
 
+@contextmanager
+def _sqlite_disk_temp(root: Path):
+    """Route Unix SQLite index-sort spill off the container's small /tmp tmpfs.
+
+    This builder is an offline, single-threaded process. Keep the process-wide
+    environment override scoped to its SQLite connection and restore it even
+    when export fails. Windows SQLite uses the OS disk temp directory instead.
+    """
+    with tempfile.TemporaryDirectory(prefix="sqlite-temp-", dir=root) as temporary:
+        previous = os.environ.get("SQLITE_TMPDIR")
+        os.environ["SQLITE_TMPDIR"] = str(Path(temporary).resolve())
+        try:
+            yield
+        finally:
+            if previous is None:
+                os.environ.pop("SQLITE_TMPDIR", None)
+            else:
+                os.environ["SQLITE_TMPDIR"] = previous
+
+
 def _write_read_model(
     connection: Any,
     destination: Path,
@@ -1294,9 +1315,10 @@ def _write_read_model(
         "outlier_stop",
     )
     rows: dict[str, int] = {}
-    with closing(sqlite3.connect(destination)) as output:
+    with _sqlite_disk_temp(destination.parent), closing(sqlite3.connect(destination)) as output:
         output.execute("PRAGMA journal_mode=DELETE")
         output.execute("PRAGMA synchronous=FULL")
+        output.execute("PRAGMA temp_store=FILE")
         output.execute(
             "CREATE TABLE analytics_metadata (name TEXT PRIMARY KEY, value TEXT NOT NULL)"
         )
@@ -1316,8 +1338,10 @@ def _write_read_model(
             "INSERT INTO analytics_metadata VALUES (?, ?)", metadata.items()
         )
         for table in table_names:
+            log(f"exporting SQLite table {table}")
             rows[table] = _copy_table(connection, output, table)
 
+        log("building SQLite indexes with disk-backed temporary storage")
         output.execute("CREATE UNIQUE INDEX idx_quality_day ON quality_day(collection_date)")
         output.execute("CREATE UNIQUE INDEX idx_network_day ON network_day(service_date)")
         output.execute(
@@ -1359,6 +1383,7 @@ def _write_read_model(
         output.execute(
             "CREATE INDEX idx_outlier_stop ON outlier_stop(service_date, train_key, stop_number)"
         )
+        log("analyzing and checking SQLite read model")
         output.execute("ANALYZE")
         output.commit()
         check = output.execute("PRAGMA quick_check").fetchone()[0]

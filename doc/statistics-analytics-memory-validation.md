@@ -18,6 +18,10 @@ archive or Linux container has passed.
 - Outlier ranking carries service identities through the four ranking windows,
   then joins the selected identities back to their full service records.
 - SQLite export bounds the SQL result itself to 5,000 physical rows per query.
+- Unix SQLite index sorting uses `SQLITE_TMPDIR` inside the disposable work
+  directory, with `temp_store=FILE`. The scoped environment override is restored
+  and scratch files are removed on success or failure. Dashboard period, table
+  export and index stages report progress separately.
 - Defaults and daily preflight agree on `128MB` DuckDB buffers, one thread,
   one-day fact/rolling batches, 384 MiB container RAM and 2 GiB RAM-plus-swap.
   The CI memory test allows no additional swap.
@@ -41,7 +45,7 @@ spill limit excludes the work DB/WAL and SQLite publication files.
 - An injected failure after the first SQLite table is exported preserves the
   previous published database byte-for-byte and removes the work directory and
   partial publication file.
-- `npm run check`: passed, including 78 Node tests and 121 Python tests with
+- `npm run check`: passed, including 78 Node tests and 122 Python tests with
   DuckDB available; no test skips.
 - `npm run build`: passed with `ASTRO_TELEMETRY_DISABLED=1`. The initial attempt
   could not create Astro's telemetry directory outside the workspace sandbox.
@@ -95,8 +99,14 @@ tables, exact service/arrival-sample totals, all three window lengths, SQLite
 integrity and work-directory cleanup. Successful runs print RSS/cgroup peak
 measurements and save `resources.json` in the fixture directory.
 
-The newly added Linux memory gate has not run in this local session. Before
-restoring the daily timer, verify that gate and perform one controlled build
+The first Linux memory run (CI 33969245299) completed all semantic calculations
+but failed creating `idx_dimension_day`: SQLite exhausted the 16 MiB `/tmp`
+tmpfs with index-sort spill. DuckDB's configured spill directory does not
+configure SQLite. The follow-up routes SQLite temporary files to disk as
+described in its [temporary storage documentation](https://www.sqlite.org/tempfiles.html#temporary_file_storage_locations),
+while preserving the same memory and tmpfs limits in the regression gate.
+
+Before restoring the daily timer, verify the corrected gate and perform one controlled build
 against the actual VPS archive. Check elapsed time as well as memory, scratch
 disk use, publication identity and collector health; shard-based queries do
 more scans, so synthetic completion does not establish the VPS run duration.

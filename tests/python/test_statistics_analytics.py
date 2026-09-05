@@ -1,4 +1,5 @@
 import json
+import os
 import sqlite3
 import sys
 import tempfile
@@ -19,6 +20,7 @@ from analytics_statistics import (  # noqa: E402
     _build_rolling_windows,
     _build_stabilized_facts,
     _copy_table,
+    _sqlite_disk_temp,
     analytics_build,
     analytics_cleanup,
     analytics_lock,
@@ -477,6 +479,11 @@ class StatisticsAnalyticsTest(unittest.TestCase):
         (abandoned / "duckdb-temp" / "spill.tmp").write_bytes(b"stale")
 
         def fail_during_export(connection, output, table):
+            temporary = Path(os.environ["SQLITE_TMPDIR"])
+            self.assertTrue(temporary.is_absolute())
+            self.assertTrue(temporary.is_dir())
+            self.assertEqual(temporary.parent.parent, self.analytics)
+            self.assertEqual(output.execute("PRAGMA temp_store").fetchone()[0], 1)
             if table == "network_day":
                 raise RuntimeError("boom")
             return _copy_table(connection, output, table)
@@ -491,6 +498,23 @@ class StatisticsAnalyticsTest(unittest.TestCase):
 
 
 class StatisticsAnalyticsLockTest(unittest.TestCase):
+    def test_sqlite_temp_scope_restores_environment_and_cleans_failed_sort(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            for previous in (None, "/previous/sqlite-temp"):
+                with self.subTest(previous=previous), patch.dict(os.environ):
+                    if previous is None:
+                        os.environ.pop("SQLITE_TMPDIR", None)
+                    else:
+                        os.environ["SQLITE_TMPDIR"] = previous
+                    with self.assertRaisesRegex(RuntimeError, "sort failed"):
+                        with _sqlite_disk_temp(Path(temporary)):
+                            scratch = Path(os.environ["SQLITE_TMPDIR"])
+                            self.assertEqual(scratch.parent, Path(temporary).resolve())
+                            (scratch / "sort-spill").write_bytes(b"incomplete")
+                            raise RuntimeError("sort failed")
+                    self.assertEqual(os.environ.get("SQLITE_TMPDIR"), previous)
+                    self.assertFalse(scratch.exists())
+
     def test_abandoned_work_roots_are_removed_without_touching_read_model(self):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             root = Path(temporary)
