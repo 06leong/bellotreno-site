@@ -18,6 +18,7 @@ from analytics_statistics import (  # noqa: E402
     AnalyticsConfig,
     _build_rolling_windows,
     _build_stabilized_facts,
+    _copy_table,
     analytics_build,
     analytics_cleanup,
     analytics_lock,
@@ -326,12 +327,14 @@ class StatisticsAnalyticsTest(unittest.TestCase):
 
     def test_build_disables_duckdb_insertion_order_preservation(self):
         captured_config = None
+        captured_database = None
 
         class DuckDBProxy:
             @staticmethod
             def connect(*args, **kwargs):
-                nonlocal captured_config
+                nonlocal captured_config, captured_database
                 captured_config = kwargs.get("config")
+                captured_database = Path(kwargs["database"])
                 return duckdb.connect(*args, **kwargs)
 
         with patch("analytics_statistics._import_duckdb", return_value=DuckDBProxy()):
@@ -342,6 +345,82 @@ class StatisticsAnalyticsTest(unittest.TestCase):
         self.assertEqual(captured_config["threads"], "1")
         self.assertEqual(captured_config["max_temp_directory_size"], "4GB")
         self.assertEqual(captured_config["preserve_insertion_order"], "false")
+        self.assertEqual(captured_database.name, "work.duckdb")
+        self.assertEqual(captured_database.parent.parent, self.analytics)
+        self.assertFalse(captured_database.parent.exists())
+
+    def test_segmented_dashboard_matches_unsegmented_queries(self):
+        from analytics_statistics import _create_archive_views
+
+        def expanded_archive(connection, index):
+            _create_archive_views(connection, index)
+            # Exercise current/previous 7/28/90-day boundaries, repeated service
+            # identities across dates, multiple operators, nulls and exclusions.
+            for table in ("train_services", "train_stop_events", "train_observations"):
+                connection.execute(f"""
+                    CREATE TABLE expanded_{table} AS
+                    SELECT t.* REPLACE (
+                        CAST(CAST(CAST(t.service_date AS DATE) - days * INTERVAL 1 DAY AS DATE)
+                             AS VARCHAR) AS service_date
+                    )
+                    FROM {table} t CROSS JOIN (VALUES (0),(7),(28),(90),(179)) shifts(days)
+                """)
+                connection.execute(f"DROP VIEW {table}")
+                connection.execute(f"ALTER TABLE expanded_{table} RENAME TO {table}")
+
+        def unsegmented(connection, table, select_sql, *, scope_column=None, shard_column=None,
+                        periods=("current", "previous")):
+            predicate = "TRUE" if len(periods) == 2 else "p.period='current'"
+            connection.execute(
+                f"CREATE OR REPLACE TABLE {table} AS "
+                + select_sql.format(batch_filter=predicate)
+            )
+
+        config = replace(self.config, max_history_days=365)
+        with patch("analytics_statistics._create_archive_views", expanded_archive), \
+                patch("analytics_statistics._build_dashboard_window", unsegmented):
+            analytics_build(config)
+        with closing(sqlite3.connect(self.analytics / "analytics.db")) as connection:
+            tables = [row[0] for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' "
+                "AND name NOT IN ('analytics_metadata', 'sqlite_stat1')"
+            )]
+            expected = {table: connection.execute(
+                f'SELECT * FROM "{table}" ORDER BY '
+                + ','.join(str(i + 1) for i in range(len(connection.execute(
+                    f'SELECT * FROM "{table}" LIMIT 0'
+                ).description)))
+            ).fetchall() for table in tables}
+
+        with patch("analytics_statistics._create_archive_views", expanded_archive):
+            analytics_build(config)
+        with closing(sqlite3.connect(self.analytics / "analytics.db")) as connection:
+            for table in tables:
+                with self.subTest(table=table):
+                    actual = connection.execute(
+                        f'SELECT * FROM "{table}" ORDER BY '
+                        + ','.join(str(i + 1) for i in range(len(connection.execute(
+                            f'SELECT * FROM "{table}" LIMIT 0'
+                        ).description)))
+                    ).fetchall()
+                    self.assertEqual(actual, expected[table])
+
+    def test_sqlite_copy_preserves_rows_across_batches_and_empty_tables(self):
+        with closing(duckdb.connect()) as source, closing(sqlite3.connect(":memory:")) as output:
+            source.execute("""
+                CREATE TABLE samples AS
+                SELECT n AS id, CASE WHEN n%7=0 THEN NULL ELSE n END AS value,
+                       DATE '2026-01-01' AS day, n%2=0 AS eligible
+                FROM range(12001) t(n);
+                DELETE FROM samples WHERE id BETWEEN 4900 AND 5100;
+                CREATE TABLE empty AS SELECT * FROM samples WHERE FALSE;
+            """)
+            self.assertEqual(_copy_table(source, output, "samples"), 11800)
+            self.assertEqual(_copy_table(source, output, "empty"), 0)
+            self.assertEqual(output.execute("SELECT COUNT(DISTINCT id), MIN(id), MAX(id) FROM samples").fetchone(),
+                             (11800, 0, 12000))
+            self.assertEqual(output.execute("SELECT value, day, eligible FROM samples WHERE id=0").fetchone(),
+                             (None, "2026-01-01", 1))
 
     def test_fact_and_rolling_batches_preserve_exact_metrics(self):
         analytics_build(replace(self.config, window_batch_days=1))
@@ -389,17 +468,26 @@ class StatisticsAnalyticsTest(unittest.TestCase):
         self.assertEqual(first["status"], "success")
 
     def test_failed_build_cleans_temporary_publication_files(self):
+        analytics_build(self.config)
+        published = self.analytics / "analytics.db"
+        previous_bytes = published.read_bytes()
         abandoned = self.analytics / "analytics-abandoned"
         abandoned.mkdir(parents=True)
         (abandoned / "duckdb-temp").mkdir()
         (abandoned / "duckdb-temp" / "spill.tmp").write_bytes(b"stale")
 
-        with patch("analytics_statistics._create_archive_views", side_effect=RuntimeError("boom")):
+        def fail_during_export(connection, output, table):
+            if table == "network_day":
+                raise RuntimeError("boom")
+            return _copy_table(connection, output, table)
+
+        with patch("analytics_statistics._copy_table", side_effect=fail_during_export):
             with self.assertRaisesRegex(RuntimeError, "boom"):
                 analytics_build(self.config)
 
         self.assertFalse((self.analytics / ".analytics.db.partial").exists())
         self.assertEqual(list(self.analytics.glob("analytics-*")), [])
+        self.assertEqual(published.read_bytes(), previous_bytes)
 
 
 class StatisticsAnalyticsLockTest(unittest.TestCase):

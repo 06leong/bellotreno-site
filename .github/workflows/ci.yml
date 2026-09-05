@@ -103,6 +103,23 @@ jobs:
           bash -n rfi-proxy/ops/bellotreno-statistics-daily
           bash tests/ops/test-statistics-daily.sh
 
+      - name: Generate full Analytics regression archive
+        run: >-
+          python tests/ops/statistics_analytics_memory.py generate
+          --root "$RUNNER_TEMP/analytics-memory" --days 90 --services 8000
+
+      - name: Build full Analytics under the VPS memory ceiling
+        timeout-minutes: 30
+        shell: bash
+        run: |
+          docker run --rm --network none --read-only --tmpfs /tmp:size=16m \
+            --memory=384m --memory-swap=384m --cpus=1 \
+            -v "$RUNNER_TEMP/analytics-memory:/fixture" \
+            -v "$RUNNER_TEMP/analytics-memory/archive:/fixture/archive:ro" \
+            -v "$PWD/tests/ops/statistics_analytics_memory.py:/tests/ops/memory.py:ro" \
+            --entrypoint python bellotreno-statistics-archive:ci \
+            /tests/ops/memory.py build --root /fixture --days 90 --services 8000
+
       - name: Build frontend
         run: npm run build
 

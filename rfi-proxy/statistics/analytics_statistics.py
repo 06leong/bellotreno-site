@@ -33,7 +33,7 @@ class AnalyticsConfig:
     threads: int
     max_history_days: int
     minimum_ranking_sample: int
-    window_batch_days: int = 7
+    window_batch_days: int = 1
     fact_batch_days: int = 1
     max_temp_directory_size: str = "4GB"
 
@@ -47,7 +47,7 @@ class AnalyticsConfig:
                 or os.environ.get("ANALYTICS_ROOT", DEFAULT_ANALYTICS_ROOT)
             ),
             as_of_date=as_of,
-            memory_limit=os.environ.get("ANALYTICS_DUCKDB_MEMORY_LIMIT", "192MB"),
+            memory_limit=os.environ.get("ANALYTICS_DUCKDB_MEMORY_LIMIT", "128MB"),
             threads=_bounded_int(
                 os.environ.get("ANALYTICS_DUCKDB_THREADS", "1"),
                 name="ANALYTICS_DUCKDB_THREADS",
@@ -67,7 +67,7 @@ class AnalyticsConfig:
                 maximum=10000,
             ),
             window_batch_days=_bounded_int(
-                os.environ.get("ANALYTICS_WINDOW_BATCH_DAYS", "7"),
+                os.environ.get("ANALYTICS_WINDOW_BATCH_DAYS", "1"),
                 name="ANALYTICS_WINDOW_BATCH_DAYS",
                 minimum=1,
                 maximum=31,
@@ -425,7 +425,10 @@ SELECT
         PARTITION BY s.service_date, s.train_key ORDER BY s.stop_number
     ) AS delay_change
 FROM stops s
-JOIN fact_service_outcome f
+JOIN (
+    SELECT f.* FROM fact_service_outcome f
+    JOIN analytics_service_date_batch b ON b.service_date=f.service_date
+) f
   ON f.service_date=s.service_date AND f.train_key=s.train_key
 """
 
@@ -460,7 +463,7 @@ METRIC_COLUMNS = """
 def _create_quality_manifest(connection: Any, quality_days: Sequence[dict[str, Any]]) -> None:
     connection.execute(
         """
-        CREATE OR REPLACE TEMP TABLE quality_manifest (
+        CREATE OR REPLACE TABLE quality_manifest (
             collection_date VARCHAR,
             coverage_status VARCHAR,
             comparison_eligible INTEGER,
@@ -530,7 +533,7 @@ def _build_stabilized_facts(
             f"{batch_number}/{batch_count} ({batch[0]} through {batch[-1]})"
         )
         connection.execute(
-            "CREATE OR REPLACE TEMP TABLE analytics_service_date_batch(service_date VARCHAR)"
+            "CREATE OR REPLACE TABLE analytics_service_date_batch(service_date VARCHAR)"
         )
         connection.executemany(
             "INSERT INTO analytics_service_date_batch VALUES (?)",
@@ -538,18 +541,21 @@ def _build_stabilized_facts(
         )
 
         service_operation = (
-            "CREATE OR REPLACE TEMP TABLE fact_service_outcome AS"
+            "CREATE OR REPLACE TABLE fact_service_outcome AS"
             if first_batch
             else "INSERT INTO fact_service_outcome"
         )
         connection.execute(f"{service_operation}\n{SERVICE_FACT_SELECT_SQL}")
 
         stop_operation = (
-            "CREATE OR REPLACE TEMP TABLE fact_stop_outcome AS"
+            "CREATE OR REPLACE TABLE fact_stop_outcome AS"
             if first_batch
             else "INSERT INTO fact_stop_outcome"
         )
         connection.execute(f"{stop_operation}\n{STOP_FACT_SELECT_SQL}")
+        # Persist completed batches so their buffers can be evicted before the
+        # next day's joins. The work database is disposable, never the live DB.
+        connection.execute("CHECKPOINT")
         first_batch = False
 
     connection.execute("DROP TABLE analytics_service_date_batch")
@@ -589,7 +595,7 @@ def _build_rolling_windows(
             f"{batch_number}/{batch_count} ({batch[0]} through {batch[-1]})"
         )
         connection.execute(
-            "CREATE OR REPLACE TEMP TABLE analytics_as_of_batch(as_of_date DATE)"
+            "CREATE OR REPLACE TABLE analytics_as_of_batch(as_of_date DATE)"
         )
         connection.executemany(
             "INSERT INTO analytics_as_of_batch VALUES (?)",
@@ -597,7 +603,7 @@ def _build_rolling_windows(
         )
 
         network_operation = (
-            "CREATE OR REPLACE TEMP TABLE network_window AS"
+            "CREATE OR REPLACE TABLE network_window AS"
             if first_batch
             else "INSERT INTO network_window"
         )
@@ -620,7 +626,7 @@ def _build_rolling_windows(
         )
 
         dimension_operation = (
-            "CREATE OR REPLACE TEMP TABLE dimension_window AS"
+            "CREATE OR REPLACE TABLE dimension_window AS"
             if first_batch
             else "INSERT INTO dimension_window"
         )
@@ -649,6 +655,59 @@ def _build_rolling_windows(
     connection.execute("DROP TABLE analytics_as_of_batch")
 
 
+def _build_dashboard_window(
+    connection: Any,
+    table: str,
+    select_sql: str,
+    *,
+    scope_column: str | None = None,
+    shard_column: str | None = None,
+    periods: Sequence[str] = ("current", "previous"),
+) -> None:
+    """Aggregate disjoint output groups without expanding all windows/scopes.
+
+    Each query still sees its entire service-date window: exact quantiles and
+    distinct-service counts must never be combined from daily summaries.
+    SQL identifiers and templates here are internal constants only.
+    """
+    first = True
+    for window in DEFAULT_WINDOWS:
+        for period in periods:
+            for scope in ("all", "operator", "category") if scope_column else (None,):
+                predicate = f"p.window_days={window} AND p.period='{period}'"
+                if scope_column:
+                    predicate += f" AND {scope_column}='{scope}'"
+                for shard in range(16 if shard_column else 1):
+                    shard_predicate = predicate
+                    if shard_column:
+                        shard_predicate += f" AND hash({shard_column}) % 16 = {shard}"
+                    operation = f"CREATE OR REPLACE TABLE {table} AS" if first else f"INSERT INTO {table}"
+                    connection.execute(f"{operation}\n{select_sql.format(batch_filter=shard_predicate)}")
+                    first = False
+
+
+def _append_dimension_windows(connection: Any, select_sql: str, *, shard_column: str | None = None) -> None:
+    """Keep exact station/relation quantiles within one window and key shard."""
+    for window in DEFAULT_WINDOWS:
+        for shard in range(16 if shard_column else 1):
+            predicate = f"w.window_days={window}"
+            if shard_column:
+                predicate += f" AND hash({shard_column}) % 16 = {shard}"
+            connection.execute("INSERT INTO dimension_window\n" + select_sql.format(batch_filter=predicate))
+
+
+def _build_daily_table(connection: Any, table: str, select_sql: str, *, append: bool = False) -> None:
+    """Daily output groups do not require one all-history aggregate state."""
+    dates = connection.execute(
+        "SELECT DISTINCT CAST(service_date AS DATE) FROM fact_service_outcome ORDER BY 1"
+    ).fetchall()
+    for (service_date,) in dates:
+        operation = f"INSERT INTO {table}" if append else f"CREATE OR REPLACE TABLE {table} AS"
+        predicate = f"CAST(service_date AS DATE)=DATE '{service_date.isoformat()}'"
+        connection.execute(f"{operation}\n{select_sql.format(batch_filter=predicate)}")
+        append = True
+
+
 def build_semantic_tables(connection: Any, index: ArchiveIndex, config: AnalyticsConfig) -> str:
     log("building stabilized service and stop facts")
     max_date_value = connection.execute(
@@ -668,12 +727,12 @@ def build_semantic_tables(connection: Any, index: ArchiveIndex, config: Analytic
     )
     _create_quality_manifest(connection, index.quality_days)
 
-    connection.execute(
+    _build_daily_table(
+        connection, "network_day",
         f"""
-        CREATE OR REPLACE TEMP TABLE network_day AS
         SELECT service_date, {METRIC_COLUMNS}
         FROM fact_service_outcome
-        WHERE CAST(service_date AS DATE) <= DATE '{max_date}'
+        WHERE {{batch_filter}}
         GROUP BY service_date
         ORDER BY service_date
         """
@@ -682,7 +741,7 @@ def build_semantic_tables(connection: Any, index: ArchiveIndex, config: Analytic
     log("building collection quality mart")
     connection.execute(
         """
-        CREATE OR REPLACE TEMP TABLE quality_day AS
+        CREATE OR REPLACE TABLE quality_day AS
         WITH run_day AS (
             SELECT date AS collection_date,
                    COUNT(*) AS collector_runs,
@@ -754,32 +813,32 @@ def build_semantic_tables(connection: Any, index: ArchiveIndex, config: Analytic
         FROM fact_service_outcome
         """
     )
-    connection.execute(
+    _build_daily_table(
+        connection, "dimension_day",
         f"""
-        CREATE OR REPLACE TEMP TABLE dimension_day AS
         SELECT service_date, dimension_type, dimension_key,
                MAX(dimension_label) AS dimension_label,
                {METRIC_COLUMNS}
         FROM rolling_dimension_fact
-        WHERE CAST(service_date AS DATE) <= DATE '{max_date}'
+        WHERE {{batch_filter}}
         GROUP BY service_date, dimension_type, dimension_key
         """
     )
-    connection.execute(
+    _build_daily_table(
+        connection, "dimension_day",
         f"""
-        INSERT INTO dimension_day
         SELECT service_date, 'relation' AS dimension_type,
                COALESCE(NULLIF(relation_key, ''), train_key) AS dimension_key,
                MAX(COALESCE(NULLIF(relation_key, ''), train_key)) AS dimension_label,
                {METRIC_COLUMNS}
         FROM fact_service_outcome
-        WHERE CAST(service_date AS DATE) <= DATE '{max_date}'
+        WHERE {{batch_filter}}
         GROUP BY service_date, COALESCE(NULLIF(relation_key, ''), train_key)
-        """
+        """, append=True,
     )
-    connection.execute(
+    _build_daily_table(
+        connection, "dimension_day",
         f"""
-        INSERT INTO dimension_day
         SELECT service_date, 'station' AS dimension_type, dimension_key,
                MAX(dimension_label) AS dimension_label,
                {METRIC_COLUMNS}
@@ -800,9 +859,9 @@ def build_semantic_tables(connection: Any, index: ArchiveIndex, config: Analytic
             FROM fact_stop_outcome
             WHERE station_code IS NOT NULL
         ) AS station_fact
-        WHERE CAST(service_date AS DATE) <= DATE '{max_date}'
+        WHERE {{batch_filter}}
         GROUP BY service_date, dimension_key
-        """
+        """, append=True,
     )
     windows_sql = ",".join(f"({value})" for value in DEFAULT_WINDOWS)
     _build_rolling_windows(
@@ -811,9 +870,9 @@ def build_semantic_tables(connection: Any, index: ArchiveIndex, config: Analytic
         max_history_days=config.max_history_days,
         batch_days=config.window_batch_days,
     )
-    connection.execute(
+    _append_dimension_windows(
+        connection,
         f"""
-        INSERT INTO dimension_window
         WITH windows(window_days) AS (VALUES {windows_sql})
         SELECT '{max_date}' AS as_of_date,
                w.window_days,
@@ -828,12 +887,13 @@ def build_semantic_tables(connection: Any, index: ArchiveIndex, config: Analytic
           ON CAST(f.service_date AS DATE)
              BETWEEN DATE '{max_date}' - (w.window_days - 1) * INTERVAL 1 DAY
                  AND DATE '{max_date}'
+        WHERE {{batch_filter}}
         GROUP BY w.window_days, COALESCE(NULLIF(f.relation_key, ''), f.train_key)
         """
     )
-    connection.execute(
+    _append_dimension_windows(
+        connection,
         f"""
-        INSERT INTO dimension_window
         WITH windows(window_days) AS (VALUES {windows_sql}),
         station_fact AS (
             SELECT service_date,
@@ -865,15 +925,16 @@ def build_semantic_tables(connection: Any, index: ArchiveIndex, config: Analytic
           ON CAST(f.service_date AS DATE)
              BETWEEN DATE '{max_date}' - (w.window_days - 1) * INTERVAL 1 DAY
                  AND DATE '{max_date}'
+        WHERE {{batch_filter}}
         GROUP BY w.window_days, f.dimension_key
-        """
+        """, shard_column="f.dimension_key",
     )
     connection.execute("DROP VIEW rolling_dimension_fact")
     connection.execute(
         f"""
-        CREATE OR REPLACE TEMP TABLE outlier_service AS
+        CREATE OR REPLACE TABLE outlier_service AS
         WITH candidates AS (
-            SELECT *,
+            SELECT service_date, train_key,
                    ROW_NUMBER() OVER (
                        ORDER BY cancelled DESC, final_arrival_delay DESC NULLS LAST,
                                 service_date DESC, train_number
@@ -904,7 +965,7 @@ def build_semantic_tables(connection: Any, index: ArchiveIndex, config: Analytic
                final_departure_delay, scheduled_departure, scheduled_arrival,
                first_observed_at, last_observed_at, observation_count,
                latest_state_quality, detail_quality, observation_quality
-        FROM candidates
+        FROM fact_service_outcome JOIN candidates USING (service_date, train_key)
         WHERE global_rank <= 5000 OR operator_rank <= 250
            OR category_rank <= 250 OR operator_category_rank <= 100
         """
@@ -913,7 +974,7 @@ def build_semantic_tables(connection: Any, index: ArchiveIndex, config: Analytic
     log("building dashboard composition, rhythm, station, and service marts")
     connection.execute(
         f"""
-        CREATE OR REPLACE TEMP TABLE dashboard_periods AS
+        CREATE OR REPLACE TABLE dashboard_periods AS
         WITH windows(window_days) AS (VALUES {windows_sql})
         SELECT window_days, 'current' AS period,
                DATE '{max_date}' - (window_days - 1) * INTERVAL 1 DAY AS window_start,
@@ -926,9 +987,9 @@ def build_semantic_tables(connection: Any, index: ArchiveIndex, config: Analytic
         FROM windows
         """
     )
-    connection.execute(
+    _build_dashboard_window(
+        connection, "operator_category_window",
         f"""
-        CREATE OR REPLACE TEMP TABLE operator_category_window AS
         SELECT '{max_date}' AS as_of_date, p.window_days, p.period,
                CAST(p.window_start AS VARCHAR) AS window_start,
                CAST(p.window_end AS VARCHAR) AS window_end,
@@ -938,6 +999,7 @@ def build_semantic_tables(connection: Any, index: ArchiveIndex, config: Analytic
         FROM dashboard_periods p
         JOIN fact_service_outcome f
           ON CAST(f.service_date AS DATE) BETWEEN p.window_start AND p.window_end
+        WHERE {{batch_filter}}
         GROUP BY p.window_days, p.period, p.window_start, p.window_end,
                  COALESCE(f.operator, 'unknown'), COALESCE(f.category, 'unknown')
         """
@@ -959,19 +1021,19 @@ def build_semantic_tables(connection: Any, index: ArchiveIndex, config: Analytic
         SELECT *, 'category', COALESCE(category, 'unknown') FROM base
         """
     )
-    connection.execute(
+    _build_dashboard_window(
+        connection, "rhythm_window",
         f"""
-        CREATE OR REPLACE TEMP TABLE rhythm_window AS
         SELECT '{max_date}' AS as_of_date, p.window_days, p.period,
                r.filter_type, r.filter_key, r.weekday, r.departure_hour AS hour,
                {METRIC_COLUMNS}
         FROM dashboard_periods p
         JOIN rhythm_scope_fact r
           ON CAST(r.service_date AS DATE) BETWEEN p.window_start AND p.window_end
-        WHERE r.departure_hour BETWEEN 0 AND 23
+        WHERE r.departure_hour BETWEEN 0 AND 23 AND {{batch_filter}}
         GROUP BY p.window_days, p.period, r.filter_type, r.filter_key,
                  r.weekday, r.departure_hour
-        """
+        """, scope_column="r.filter_type",
     )
     connection.execute(
         """
@@ -999,9 +1061,9 @@ def build_semantic_tables(connection: Any, index: ArchiveIndex, config: Analytic
         SELECT *, 'category', COALESCE(category, 'unknown') FROM base
         """
     )
-    connection.execute(
+    _build_dashboard_window(
+        connection, "station_window",
         f"""
-        CREATE OR REPLACE TEMP TABLE station_window AS
         SELECT '{max_date}' AS as_of_date, p.window_days, p.period,
                s.filter_type, s.filter_key, s.station_code,
                MAX(s.station_label) AS station_label,
@@ -1020,13 +1082,14 @@ def build_semantic_tables(connection: Any, index: ArchiveIndex, config: Analytic
         FROM dashboard_periods p
         JOIN station_scope_fact s
           ON CAST(s.service_date AS DATE) BETWEEN p.window_start AND p.window_end
+        WHERE {{batch_filter}}
         GROUP BY p.window_days, p.period, s.filter_type, s.filter_key,
                  s.station_code
-        """
+        """, scope_column="s.filter_type", shard_column="s.station_code",
     )
     connection.execute(
         f"""
-        CREATE OR REPLACE TEMP TABLE top_station AS
+        CREATE OR REPLACE TABLE top_station AS
         SELECT station_code
         FROM station_window
         WHERE as_of_date='{max_date}' AND window_days=90 AND period='current'
@@ -1035,9 +1098,9 @@ def build_semantic_tables(connection: Any, index: ArchiveIndex, config: Analytic
         LIMIT 250
         """
     )
-    connection.execute(
+    _build_dashboard_window(
+        connection, "station_hour_window",
         f"""
-        CREATE OR REPLACE TEMP TABLE station_hour_window AS
         WITH timed AS (
             SELECT s.*,
                    CAST(EXTRACT(ISODOW FROM CAST(s.station_expected_date AS DATE)) - 1 AS INTEGER) AS weekday,
@@ -1056,9 +1119,9 @@ def build_semantic_tables(connection: Any, index: ArchiveIndex, config: Analytic
                COUNT(DISTINCT CASE WHEN t.station_role='transit' THEN t.service_date || '|' || t.train_key END) AS transits
         FROM dashboard_periods p
         JOIN timed t ON CAST(t.service_date AS DATE) BETWEEN p.window_start AND p.window_end
-        WHERE p.period='current' AND t.hour BETWEEN 0 AND 23
+        WHERE {{batch_filter}} AND t.hour BETWEEN 0 AND 23
         GROUP BY p.window_days, t.station_code, t.weekday, t.hour
-        """
+        """, periods=("current",),
     )
     connection.execute(
         """
@@ -1086,9 +1149,9 @@ def build_semantic_tables(connection: Any, index: ArchiveIndex, config: Analytic
         SELECT *, 'category', COALESCE(category, 'unknown') FROM base
         """
     )
-    connection.execute(
+    _build_dashboard_window(
+        connection, "relation_feature_window",
         f"""
-        CREATE OR REPLACE TEMP TABLE relation_feature_window AS
         SELECT '{max_date}' AS as_of_date, p.window_days, p.period,
                r.filter_type, r.filter_key, r.relation_id, MAX(r.relation_label) AS relation_label,
                {METRIC_COLUMNS},
@@ -1103,13 +1166,14 @@ def build_semantic_tables(connection: Any, index: ArchiveIndex, config: Analytic
         FROM dashboard_periods p
         JOIN relation_scope_fact r
           ON CAST(r.service_date AS DATE) BETWEEN p.window_start AND p.window_end
+        WHERE {{batch_filter}}
         GROUP BY p.window_days, p.period, r.filter_type, r.filter_key,
                  r.relation_id
-        """
+        """, scope_column="r.filter_type",
     )
-    connection.execute(
+    _build_dashboard_window(
+        connection, "cross_midnight_window",
         f"""
-        CREATE OR REPLACE TEMP TABLE cross_midnight_window AS
         SELECT '{max_date}' AS as_of_date, p.window_days, p.period,
                r.filter_type, r.filter_key,
                COUNT(*) FILTER (WHERE r.cross_midnight IS NOT NULL) AS observed_services,
@@ -1121,12 +1185,13 @@ def build_semantic_tables(connection: Any, index: ArchiveIndex, config: Analytic
         FROM dashboard_periods p
         JOIN relation_scope_fact r
           ON CAST(r.service_date AS DATE) BETWEEN p.window_start AND p.window_end
+        WHERE {{batch_filter}}
         GROUP BY p.window_days, p.period, r.filter_type, r.filter_key
-        """
+        """, scope_column="r.filter_type",
     )
     connection.execute(
         f"""
-        CREATE OR REPLACE TEMP TABLE long_journey_service AS
+        CREATE OR REPLACE TABLE long_journey_service AS
         SELECT service_date, train_key, train_number, operator, category,
                origin, destination, origin_code, destination_code, relation_key,
                scheduled_departure, scheduled_arrival, scheduled_duration_minutes,
@@ -1143,7 +1208,7 @@ def build_semantic_tables(connection: Any, index: ArchiveIndex, config: Analytic
     )
     connection.execute(
         """
-        CREATE OR REPLACE TEMP TABLE outlier_stop AS
+        CREATE OR REPLACE TABLE outlier_stop AS
         SELECT s.service_date, s.train_key, s.stop_number, s.station_code,
                s.station_name, s.stop_type, s.platform,
                s.arrival_expected, s.arrival_actual, s.arrival_delay,
@@ -1176,7 +1241,7 @@ def _sqlite_value(value: Any) -> Any:
 
 
 def _copy_table(duck: Any, sqlite: sqlite3.Connection, table: str) -> int:
-    cursor = duck.execute(f"SELECT * FROM {table}")
+    cursor = duck.execute(f"SELECT * FROM {table} LIMIT 0")
     columns = [item[0] for item in cursor.description]
     types = [item[1] for item in cursor.description]
     definitions = ", ".join(
@@ -1185,10 +1250,15 @@ def _copy_table(duck: Any, sqlite: sqlite3.Connection, table: str) -> int:
     sqlite.execute(f'CREATE TABLE "{table}" ({definitions})')
     placeholders = ",".join("?" for _ in columns)
     inserted = 0
-    while True:
-        rows = cursor.fetchmany(5000)
-        if not rows:
-            break
+    # fetchmany() alone only bounds Python tuples: execute() can retain the
+    # entire native result. These finalized work tables are immutable, so
+    # physical rowid ranges bound both sides of the DuckDB -> SQLite handoff.
+    last_rowid = duck.execute(f"SELECT MAX(rowid) FROM {table}").fetchone()[0]
+    for start in range(0, last_rowid + 1 if last_rowid is not None else 0, 5000):
+        rows = duck.execute(
+            f"SELECT * FROM {table} WHERE rowid >= ? AND rowid < ?",
+            [start, start + 5000],
+        ).fetchall()
         sqlite.executemany(
             f'INSERT INTO "{table}" VALUES ({placeholders})',
             [tuple(_sqlite_value(value) for value in row) for row in rows],
@@ -1317,6 +1387,7 @@ def analytics_build(config: AnalyticsConfig) -> dict[str, Any]:
             temp_root = work_root / "duckdb-temp"
             temp_root.mkdir()
             connection = duckdb.connect(
+                database=str(work_root / "work.duckdb"),
                 config={
                     "memory_limit": config.memory_limit,
                     "threads": str(config.threads),

@@ -86,11 +86,11 @@ STATISTICS_ARCHIVE_DUCKDB_MAX_TEMP_DIRECTORY_SIZE=4GB
 STATISTICS_ARCHIVE_INCLUDE_RAW_PAYLOADS=false
 
 # Optional professional analytics tuning
-STATISTICS_ANALYTICS_DUCKDB_MEMORY_LIMIT=192MB
+STATISTICS_ANALYTICS_DUCKDB_MEMORY_LIMIT=128MB
 STATISTICS_ANALYTICS_DUCKDB_THREADS=1
 STATISTICS_ANALYTICS_DUCKDB_MAX_TEMP_DIRECTORY_SIZE=4GB
 STATISTICS_ANALYTICS_FACT_BATCH_DAYS=1
-STATISTICS_ANALYTICS_WINDOW_BATCH_DAYS=7
+STATISTICS_ANALYTICS_WINDOW_BATCH_DAYS=1
 STATISTICS_ANALYTICS_HISTORY_DAYS=730
 STATISTICS_ANALYTICS_MIN_RANKING_SAMPLE=100
 # Docker treats this as a 384-MiB RAM ceiling and a 2-GiB combined
@@ -401,18 +401,36 @@ The script preserves the same safety boundaries as the manual runbook:
 - an archive failure retains the exact snapshot and diagnostics instead of
   guessing that partial output is safe;
 - analytics runs with a 384-MiB memory ceiling, 2-GiB memory-plus-swap limit,
-  one CPU, one DuckDB thread, and a 192-MiB DuckDB limit for the 1-GiB
-  production VPS; stabilized service and stop facts are materialized in fixed
-  one-day batches, rolling historical windows use fixed seven-day batches,
-  and reusable dimension expansions remain non-materialized views,
-  so history growth does not multiply one hash aggregation across every date;
-  DuckDB spill files are capped at 4 GiB, matching the archive capacity gate;
+  one CPU, one DuckDB thread, and a `128MB` DuckDB buffer limit for the 1-GiB
+  production VPS. The buffer limit does not cap total process memory.
+  Stabilized facts, daily metrics, and rolling as-of dates use one-day batches.
+  Both sides of stop/service joins are scoped to the active day. Completed
+  facts live in a disposable on-disk DuckDB work database and are checkpointed
+  after each fact batch. Dashboard queries process one period and filter type
+  at a time; station aggregates also use 16 disjoint station-key shards.
+  Exact quantiles and distinct-service counts use every sample in each group.
+  SQLite export queries at most 5,000 physical rows at a time;
+  DuckDB spill files are capped at `4GB`, matching the configured capacity
+  allowance. The work database/WAL and new SQLite output need additional disk
+  space; this is not a cap on the entire Analytics directory;
   neither container ceiling is raised;
 - analytics publishes atomically, so a failed build leaves the previous read
   model available; before a new build starts under the publication lock, it
   removes `analytics-*` work directories left by an earlier SIGKILL or host
   interruption; a successful build ID must also be visible through the always-
   on service health endpoint.
+
+The full CI regression generates 90 days of Parquet (8,000 services and 96,000
+stop events per day), then invokes the production image with 384 MiB RAM and
+no additional swap. It verifies all 14 output tables and the expected service
+and arrival-sample totals. Run the same test locally on a Docker host with
+`tests/ops/statistics_analytics_memory.py`; the exact container invocation is
+in `.github/workflows/ci.yml`. Generation happens outside the constrained build.
+Synthetic and CI success still require a controlled build against the actual
+VPS archive before re-enabling the daily timer. Existing `.env` files must set
+`STATISTICS_ANALYTICS_DUCKDB_MEMORY_LIMIT=128MB` and
+`STATISTICS_ANALYTICS_WINDOW_BATCH_DAYS=1`; the daily preflight rejects the old
+192MB/seven-day configuration.
 
 The analytics safety interval defaults to 900 seconds. Override it only on the
 host, not in Compose, by setting
@@ -462,11 +480,11 @@ set_env() {
 
 set_env STATISTICS_IMAGE_TAG "sha-$AUTOMATION_REVISION"
 set_env STATISTICS_ACTIVE_SERVICE_TTL_DAYS 3
-set_env STATISTICS_ANALYTICS_DUCKDB_MEMORY_LIMIT 192MB
+set_env STATISTICS_ANALYTICS_DUCKDB_MEMORY_LIMIT 128MB
 set_env STATISTICS_ANALYTICS_DUCKDB_THREADS 1
 set_env STATISTICS_ANALYTICS_DUCKDB_MAX_TEMP_DIRECTORY_SIZE 4GB
 set_env STATISTICS_ANALYTICS_FACT_BATCH_DAYS 1
-set_env STATISTICS_ANALYTICS_WINDOW_BATCH_DAYS 7
+set_env STATISTICS_ANALYTICS_WINDOW_BATCH_DAYS 1
 set_env STATISTICS_ANALYTICS_CONTAINER_MEMORY_LIMIT 384m
 set_env STATISTICS_ANALYTICS_CONTAINER_MEMORY_SWAP_LIMIT 2g
 
