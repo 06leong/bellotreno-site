@@ -720,6 +720,7 @@ def _build_dashboard_window(
     scope_column: str | None = None,
     shard_column: str | None = None,
     shard_source: str | None = None,
+    shard_base_source: str | None = None,
     shard_columns: Sequence[str] = (),
     periods: Sequence[str] = ("current", "previous"),
 ) -> None:
@@ -741,19 +742,27 @@ def _build_dashboard_window(
             log(f"materializing {table} station shard {shard + 1}/16")
             connection.execute(f"""
                 CREATE OR REPLACE TABLE dashboard_key_shard AS
-                SELECT {columns} FROM {shard_source}
+                SELECT {columns} FROM {shard_base_source or shard_source}
                 WHERE hash({key}) % 16 = {shard}
-                  AND CAST(service_date AS DATE) BETWEEN
-                      (SELECT MIN(window_start) FROM dashboard_periods) AND
-                      (SELECT MAX(window_end) FROM dashboard_periods)
-            """)
+                  AND CAST(service_date AS DATE) BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)
+            """, connection.execute(
+                "SELECT MIN(window_start), MAX(window_end) FROM dashboard_periods"
+            ).fetchone())
             connection.execute("CHECKPOINT")
-            query = query.replace(f"JOIN {shard_source} ", "JOIN dashboard_key_shard ")
+            source = "dashboard_scoped_shard" if shard_base_source else "dashboard_key_shard"
+            query = query.replace(f"JOIN {shard_source} ", f"JOIN {source} ")
         for window in DEFAULT_WINDOWS:
             for period in periods:
                 if not shard_source:
                     log(f"building {table}: {window}-day {period} period")
                 for scope in ("all", "operator", "category") if scope_column else (None,):
+                    if shard_base_source:
+                        key_sql = "'all'" if scope == "all" else f"COALESCE({scope}, 'unknown')"
+                        connection.execute(
+                            "CREATE OR REPLACE TEMP VIEW dashboard_scoped_shard AS "
+                            f"SELECT *, '{scope}' AS filter_type, {key_sql} AS filter_key "
+                            "FROM dashboard_key_shard"
+                        )
                     predicate = f"p.window_days={window} AND p.period='{period}'"
                     if scope_column:
                         predicate += f" AND {scope_column}='{scope}'"
@@ -763,6 +772,8 @@ def _build_dashboard_window(
                     connection.execute(f"{operation}\n{query.format(batch_filter=predicate)}")
                     first = False
     if shard_source:
+        if shard_base_source:
+            connection.execute("DROP VIEW dashboard_scoped_shard")
         connection.execute("DROP TABLE dashboard_key_shard")
 
 
@@ -1117,8 +1128,7 @@ def build_semantic_tables(connection: Any, index: ArchiveIndex, config: Analytic
     )
     connection.execute(
         """
-        CREATE OR REPLACE TEMP VIEW station_scope_fact AS
-        WITH base AS (
+        CREATE OR REPLACE TEMP VIEW station_base_fact AS
             SELECT *,
                    COALESCE(NULLIF(station_name, ''), station_code) AS station_label,
                    CASE WHEN LOWER(COALESCE(stop_type, '')) IN ('origine', 'origin') THEN 'departure'
@@ -1133,12 +1143,16 @@ def build_semantic_tables(connection: Any, index: ArchiveIndex, config: Analytic
                    CASE WHEN stop_cancelled=0 THEN arrival_delay END AS final_arrival_delay
             FROM fact_stop_outcome
             WHERE station_code IS NOT NULL AND identity_quality='canonical'
-        )
-        SELECT *, 'all' AS filter_type, 'all' AS filter_key FROM base
+        """
+    )
+    connection.execute(
+        """
+        CREATE OR REPLACE TEMP VIEW station_scope_fact AS
+        SELECT *, 'all' AS filter_type, 'all' AS filter_key FROM station_base_fact
         UNION ALL
-        SELECT *, 'operator', COALESCE(operator, 'unknown') FROM base
+        SELECT *, 'operator', COALESCE(operator, 'unknown') FROM station_base_fact
         UNION ALL
-        SELECT *, 'category', COALESCE(category, 'unknown') FROM base
+        SELECT *, 'category', COALESCE(category, 'unknown') FROM station_base_fact
         """
     )
     _build_dashboard_window(
@@ -1167,7 +1181,8 @@ def build_semantic_tables(connection: Any, index: ArchiveIndex, config: Analytic
                  s.station_code
         """, scope_column="s.filter_type", shard_column="s.station_code",
         shard_source="station_scope_fact",
-        shard_columns=("service_date", "train_key", "filter_type", "filter_key",
+        shard_base_source="station_base_fact",
+        shard_columns=("service_date", "train_key", "operator", "category",
                        "station_code", "station_label", "station_role",
                        "outcome_eligible", "cancelled", "arrival_eligible", "final_arrival_delay"),
     )

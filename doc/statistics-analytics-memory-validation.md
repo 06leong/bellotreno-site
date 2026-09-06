@@ -121,6 +121,16 @@ path and then complete the same 400,000-row sort through the production helper.
 The CI now also exercises 730 days at 100 services/day; this covers calendar
 and partition growth, not two years at full production density.
 
+CI 34016273739 passed that SQLite negative/positive control, but exposed a
+station-shard preparation regression: expanding all three filter scopes before
+materializing each shard took about 90–105 seconds per shard and exhausted the
+30-minute step budget. The final implementation materializes one base shard
+without scope duplication, then creates a cheap view for each requested scope.
+On the saved 90-day disk work database, the complete station-window phase took
+145.68 seconds at 128MB, versus 446.75 seconds for the original 288-query
+implementation; every output row matched the original SQLite reference in both
+directions. This is a phase benchmark, not the final end-to-end Linux result.
+
 See [the architecture and reliability review](statistics-reliability-review.md)
 for the full data path, resource boundaries and production acceptance criteria.
 

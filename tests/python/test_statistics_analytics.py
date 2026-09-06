@@ -373,7 +373,7 @@ class StatisticsAnalyticsTest(unittest.TestCase):
                 connection.execute(f"ALTER TABLE expanded_{table} RENAME TO {table}")
 
         def unsegmented(connection, table, select_sql, *, scope_column=None, shard_column=None,
-                        shard_source=None, shard_columns=(), periods=("current", "previous")):
+                        shard_source=None, shard_base_source=None, shard_columns=(), periods=("current", "previous")):
             predicate = "TRUE" if len(periods) == 2 else "p.period='current'"
             connection.execute(
                 f"CREATE OR REPLACE TABLE {table} AS "
