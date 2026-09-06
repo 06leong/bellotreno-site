@@ -11,6 +11,7 @@ RUN pip install --no-cache-dir -r archive-requirements.txt \
 
 COPY archive_statistics.py .
 COPY analytics_statistics.py .
+COPY analytics_sqlite.py .
 COPY statistics_snapshot.py .
 
 ENTRYPOINT ["python", "-u", "archive_statistics.py"]

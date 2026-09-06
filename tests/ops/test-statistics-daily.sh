@@ -57,12 +57,13 @@ snapshot_id="20260819T125209Z-f56f1d8c5683"
 revision="0123456789abcdef0123456789abcdef01234567"
 
 if [[ "$joined" == *" config --format json "* ]]; then
-  printf '{"services":{"bellotreno-statistics-analytics":{"mem_limit":"%s","memswap_limit":"%s","environment":{"ANALYTICS_DUCKDB_MEMORY_LIMIT":"%s","ANALYTICS_DUCKDB_THREADS":"1","ANALYTICS_DUCKDB_MAX_TEMP_DIRECTORY_SIZE":"%s","ANALYTICS_WINDOW_BATCH_DAYS":"%s"}}}}\n' \
+  printf '{"services":{"bellotreno-statistics-analytics":{"mem_limit":"%s","memswap_limit":"%s","environment":{"ANALYTICS_DUCKDB_MEMORY_LIMIT":"%s","ANALYTICS_DUCKDB_THREADS":"1","ANALYTICS_DUCKDB_MAX_TEMP_DIRECTORY_SIZE":"%s","ANALYTICS_FACT_BATCH_DAYS":"%s","ANALYTICS_WINDOW_BATCH_DAYS":"%s"}}}}\n' \
     "${FAKE_ANALYTICS_MEMORY_LIMIT:-402653184}" \
     "${FAKE_ANALYTICS_MEMORY_SWAP_LIMIT:-2147483648}" \
     "${FAKE_ANALYTICS_DUCKDB_MEMORY_LIMIT:-128MB}" \
     "${FAKE_ANALYTICS_DUCKDB_MAX_TEMP_DIRECTORY_SIZE:-4GB}" \
-    "${FAKE_ANALYTICS_WINDOW_BATCH_DAYS:-7}"
+    "${FAKE_ANALYTICS_FACT_BATCH_DAYS:-1}" \
+    "${FAKE_ANALYTICS_WINDOW_BATCH_DAYS:-1}"
 elif [[ "$joined" == *" config --images "* ]]; then
   printf '%s\n' \
     "ghcr.io/06leong/bellotreno-statistics-archive:sha-$revision" \
@@ -177,7 +178,8 @@ run_pipeline() {
     FAKE_ANALYTICS_MEMORY_SWAP_LIMIT="${FAKE_ANALYTICS_MEMORY_SWAP_LIMIT:-2147483648}" \
     FAKE_ANALYTICS_DUCKDB_MEMORY_LIMIT="${FAKE_ANALYTICS_DUCKDB_MEMORY_LIMIT:-128MB}" \
     FAKE_ANALYTICS_DUCKDB_MAX_TEMP_DIRECTORY_SIZE="${FAKE_ANALYTICS_DUCKDB_MAX_TEMP_DIRECTORY_SIZE:-4GB}" \
-    FAKE_ANALYTICS_WINDOW_BATCH_DAYS="${FAKE_ANALYTICS_WINDOW_BATCH_DAYS:-7}" \
+    FAKE_ANALYTICS_FACT_BATCH_DAYS="${FAKE_ANALYTICS_FACT_BATCH_DAYS:-1}" \
+    FAKE_ANALYTICS_WINDOW_BATCH_DAYS="${FAKE_ANALYTICS_WINDOW_BATCH_DAYS:-1}" \
     BELLOTRENO_COMPOSE_DIR="$COMPOSE_ROOT" \
     BELLOTRENO_STATE_DIR="$STATE_ROOT" \
     BELLOTRENO_COLLECTOR_WAIT_SECONDS="${BELLOTRENO_COLLECTOR_WAIT_SECONDS:-1800}" \
@@ -274,8 +276,14 @@ fi
 assert_not_contains "$FAKE_LOG" "snapshot_statistics.py create"
 
 make_scenario unsafe_analytics_duckdb_memory
-if FAKE_ANALYTICS_DUCKDB_MEMORY_LIMIT=256MB run_pipeline; then
+if FAKE_ANALYTICS_DUCKDB_MEMORY_LIMIT=192MB run_pipeline; then
   fail "unsafe analytics DuckDB memory scenario unexpectedly succeeded"
+fi
+assert_not_contains "$FAKE_LOG" "snapshot_statistics.py create"
+
+make_scenario unsafe_analytics_fact_batch
+if FAKE_ANALYTICS_FACT_BATCH_DAYS=7 run_pipeline; then
+  fail "unsafe Analytics stabilized-fact batch scenario unexpectedly succeeded"
 fi
 assert_not_contains "$FAKE_LOG" "snapshot_statistics.py create"
 

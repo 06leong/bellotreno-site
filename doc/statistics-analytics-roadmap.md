@@ -60,15 +60,25 @@ The foundation is now usable rather than hypothetical:
 - after the retained history grew beyond the first successful unattended
   builds, the all-dates rolling-window join reached roughly 708 MiB resident
   memory and triggered the 907-MiB VPS global OOM before the 800-MiB container
-  ceiling. The follow-up design keeps
-  exact numerators, denominators, exclusions, and quantiles while building a
-  fixed maximum of seven as-of dates per batch, leaves operator/category/station/relation expansions as
-  non-materialized views, and lowers DuckDB's buffer allowance to 128 MiB. This
-  bounds peak fan-out without deleting Parquet history or weakening metrics.
-  The container is capped at 384 MiB to preserve host headroom, while DuckDB
-  spill files are capped at the same 4-GiB allowance used by capacity planning;
-  a 600-MiB container ceiling now also preserves host headroom instead of
-  relying on the kernel to swap quickly enough under pressure.
+  ceiling. A first 128-MiB DuckDB follow-up then failed closed at 122 MiB while
+  materializing all stabilized facts, before any rolling window ran. The
+  initial one-day-fact/seven-day-window patch was insufficient: a subsequent
+  full 60-day Parquet regression still exhausted DuckDB, and the experimental
+  segmented version failed again at 90 days. Local fact-only tests were not
+  evidence for the full daily pipeline;
+- the September follow-up keeps both sides of stop/service joins within the
+  current day, checkpoints completed facts into a disposable disk work database,
+  calculates daily metrics and rolling as-of dates one day at a time, narrows
+  ranking intermediates, and separates dashboard windows and filter types.
+  Station aggregation uses 16 disjoint key shards, preserving each station's
+  complete sample set. SQLite handoff uses bounded SQL row ranges, not merely
+  Python fetch batches. Numerators, denominators, exclusions, nulls and exact
+  quantiles retain their definitions. Defaults are `128MB` DuckDB buffers,
+  one thread, a 384-MiB container ceiling and `4GB` spill allowance. Work DB/WAL
+  and SQLite publication require additional disk space. A new Linux CI gate
+  builds all 14 marts from 90 days of Parquet under 384 MiB without extra swap;
+  its result and a controlled production-archive build must be verified before
+  treating this follow-up as deployed or re-enabling unattended runs.
 
 The first archive is evidence that normalized Parquet is compact, but it is not
 a fair 9.5-GiB-to-35-MiB compression comparison. The live SQLite file contains
