@@ -18,10 +18,14 @@ archive or Linux container has passed.
 - Outlier ranking carries service identities through the four ranking windows,
   then joins the selected identities back to their full service records.
 - SQLite export bounds the SQL result itself to 5,000 physical rows per query.
-- Unix SQLite index sorting uses `SQLITE_TMPDIR` inside the disposable work
-  directory, with `temp_store=FILE`. The scoped environment override is restored
-  and scratch files are removed on success or failure. Dashboard period, table
-  export and index stages report progress separately.
+- SQLite index sorting runs in a fresh process after DuckDB closes, with
+  `SQLITE_TMPDIR` set before process startup and `temp_store=FILE`. Scratch files
+  are removed on success or failure. A runtime environment override was
+  insufficient because SQLite caches the directory during initialization.
+- Parquet service-date metadata is read once to select batch input files;
+  collection-date filenames are never mistaken for service-date boundaries.
+- Narrow station shards covering at most 180 days are materialized once and
+  reused across dashboard periods and scopes instead of rehashing full history.
 - Defaults and daily preflight agree on `128MB` DuckDB buffers, one thread,
   one-day fact/rolling batches, 384 MiB container RAM and 2 GiB RAM-plus-swap.
   The CI memory test allows no additional swap.
@@ -45,8 +49,12 @@ spill limit excludes the work DB/WAL and SQLite publication files.
 - An injected failure after the first SQLite table is exported preserves the
   previous published database byte-for-byte and removes the work directory and
   partial publication file.
-- `npm run check`: passed, including 78 Node tests and 122 Python tests with
+- The initial `npm run check` passed, including 78 Node tests and 122 Python tests with
   DuckDB available; no test skips.
+- The process-isolation/file-pruning follow-up passed the complete check again:
+  78 Node tests and 124 Python tests, plus the production build and daily shell
+  scenarios. Its local 400,000-row index-sort smoke also passed. Linux negative
+  control, dense-history and two-year gates remain the required CI evidence.
 - `npm run build`: passed with `ASTRO_TELEMETRY_DISABLED=1`. The initial attempt
   could not create Astro's telemetry directory outside the workspace sandbox.
 - Daily automation shell scenarios and shell syntax: passed.
@@ -105,6 +113,16 @@ tmpfs with index-sort spill. DuckDB's configured spill directory does not
 configure SQLite. The follow-up routes SQLite temporary files to disk as
 described in its [temporary storage documentation](https://www.sqlite.org/tempfiles.html#temporary_file_storage_locations),
 while preserving the same memory and tmpfs limits in the regression gate.
+That environment-only follow-up also failed in CI 33970345088: the library
+had already cached its temp directory. The current finalizer instead starts a
+fresh process with the directory supplied at process creation. A quick Linux
+negative-control test must reproduce `SQLITE_FULL` in the old same-process
+path and then complete the same 400,000-row sort through the production helper.
+The CI now also exercises 730 days at 100 services/day; this covers calendar
+and partition growth, not two years at full production density.
+
+See [the architecture and reliability review](statistics-reliability-review.md)
+for the full data path, resource boundaries and production acceptance criteria.
 
 Before restoring the daily timer, verify the corrected gate and perform one controlled build
 against the actual VPS archive. Check elapsed time as well as memory, scratch

@@ -410,6 +410,11 @@ The script preserves the same safety boundaries as the manual runbook:
   at a time; station aggregates also use 16 disjoint station-key shards.
   Exact quantiles and distinct-service counts use every sample in each group.
   SQLite export queries at most 5,000 physical rows at a time;
+  Parquet service-date ranges select the batch input files, including observations
+  stored under a different collection date. Narrow station shards are reused
+  across comparison windows. After DuckDB closes, a fresh SQLite index process
+  receives its disk temporary directory before library initialization; index
+  sorting does not use the container's small `/tmp` tmpfs;
   DuckDB spill files are capped at `4GB`, matching the configured capacity
   allowance. The work database/WAL and new SQLite output need additional disk
   space; this is not a cap on the entire Analytics directory;
@@ -431,6 +436,12 @@ VPS archive before re-enabling the daily timer. Existing `.env` files must set
 `STATISTICS_ANALYTICS_DUCKDB_MEMORY_LIMIT=128MB` and
 `STATISTICS_ANALYTICS_WINDOW_BATCH_DAYS=1`; the daily preflight rejects the old
 192MB/seven-day configuration.
+
+CI also checks the SQLite index-sort failure directly and exercises 730 days
+at 100 services/day under the same limits. See
+[`doc/statistics-reliability-review.md`](../doc/statistics-reliability-review.md)
+for the complete architecture review and the distinction between container
+limits, whole-host headroom, historical coverage and daily refresh duration.
 
 The analytics safety interval defaults to 900 seconds. Override it only on the
 host, not in Compose, by setting

@@ -1,6 +1,8 @@
 import json
 import os
+import shutil
 import sqlite3
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -20,7 +22,7 @@ from analytics_statistics import (  # noqa: E402
     _build_rolling_windows,
     _build_stabilized_facts,
     _copy_table,
-    _sqlite_disk_temp,
+    _finalize_read_model,
     analytics_build,
     analytics_cleanup,
     analytics_lock,
@@ -371,7 +373,7 @@ class StatisticsAnalyticsTest(unittest.TestCase):
                 connection.execute(f"ALTER TABLE expanded_{table} RENAME TO {table}")
 
         def unsegmented(connection, table, select_sql, *, scope_column=None, shard_column=None,
-                        periods=("current", "previous")):
+                        shard_source=None, shard_columns=(), periods=("current", "previous")):
             predicate = "TRUE" if len(periods) == 2 else "p.period='current'"
             connection.execute(
                 f"CREATE OR REPLACE TABLE {table} AS "
@@ -423,6 +425,25 @@ class StatisticsAnalyticsTest(unittest.TestCase):
                              (11800, 0, 12000))
             self.assertEqual(output.execute("SELECT value, day, eligible FROM samples WHERE id=0").fetchone(),
                              (None, "2026-01-01", 1))
+
+    def test_parquet_service_date_pruning_preserves_every_mart(self):
+        result = analytics_build(self.config)
+        reference = self.root / "pruned.db"
+        shutil.copyfile(self.analytics / "analytics.db", reference)
+        with patch("analytics_statistics._restrict_fact_archive_views"):
+            analytics_build(self.config)
+        with closing(sqlite3.connect(self.analytics / "analytics.db")) as connection:
+            connection.execute("ATTACH DATABASE ? AS reference", [str(reference)])
+            for table in result["rows"]:
+                with self.subTest(table=table):
+                    self.assertEqual(connection.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone(),
+                                     connection.execute(f'SELECT COUNT(*) FROM reference."{table}"').fetchone())
+                    self.assertEqual(connection.execute(
+                        f'SELECT * FROM "{table}" EXCEPT SELECT * FROM reference."{table}"'
+                    ).fetchall(), [])
+                    self.assertEqual(connection.execute(
+                        f'SELECT * FROM reference."{table}" EXCEPT SELECT * FROM "{table}"'
+                    ).fetchall(), [])
 
     def test_fact_and_rolling_batches_preserve_exact_metrics(self):
         analytics_build(replace(self.config, window_batch_days=1))
@@ -479,10 +500,6 @@ class StatisticsAnalyticsTest(unittest.TestCase):
         (abandoned / "duckdb-temp" / "spill.tmp").write_bytes(b"stale")
 
         def fail_during_export(connection, output, table):
-            temporary = Path(os.environ["SQLITE_TMPDIR"])
-            self.assertTrue(temporary.is_absolute())
-            self.assertTrue(temporary.is_dir())
-            self.assertEqual(temporary.parent.parent, self.analytics)
             self.assertEqual(output.execute("PRAGMA temp_store").fetchone()[0], 1)
             if table == "network_day":
                 raise RuntimeError("boom")
@@ -496,9 +513,20 @@ class StatisticsAnalyticsTest(unittest.TestCase):
         self.assertEqual(list(self.analytics.glob("analytics-*")), [])
         self.assertEqual(published.read_bytes(), previous_bytes)
 
+    def test_failed_index_child_preserves_published_model(self):
+        analytics_build(self.config)
+        published = self.analytics / "analytics.db"
+        previous_bytes = published.read_bytes()
+        with patch("analytics_statistics.subprocess.run", side_effect=subprocess.CalledProcessError(1, "index")):
+            with self.assertRaises(subprocess.CalledProcessError):
+                analytics_build(self.config)
+        self.assertEqual(published.read_bytes(), previous_bytes)
+        self.assertEqual(list(self.analytics.glob("analytics-*")), [])
+        self.assertFalse((self.analytics / ".analytics.db.partial").exists())
+
 
 class StatisticsAnalyticsLockTest(unittest.TestCase):
-    def test_sqlite_temp_scope_restores_environment_and_cleans_failed_sort(self):
+    def test_sqlite_finalizer_starts_with_disk_temp_and_cleans_failed_sort(self):
         with tempfile.TemporaryDirectory() as temporary:
             for previous in (None, "/previous/sqlite-temp"):
                 with self.subTest(previous=previous), patch.dict(os.environ):
@@ -506,14 +534,19 @@ class StatisticsAnalyticsLockTest(unittest.TestCase):
                         os.environ.pop("SQLITE_TMPDIR", None)
                     else:
                         os.environ["SQLITE_TMPDIR"] = previous
-                    with self.assertRaisesRegex(RuntimeError, "sort failed"):
-                        with _sqlite_disk_temp(Path(temporary)):
-                            scratch = Path(os.environ["SQLITE_TMPDIR"])
-                            self.assertEqual(scratch.parent, Path(temporary).resolve())
-                            (scratch / "sort-spill").write_bytes(b"incomplete")
-                            raise RuntimeError("sort failed")
+                    def fail_child(command, *, env, check):
+                        self.assertTrue(check)
+                        self.assertEqual(command[0], sys.executable)
+                        scratch = Path(env["SQLITE_TMPDIR"])
+                        self.assertEqual(scratch.parent, Path(temporary).resolve())
+                        (scratch / "sort-spill").write_bytes(b"incomplete")
+                        raise subprocess.CalledProcessError(1, command)
+
+                    with patch("analytics_statistics.subprocess.run", side_effect=fail_child):
+                        with self.assertRaises(subprocess.CalledProcessError):
+                            _finalize_read_model(Path(temporary) / "analytics.db")
                     self.assertEqual(os.environ.get("SQLITE_TMPDIR"), previous)
-                    self.assertFalse(scratch.exists())
+                    self.assertEqual(list(Path(temporary).glob("sqlite-temp-*")), [])
 
     def test_abandoned_work_roots_are_removed_without_touching_read_model(self):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:

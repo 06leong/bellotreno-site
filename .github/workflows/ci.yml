@@ -103,6 +103,17 @@ jobs:
           bash -n rfi-proxy/ops/bellotreno-statistics-daily
           bash tests/ops/test-statistics-daily.sh
 
+      - name: Verify SQLite disk sorting with a small tmpfs
+        timeout-minutes: 3
+        run: |
+          mkdir -p "$RUNNER_TEMP/analytics-sqlite-sort"
+          docker run --rm --network none --read-only --tmpfs /tmp:size=16m \
+            --memory=384m --memory-swap=384m --cpus=1 \
+            -v "$RUNNER_TEMP/analytics-sqlite-sort:/fixture" \
+            -v "$PWD/tests/ops/statistics_sqlite_smoke.py:/tests/ops/sort.py:ro" \
+            --entrypoint python bellotreno-statistics-archive:ci \
+            /tests/ops/sort.py --root /fixture --require-tmpfs-failure
+
       - name: Generate full Analytics regression archive
         run: >-
           python tests/ops/statistics_analytics_memory.py generate
@@ -119,6 +130,20 @@ jobs:
             -v "$PWD/tests/ops/statistics_analytics_memory.py:/tests/ops/memory.py:ro" \
             --entrypoint python bellotreno-statistics-archive:ci \
             /tests/ops/memory.py build --root /fixture --days 90 --services 8000
+
+      - name: Verify two-year Analytics history under the same memory ceiling
+        timeout-minutes: 30
+        shell: bash
+        run: |
+          python tests/ops/statistics_analytics_memory.py generate \
+            --root "$RUNNER_TEMP/analytics-history" --days 730 --services 100
+          docker run --rm --network none --read-only --tmpfs /tmp:size=16m \
+            --memory=384m --memory-swap=384m --cpus=1 \
+            -v "$RUNNER_TEMP/analytics-history:/fixture" \
+            -v "$RUNNER_TEMP/analytics-history/archive:/fixture/archive:ro" \
+            -v "$PWD/tests/ops/statistics_analytics_memory.py:/tests/ops/memory.py:ro" \
+            --entrypoint python bellotreno-statistics-archive:ci \
+            /tests/ops/memory.py build --root /fixture --days 730 --services 100
 
       - name: Build frontend
         run: npm run build

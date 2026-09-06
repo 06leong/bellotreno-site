@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import sqlite3
+import subprocess
 import sys
 import tempfile
 import uuid
@@ -293,6 +294,60 @@ def _create_archive_views(connection: Any, index: ArchiveIndex) -> None:
             f"SELECT * FROM read_parquet({_duckdb_file_list(paths)}, "
             "union_by_name=true, hive_partitioning=false)"
         )
+    # Read file statistics once. Observation files are partitioned by collection
+    # date, so filename dates cannot safely select a service-day batch.
+    connection.execute("""
+        CREATE OR REPLACE TABLE analytics_source_file_ranges (
+            dataset VARCHAR, file_name VARCHAR, first_service_date DATE, last_service_date DATE
+        )
+    """)
+    for dataset in ("train_services", "train_observations", "train_stop_events"):
+        connection.execute(f"""
+            INSERT INTO analytics_source_file_ranges
+            WITH ranges AS (
+            SELECT file_name,
+                   CASE WHEN COUNT(*) FILTER (WHERE path_in_schema='service_date') > 0
+                             AND NOT BOOL_OR(path_in_schema='service_date' AND
+                                 (TRY_CAST(stats_min_value AS DATE) IS NULL OR TRY_CAST(stats_max_value AS DATE) IS NULL))
+                        THEN MIN(TRY_CAST(stats_min_value AS DATE)) FILTER (WHERE path_in_schema='service_date') END AS first_service_date,
+                   CASE WHEN COUNT(*) FILTER (WHERE path_in_schema='service_date') > 0
+                             AND NOT BOOL_OR(path_in_schema='service_date' AND
+                                 (TRY_CAST(stats_min_value AS DATE) IS NULL OR TRY_CAST(stats_max_value AS DATE) IS NULL))
+                        THEN MAX(TRY_CAST(stats_max_value AS DATE)) FILTER (WHERE path_in_schema='service_date') END AS last_service_date
+            FROM parquet_metadata({_duckdb_file_list(index.files[dataset])})
+            GROUP BY file_name
+            )
+            SELECT '{dataset}', f.file_name, r.first_service_date, r.last_service_date
+            FROM UNNEST({_duckdb_file_list(index.files[dataset])}) f(file_name)
+            LEFT JOIN ranges r USING (file_name)
+        """)
+
+
+def _restrict_fact_archive_views(connection: Any, first: str | None, last: str | None) -> None:
+    # Direct callers may supply in-memory source tables instead of archive views.
+    available = connection.execute("""
+        SELECT COUNT(*) FROM duckdb_views()
+        WHERE view_name IN ('train_services', 'train_observations', 'train_stop_events')
+    """).fetchone()[0]
+    if available != 3:
+        return
+    for dataset in ("train_services", "train_observations", "train_stop_events"):
+        paths = connection.execute("""
+            SELECT file_name FROM analytics_source_file_ranges WHERE dataset=?
+              AND (? IS NULL OR first_service_date IS NULL OR last_service_date IS NULL
+                   OR (first_service_date<=CAST(? AS DATE) AND last_service_date>=CAST(? AS DATE)))
+            ORDER BY file_name
+        """, [dataset, first, last, first]).fetchall()
+        empty = not paths
+        if empty:
+            paths = connection.execute(
+                "SELECT file_name FROM analytics_source_file_ranges WHERE dataset=? LIMIT 1", [dataset]
+            ).fetchall()
+        connection.execute(
+            f"CREATE OR REPLACE TEMP VIEW {dataset} AS SELECT * FROM "
+            f"read_parquet({_duckdb_file_list(Path(row[0]) for row in paths)}, "
+            "union_by_name=true, hive_partitioning=false)" + (" WHERE FALSE" if empty else "")
+        )
 
 
 SERVICE_FACT_SELECT_SQL = """
@@ -539,6 +594,7 @@ def _build_stabilized_facts(
             "INSERT INTO analytics_service_date_batch VALUES (?)",
             [(value,) for value in batch],
         )
+        _restrict_fact_archive_views(connection, str(batch[0]), str(batch[-1]))
 
         service_operation = (
             "CREATE OR REPLACE TABLE fact_service_outcome AS"
@@ -559,6 +615,7 @@ def _build_stabilized_facts(
         first_batch = False
 
     connection.execute("DROP TABLE analytics_service_date_batch")
+    _restrict_fact_archive_views(connection, None, None)
 
 
 def _build_rolling_windows(
@@ -662,6 +719,8 @@ def _build_dashboard_window(
     *,
     scope_column: str | None = None,
     shard_column: str | None = None,
+    shard_source: str | None = None,
+    shard_columns: Sequence[str] = (),
     periods: Sequence[str] = ("current", "previous"),
 ) -> None:
     """Aggregate disjoint output groups without expanding all windows/scopes.
@@ -671,20 +730,40 @@ def _build_dashboard_window(
     SQL identifiers and templates here are internal constants only.
     """
     first = True
-    for window in DEFAULT_WINDOWS:
-        for period in periods:
-            log(f"building {table}: {window}-day {period} period")
-            for scope in ("all", "operator", "category") if scope_column else (None,):
-                predicate = f"p.window_days={window} AND p.period='{period}'"
-                if scope_column:
-                    predicate += f" AND {scope_column}='{scope}'"
-                for shard in range(16 if shard_column else 1):
-                    shard_predicate = predicate
-                    if shard_column:
-                        shard_predicate += f" AND hash({shard_column}) % 16 = {shard}"
+    # Materialize one narrow station shard once, then reuse it for all windows
+    # and filter scopes. Previously every window rescanned and rehashed the
+    # complete stop history. The period bounds limit this scratch to 180 days.
+    for shard in range(16 if shard_column else 1):
+        query = select_sql
+        if shard_source:
+            columns = ", ".join(shard_columns)
+            key = shard_column.rsplit(".", 1)[-1]
+            log(f"materializing {table} station shard {shard + 1}/16")
+            connection.execute(f"""
+                CREATE OR REPLACE TABLE dashboard_key_shard AS
+                SELECT {columns} FROM {shard_source}
+                WHERE hash({key}) % 16 = {shard}
+                  AND CAST(service_date AS DATE) BETWEEN
+                      (SELECT MIN(window_start) FROM dashboard_periods) AND
+                      (SELECT MAX(window_end) FROM dashboard_periods)
+            """)
+            connection.execute("CHECKPOINT")
+            query = query.replace(f"JOIN {shard_source} ", "JOIN dashboard_key_shard ")
+        for window in DEFAULT_WINDOWS:
+            for period in periods:
+                if not shard_source:
+                    log(f"building {table}: {window}-day {period} period")
+                for scope in ("all", "operator", "category") if scope_column else (None,):
+                    predicate = f"p.window_days={window} AND p.period='{period}'"
+                    if scope_column:
+                        predicate += f" AND {scope_column}='{scope}'"
+                    if shard_column and not shard_source:
+                        predicate += f" AND hash({shard_column}) % 16 = {shard}"
                     operation = f"CREATE OR REPLACE TABLE {table} AS" if first else f"INSERT INTO {table}"
-                    connection.execute(f"{operation}\n{select_sql.format(batch_filter=shard_predicate)}")
+                    connection.execute(f"{operation}\n{query.format(batch_filter=predicate)}")
                     first = False
+    if shard_source:
+        connection.execute("DROP TABLE dashboard_key_shard")
 
 
 def _append_dimension_windows(connection: Any, select_sql: str, *, shard_column: str | None = None) -> None:
@@ -1087,6 +1166,10 @@ def build_semantic_tables(connection: Any, index: ArchiveIndex, config: Analytic
         GROUP BY p.window_days, p.period, s.filter_type, s.filter_key,
                  s.station_code
         """, scope_column="s.filter_type", shard_column="s.station_code",
+        shard_source="station_scope_fact",
+        shard_columns=("service_date", "train_key", "filter_type", "filter_key",
+                       "station_code", "station_label", "station_role",
+                       "outcome_eligible", "cancelled", "arrival_eligible", "final_arrival_delay"),
     )
     connection.execute(
         f"""
@@ -1268,24 +1351,18 @@ def _copy_table(duck: Any, sqlite: sqlite3.Connection, table: str) -> int:
     return inserted
 
 
-@contextmanager
-def _sqlite_disk_temp(root: Path):
-    """Route Unix SQLite index-sort spill off the container's small /tmp tmpfs.
-
-    This builder is an offline, single-threaded process. Keep the process-wide
-    environment override scoped to its SQLite connection and restore it even
-    when export fails. Windows SQLite uses the OS disk temp directory instead.
-    """
-    with tempfile.TemporaryDirectory(prefix="sqlite-temp-", dir=root) as temporary:
-        previous = os.environ.get("SQLITE_TMPDIR")
-        os.environ["SQLITE_TMPDIR"] = str(Path(temporary).resolve())
-        try:
-            yield
-        finally:
-            if previous is None:
-                os.environ.pop("SQLITE_TMPDIR", None)
-            else:
-                os.environ["SQLITE_TMPDIR"] = previous
+def _finalize_read_model(destination: Path) -> None:
+    # SQLite caches Unix temp directories during library initialization. A fresh
+    # process must receive this environment before importing sqlite3, including
+    # when the caller has already opened SQLite connections (tests and tools).
+    with tempfile.TemporaryDirectory(prefix="sqlite-temp-", dir=destination.parent) as temporary:
+        environment = os.environ.copy()
+        environment["SQLITE_TMPDIR"] = str(Path(temporary).resolve())
+        subprocess.run(
+            [sys.executable, str(Path(__file__).with_name("analytics_sqlite.py")),
+             str(destination.resolve())],
+            env=environment, check=True,
+        )
 
 
 def _write_read_model(
@@ -1315,7 +1392,7 @@ def _write_read_model(
         "outlier_stop",
     )
     rows: dict[str, int] = {}
-    with _sqlite_disk_temp(destination.parent), closing(sqlite3.connect(destination)) as output:
+    with closing(sqlite3.connect(destination)) as output:
         output.execute("PRAGMA journal_mode=DELETE")
         output.execute("PRAGMA synchronous=FULL")
         output.execute("PRAGMA temp_store=FILE")
@@ -1341,54 +1418,7 @@ def _write_read_model(
             log(f"exporting SQLite table {table}")
             rows[table] = _copy_table(connection, output, table)
 
-        log("building SQLite indexes with disk-backed temporary storage")
-        output.execute("CREATE UNIQUE INDEX idx_quality_day ON quality_day(collection_date)")
-        output.execute("CREATE UNIQUE INDEX idx_network_day ON network_day(service_date)")
-        output.execute(
-            "CREATE INDEX idx_dimension_day ON dimension_day(dimension_type, dimension_key, service_date)"
-        )
-        output.execute(
-            "CREATE UNIQUE INDEX idx_network_window ON network_window(as_of_date, window_days)"
-        )
-        output.execute(
-            "CREATE UNIQUE INDEX idx_dimension_window ON dimension_window(as_of_date, window_days, dimension_type, dimension_key)"
-        )
-        output.execute(
-            "CREATE INDEX idx_outlier_window ON outlier_service(service_date, cancelled, final_arrival_delay DESC)"
-        )
-        output.execute(
-            "CREATE INDEX idx_outlier_filter ON outlier_service(operator, category, service_date)"
-        )
-        output.execute(
-            "CREATE INDEX idx_operator_category_window ON operator_category_window(as_of_date, window_days, period, operator, category)"
-        )
-        output.execute(
-            "CREATE INDEX idx_rhythm_window ON rhythm_window(as_of_date, window_days, period, filter_type, filter_key, weekday, hour)"
-        )
-        output.execute(
-            "CREATE INDEX idx_station_window ON station_window(as_of_date, window_days, period, filter_type, filter_key, observed_services DESC)"
-        )
-        output.execute(
-            "CREATE INDEX idx_station_hour_window ON station_hour_window(as_of_date, window_days, station_code, weekday, hour)"
-        )
-        output.execute(
-            "CREATE INDEX idx_relation_feature_window ON relation_feature_window(as_of_date, window_days, period, filter_type, filter_key, observed_services DESC)"
-        )
-        output.execute(
-            "CREATE INDEX idx_cross_midnight_window ON cross_midnight_window(as_of_date, window_days, period, filter_type, filter_key)"
-        )
-        output.execute(
-            "CREATE INDEX idx_long_journey_window ON long_journey_service(service_date, operator, category, scheduled_duration_minutes DESC)"
-        )
-        output.execute(
-            "CREATE INDEX idx_outlier_stop ON outlier_stop(service_date, train_key, stop_number)"
-        )
-        log("analyzing and checking SQLite read model")
-        output.execute("ANALYZE")
         output.commit()
-        check = output.execute("PRAGMA quick_check").fetchone()[0]
-        if check != "ok":
-            raise RuntimeError(f"analytics SQLite quick_check failed: {check}")
     return rows
 
 
@@ -1436,6 +1466,7 @@ def analytics_build(config: AnalyticsConfig) -> dict[str, Any]:
             finally:
                 connection.close()
 
+            _finalize_read_model(destination)
             shutil.move(destination, partial_path)
             os.replace(partial_path, final_path)
             return {
