@@ -118,6 +118,12 @@ Important modules:
 `window.*` globals. Prefer normal imports for new code; add globals only when an
 Astro template or legacy browser boundary genuinely needs them.
 
+## Documentation language
+
+Write all new documentation and documentation updates in English, including
+Markdown files, READMEs, operational guides, and agent instructions. This does
+not change the supported languages for user-facing application content.
+
 ## Encoding
 
 Repository text files are UTF-8. PowerShell can display UTF-8 Chinese or Italian
@@ -221,7 +227,7 @@ Treat these values as external even if they usually look safe:
 - query string values;
 - localStorage/sessionStorage values.
 
-Current risk tracking lives in `doc/innerhtml-audit.md`.
+Run `npm run audit:innerhtml` to locate remaining HTML rendering sites for review.
 
 ## Feature Notes
 
