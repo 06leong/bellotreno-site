@@ -119,9 +119,8 @@ Detailed implementation notes live in the `doc/` directory:
 
 - [Project guide](doc/PROJECT_GUIDE.md)
 - [Statistics analytics roadmap](doc/statistics-analytics-roadmap.md)
+- [Statistics reliability review](doc/statistics-reliability-review.md)
 - [Repository-wide agent/developer notes](AGENTS.md)
-- [TypeScript migration audit](doc/typescript-migration-audit.md)
-- [innerHTML audit notes](doc/innerhtml-audit.md)
 - [ViaggiaTreno API notes](doc/blog-viaggiatreno-api.md)
 - [Italo realtime integration guide](doc/italo-integration-guide.md)
 - [LeFrecce rolling stock and onboard services guide](doc/lefrecce-onboard-integration-guide.md)
