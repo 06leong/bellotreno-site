@@ -448,7 +448,7 @@ exposing upstream tokens to browser code.
 
 | Item | Detail |
 | --- | --- |
-| Framework | Astro 6 |
+| Framework | Astro 7 |
 | Language | TypeScript |
 | Styling | Tailwind CSS 4 + DaisyUI 5 |
 | Build runtime | Node.js 24.11.1+ and npm 11.6.2+ |
@@ -674,7 +674,7 @@ secrets must never use `PUBLIC_`.
 
 ```text
 Frontend
-  Astro 6
+  Astro 7
   TypeScript
   Tailwind CSS 4
   DaisyUI 5

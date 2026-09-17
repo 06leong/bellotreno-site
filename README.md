@@ -3,7 +3,7 @@
 ![BelloTreno project banner](public/readme-banner.svg)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Astro](https://img.shields.io/badge/Astro-6.x-orange.svg)](https://astro.build/)
+[![Astro](https://img.shields.io/badge/Astro-7.x-orange.svg)](https://astro.build/)
 [![Cloudflare Pages](https://img.shields.io/badge/Cloudflare-Pages-f38020.svg)](https://pages.cloudflare.com/)
 [![CI](https://github.com/06leong/bellotreno-site/actions/workflows/ci.yml/badge.svg)](https://github.com/06leong/bellotreno-site/actions/workflows/ci.yml)
 [![Docker Images](https://github.com/06leong/bellotreno-site/actions/workflows/docker-images.yml/badge.svg)](https://github.com/06leong/bellotreno-site/actions/workflows/docker-images.yml)
