@@ -1,3 +1,4 @@
+import { syncDatePicker } from "./statistics-date-picker.js";
 import { onBelloLanguageChanged } from "./language-events.js";
 import {
     CATEGORY_ORDER,
@@ -399,6 +400,7 @@ import {
         });
         replaceChildrenSafe(select, options);
         select.disabled = options.length === 0;
+        syncDatePicker(select);
     }
 
     function comparisonCandidates(): StatisticsCoverageDay[] {
@@ -453,6 +455,7 @@ import {
         replaceChildrenSafe(select, [placeholder, ...options]);
         select.value = state.compareDate;
         select.disabled = options.length === 0;
+        syncDatePicker(select);
 
         const latestCompleteButton = $<HTMLButtonElement>("statisticsLatestComplete");
         if (latestCompleteButton) {

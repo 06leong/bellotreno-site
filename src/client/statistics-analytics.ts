@@ -1,3 +1,4 @@
+import { syncDatePicker } from "./statistics-date-picker.js";
 import { onBelloLanguageChanged } from "./language-events.js";
 import {
     formatAnalyticsNumber,
@@ -312,7 +313,10 @@ import {
         const category = $<HTMLSelectElement>("statisticsAnalyticsCategory");
         const dimension = $<HTMLSelectElement>("statisticsAnalyticsDimension");
         const sort = $<HTMLSelectElement>("statisticsAnalyticsRankSort");
-        if (asOf) asOf.value = state.asOf;
+        if (asOf) {
+            asOf.value = state.asOf;
+            syncDatePicker(asOf);
+        }
         if (operator) operator.value = state.operator;
         if (category) category.value = state.category;
         if (dimension) dimension.value = state.dimension;

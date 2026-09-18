@@ -3900,7 +3900,7 @@ button.swiss-section-title {
     pointer-events: none;
 }
 
-.statistics-date-field select,
+.statistics-date-field :is(select, .statistics-date-control),
 .statistics-filter-grid select,
 .statistics-filter-grid input {
     width: 100%;
@@ -3913,7 +3913,7 @@ button.swiss-section-title {
     box-shadow: inset 0 1px 0 color-mix(in oklch, #ffffff 8%, transparent);
 }
 
-.statistics-date-field select {
+.statistics-date-field :is(select, .statistics-date-control) {
     min-width: 0;
     max-width: 100%;
     padding-inline: 42px 38px;
@@ -3952,7 +3952,7 @@ button.swiss-section-title {
     font-size: 1rem;
 }
 
-.statistics-date-field select:disabled,
+.statistics-date-field :is(select, .statistics-date-control):disabled,
 .statistics-filter-grid select:disabled {
     border-color: var(--statistics-border);
     background-color: var(--statistics-surface-muted);
@@ -3960,15 +3960,15 @@ button.swiss-section-title {
     opacity: 1;
 }
 
-.statistics-date-field select option,
-.statistics-date-field select optgroup,
+.statistics-date-field :is(select, .statistics-date-control) option,
+.statistics-date-field :is(select, .statistics-date-control) optgroup,
 .statistics-filter-grid select option,
 .statistics-filter-grid select optgroup {
     background-color: var(--statistics-surface);
     color: var(--color-base-content);
 }
 
-.statistics-date-field select:focus-visible,
+.statistics-date-field :is(select, .statistics-date-control):focus-visible,
 .statistics-filter-grid select:focus-visible,
 .statistics-filter-grid input:focus-visible,
 .statistics-export-button:focus-visible,
@@ -4755,7 +4755,7 @@ button.swiss-section-title {
 }
 
 .statistics-window-control legend,
-.statistics-performance-field > span {
+.statistics-performance-field > span[data-i18n] {
     display: block;
     margin-bottom: 7px;
     color: color-mix(in oklch, var(--color-base-content) 62%, transparent);
@@ -4796,7 +4796,7 @@ button.swiss-section-title {
     min-width: 0;
 }
 
-.statistics-performance-field select {
+.statistics-performance-field :is(select, .statistics-date-control) {
     width: 100%;
     min-height: 44px;
     border: 1px solid var(--statistics-border-strong);
@@ -4807,7 +4807,7 @@ button.swiss-section-title {
     font-size: 0.78rem;
 }
 
-.statistics-performance-field select option {
+.statistics-performance-field :is(select, .statistics-date-control) option {
     background: var(--statistics-surface);
     color: var(--color-base-content);
 }
@@ -5721,7 +5721,7 @@ button.swiss-section-title {
         gap: 5px;
     }
 
-    .statistics-date-field select,
+    .statistics-date-field :is(select, .statistics-date-control),
     .statistics-filter-grid select,
     .statistics-filter-grid input {
         min-height: 52px;
@@ -6023,7 +6023,7 @@ button.swiss-section-title {
     }
 
     .statistics-window-options,
-    .statistics-performance-field select {
+    .statistics-performance-field :is(select, .statistics-date-control) {
         min-height: 50px;
         border-radius: 9px;
     }
@@ -6264,17 +6264,17 @@ button.swiss-section-title {
 
 .statistics-date-field,
 .statistics-window-control legend,
-.statistics-performance-field > span {
+.statistics-performance-field > span[data-i18n] {
     color: var(--statistics-text-muted);
     font-size: 0.71rem;
     letter-spacing: 0.045em;
     text-transform: uppercase;
 }
 
-.statistics-date-field select,
+.statistics-date-field :is(select, .statistics-date-control),
 .statistics-filter-grid select,
 .statistics-filter-grid input,
-.statistics-performance-field select,
+.statistics-performance-field :is(select, .statistics-date-control),
 .statistics-window-options {
     border-color: var(--statistics-border-strong);
     background-color: var(--statistics-control-surface);
@@ -6282,7 +6282,7 @@ button.swiss-section-title {
     box-shadow: none;
 }
 
-.statistics-date-field select:disabled,
+.statistics-date-field :is(select, .statistics-date-control):disabled,
 .statistics-filter-grid select:disabled {
     background-color: var(--statistics-control-disabled);
     color: var(--statistics-text-faint);
