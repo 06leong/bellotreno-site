@@ -1,18 +1,31 @@
 .statistics-date-picker { display: grid; width: 100%; min-width: 0; gap: 4px; text-transform: none; letter-spacing: normal; }
 .statistics-date-trigger, .statistics-date-native {
-    width: 100%; min-width: 0; min-height: 46px; padding: 10px 14px;
+    box-sizing: border-box; width: 100%; min-width: 0; height: 46px; min-height: 46px; padding: 10px 14px;
     border: 1px solid var(--statistics-border-strong); border-radius: 14px;
     background: var(--statistics-control-surface); color: var(--color-base-content);
-    font: inherit; font-size: 0.95rem; text-align: start; cursor: pointer;
+    font: inherit; font-size: 0.95rem; line-height: 24px; text-align: start; cursor: pointer;
 }
+.statistics-date-trigger { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.statistics-date-field:has(.statistics-date-picker) { align-content: start; }
+.statistics-select-shell:has(.statistics-date-picker) { height: 46px; overflow: visible; }
+.statistics-select-shell:has(.statistics-date-picker) > .material-symbols-outlined { top: 50%; transform: translateY(-50%); }
 .statistics-select-shell .statistics-date-trigger, .statistics-select-shell .statistics-date-native { padding-inline-start: 42px; }
 .statistics-date-native { display: none; color-scheme: light dark; }
 [data-theme="light"] .statistics-date-native { color-scheme: light; }
 [data-theme="dark"] .statistics-date-native { color-scheme: dark; }
 .statistics-date-trigger:disabled, .statistics-date-native:disabled { opacity: .55; cursor: default; }
-.statistics-date-status, .statistics-date-error { font-size: .75rem; line-height: 1.4; }
+.statistics-date-field > .statistics-date-status,
+.statistics-date-field > .statistics-date-error,
+.statistics-performance-field > .statistics-date-status,
+.statistics-performance-field > .statistics-date-error {
+    display: block; font-size: .75rem; line-height: 1.5; font-weight: 500;
+    text-transform: none; letter-spacing: normal; white-space: normal; overflow-wrap: anywhere;
+}
+.statistics-date-field > .statistics-date-status:empty,
+.statistics-date-field > .statistics-date-error:empty,
+.statistics-performance-field > .statistics-date-status:empty,
+.statistics-performance-field > .statistics-date-error:empty,
 .statistics-date-status:empty, .statistics-date-error:empty { display: none; }
-.statistics-date-native-note { display: none; }
 .statistics-date-error { color: var(--color-error); }
 .statistics-date-dialog {
     margin: auto; width: min(360px, calc(100vw - 24px)); max-height: calc(100dvh - 24px);
@@ -21,14 +34,19 @@
     box-shadow: 0 20px 70px #0006;
 }
 .statistics-date-dialog::backdrop { background: #0005; }
-.statistics-calendar-heading { display: flex; align-items: center; gap: 6px; margin-bottom: 16px; }
+.statistics-calendar-heading { display: flex; align-items: center; gap: 6px; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--statistics-border-strong); }
 .statistics-calendar-heading select { min-width: 0; padding: 6px; background: var(--statistics-control-surface); color: inherit; border: 1px solid var(--statistics-border-strong); border-radius: 8px; min-height: 38px; }
-.statistics-calendar-heading select:nth-child(2) { flex: 1; }
+.statistics-calendar-heading .statistics-calendar-month-toggle { flex: 1; width: auto; padding: 6px 8px; font-size: .95rem; font-weight: 650; text-align: start; }
+.statistics-calendar-month-toggle::after { content: "⌄"; margin-inline-start: 8px; opacity: .6; }
 .statistics-date-dialog button { cursor: pointer; border-radius: 8px; min-height: 38px; }
 .statistics-calendar-heading button { width: 32px; font-size: 1.5rem; }
 .statistics-calendar-weekdays, .statistics-calendar-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; text-align: center; }
 .statistics-calendar-weekdays { font-size: .75rem; opacity: .65; margin-bottom: 8px; }
 .statistics-calendar-days button { aspect-ratio: 1; }
+.statistics-calendar-months { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.statistics-calendar-months button { min-height: 48px; padding: 6px 2px; font-size: .8rem; }
+.statistics-calendar-months button[aria-pressed="true"] { background: var(--statistics-blue); color: var(--color-base-100); font-weight: 700; }
+.statistics-date-dialog [hidden] { display: none; }
 .statistics-date-dialog button:hover:not(:disabled) { background: color-mix(in oklch, var(--statistics-blue) 20%, transparent); }
 .statistics-calendar-days button[aria-pressed="true"] { background: var(--statistics-blue); color: var(--color-base-100); font-weight: 700; }
 .statistics-date-dialog button:disabled { opacity: .28; cursor: default; }
@@ -37,5 +55,4 @@
 @media (pointer: coarse) {
     .statistics-date-trigger { display: none; }
     .statistics-date-native { display: block; }
-    .statistics-date-native-note:not(:empty) { display: block; }
 }

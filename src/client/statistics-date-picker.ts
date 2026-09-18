@@ -48,7 +48,13 @@ function createDatePicker(source: HTMLSelectElement): () => void {
     trigger.setAttribute("aria-controls", dialog.id);
     const heading = node("div", "statistics-calendar-heading");
     const year = node("select");
-    const month = node("select");
+    const month = button("statistics-calendar-month-toggle");
+    month.setAttribute("aria-expanded", "false");
+    const months = node("div", "statistics-calendar-months");
+    months.id = `${source.id}-months`;
+    month.setAttribute("aria-controls", months.id);
+    months.hidden = true;
+    let choosingMonth = false;
     const previous = button();
     previous.textContent = "‹";
     const next = button();
@@ -58,11 +64,13 @@ function createDatePicker(source: HTMLSelectElement): () => void {
     weekdays.setAttribute("aria-hidden", "true");
     const days = node("div", "statistics-calendar-days");
     const close = button("statistics-calendar-close");
-    dialog.append(heading, weekdays, days, close);
+    dialog.append(heading, months, weekdays, days, close);
     // Keep theme variables inherited from the statistics page; showModal uses the top layer.
     (source.closest("main") || document.body).append(dialog);
-    wrapper.append(trigger, native, status, error);
+    wrapper.append(trigger, native);
     source.after(wrapper);
+    // Supporting text must sit outside the rounded, clipped input shell.
+    (source.closest(".statistics-select-shell") || wrapper).after(status, error);
     source.hidden = true;
     const label = source.closest("label");
     const touch = window.matchMedia("(pointer: coarse)");
@@ -96,18 +104,30 @@ function createDatePicker(source: HTMLSelectElement): () => void {
             year.append(option);
         }
         year.value = String(y);
-        month.replaceChildren();
+        const monthName = (value: number): string => {
+            const name = new Intl.DateTimeFormat(locale(), { month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(y, value, 1)));
+            return name.charAt(0).toLocaleUpperCase(locale()) + name.slice(1);
+        };
+        month.textContent = monthName(m);
+        month.setAttribute("aria-label", `${text("date_picker_month")}: ${monthName(m)}`);
+        month.setAttribute("aria-expanded", String(choosingMonth));
+        months.hidden = !choosingMonth;
+        weekdays.hidden = days.hidden = choosingMonth;
+        months.replaceChildren();
         for (let value = 0; value < 12; value++) {
-            const option = node("option");
-            option.value = String(value + 1).padStart(2, "0");
-            option.textContent = new Intl.DateTimeFormat(locale(), { month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(y, value, 1)));
-            const prefix = `${y}-${option.value}`;
-            option.disabled = prefix < minimum.slice(0, 7) || prefix > maximum.slice(0, 7);
-            month.append(option);
+            const choice = button();
+            const prefix = `${y}-${String(value + 1).padStart(2, "0")}`;
+            choice.textContent = monthName(value);
+            choice.disabled = ![...available].some((date) => date.startsWith(prefix));
+            choice.setAttribute("aria-pressed", String(value === m));
+            choice.addEventListener("click", () => {
+                choosingMonth = false;
+                changeMonth(prefix);
+                month.focus();
+            });
+            months.append(choice);
         }
-        month.value = String(m + 1).padStart(2, "0");
         year.setAttribute("aria-label", text("date_picker_year"));
-        month.setAttribute("aria-label", text("date_picker_month"));
         previous.setAttribute("aria-label", text("date_picker_previous"));
         next.setAttribute("aria-label", text("date_picker_next"));
         previous.disabled = cursor <= minimum.slice(0, 7);
@@ -140,8 +160,14 @@ function createDatePicker(source: HTMLSelectElement): () => void {
         cursor = value < minimum.slice(0, 7) ? minimum.slice(0, 7) : value > maximum.slice(0, 7) ? maximum.slice(0, 7) : value;
         render();
     }
-    year.addEventListener("change", () => changeMonth(`${year.value}-${month.value}`));
-    month.addEventListener("change", () => changeMonth(`${year.value}-${month.value}`));
+    year.addEventListener("change", () => changeMonth(`${year.value}-${cursor.slice(5, 7)}`));
+    month.addEventListener("click", () => {
+        choosingMonth = !choosingMonth;
+        render();
+        if (choosingMonth) {
+            (months.querySelector<HTMLButtonElement>('[aria-pressed="true"]:not(:disabled)') || months.querySelector<HTMLButtonElement>("button:not(:disabled)"))?.focus();
+        }
+    });
     function stepMonth(step: number): void {
         const date = new Date(`${cursor}-01T12:00:00Z`);
         date.setUTCMonth(date.getUTCMonth() + step);
@@ -169,6 +195,7 @@ function createDatePicker(source: HTMLSelectElement): () => void {
         days.querySelector<HTMLButtonElement>(`[data-date="${value}"]`)?.focus();
     });
     trigger.addEventListener("click", () => {
+        choosingMonth = false;
         cursor = (source.value || maximum).slice(0, 7);
         render();
         dialog.showModal();
@@ -187,14 +214,11 @@ function createDatePicker(source: HTMLSelectElement): () => void {
         native.value = source.value;
         trigger.disabled = native.disabled = source.disabled || !options.length;
         const selected = source.selectedOptions[0];
-        trigger.textContent = source.value ? new Intl.DateTimeFormat(locale(), { dateStyle: "medium", timeZone: "UTC" }).format(new Date(`${source.value}T12:00:00Z`)) : selected?.textContent || "—";
+        trigger.textContent = source.value ? new Intl.DateTimeFormat(locale(), { dateStyle: "medium", timeZone: "UTC" }).format(new Date(`${source.value}T12:00:00Z`)) : text("date_picker_no_date");
         status.textContent = selected?.textContent?.split(" · ").slice(1).join(" · ") || "";
         native.title = source.value ? "" : selected?.textContent || "";
         if (!source.value) {
             status.textContent = selected?.textContent || "";
-            status.classList.add("statistics-date-native-note");
-        } else {
-            status.classList.remove("statistics-date-native-note");
         }
         if (error.textContent) error.textContent = text("date_picker_unavailable");
         const title = label?.querySelector("[data-i18n]")?.textContent || text("statistics_date");
