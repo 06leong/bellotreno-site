@@ -1,15 +1,8 @@
 .statistics-date-picker { display: grid; width: 100%; min-width: 0; gap: 4px; text-transform: none; letter-spacing: normal; }
-.statistics-date-trigger, .statistics-date-native {
-    box-sizing: border-box; width: 100%; min-width: 0; height: 46px; min-height: 46px; padding: 10px 14px;
-    border: 1px solid var(--statistics-border-strong); border-radius: 14px;
-    background: var(--statistics-control-surface); color: var(--color-base-content);
-    font: inherit; font-size: 0.95rem; line-height: 24px; text-align: start; cursor: pointer;
-}
-.statistics-date-trigger { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.statistics-date-trigger { text-align: start; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .statistics-date-field:has(.statistics-date-picker) { align-content: start; }
-.statistics-select-shell:has(.statistics-date-picker) { height: 46px; overflow: visible; }
+.statistics-select-shell:has(.statistics-date-picker) { overflow: visible; }
 .statistics-select-shell:has(.statistics-date-picker) > .material-symbols-outlined { top: 50%; transform: translateY(-50%); }
-.statistics-select-shell .statistics-date-trigger, .statistics-select-shell .statistics-date-native { padding-inline-start: 42px; }
 .statistics-date-native { display: none; color-scheme: light dark; }
 [data-theme="light"] .statistics-date-native { color-scheme: light; }
 [data-theme="dark"] .statistics-date-native { color-scheme: dark; }

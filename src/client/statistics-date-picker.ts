@@ -30,10 +30,10 @@ function createDatePicker(source: HTMLSelectElement): () => void {
         return result;
     }
     const wrapper = node("span", "statistics-date-picker");
-    const trigger = button("statistics-date-trigger");
+    const trigger = button("input input-bordered statistics-date-control statistics-date-trigger");
     trigger.id = `${source.id}-trigger`;
     trigger.setAttribute("aria-haspopup", "dialog");
-    const native = node("input", "statistics-date-native");
+    const native = node("input", "input input-bordered statistics-date-control statistics-date-native");
     native.type = "date";
     native.id = `${source.id}-native`;
     const status = node("span", "statistics-date-status");
@@ -106,7 +106,7 @@ function createDatePicker(source: HTMLSelectElement): () => void {
         year.value = String(y);
         const monthName = (value: number): string => {
             const name = new Intl.DateTimeFormat(locale(), { month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(y, value, 1)));
-            return name.charAt(0).toLocaleUpperCase(locale()) + name.slice(1);
+            return name;
         };
         month.textContent = monthName(m);
         month.setAttribute("aria-label", `${text("date_picker_month")}: ${monthName(m)}`);
