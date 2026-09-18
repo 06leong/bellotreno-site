@@ -49,6 +49,11 @@ function createDatePicker(source: HTMLSelectElement): () => void {
     const heading = node("div", "statistics-calendar-heading");
     const year = node("select");
     const month = button("statistics-calendar-month-toggle");
+    const monthLabel = node("span");
+    const monthIcon = node("span", "material-symbols-outlined");
+    monthIcon.textContent = "expand_more";
+    monthIcon.setAttribute("aria-hidden", "true");
+    month.append(monthLabel, monthIcon);
     month.setAttribute("aria-expanded", "false");
     const months = node("div", "statistics-calendar-months");
     months.id = `${source.id}-months`;
@@ -108,7 +113,7 @@ function createDatePicker(source: HTMLSelectElement): () => void {
             const name = new Intl.DateTimeFormat(locale(), { month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(y, value, 1)));
             return name;
         };
-        month.textContent = monthName(m);
+        monthLabel.textContent = monthName(m);
         month.setAttribute("aria-label", `${text("date_picker_month")}: ${monthName(m)}`);
         month.setAttribute("aria-expanded", String(choosingMonth));
         months.hidden = !choosingMonth;
@@ -216,6 +221,8 @@ function createDatePicker(source: HTMLSelectElement): () => void {
         const selected = source.selectedOptions[0];
         trigger.textContent = source.value ? new Intl.DateTimeFormat(locale(), { dateStyle: "medium", timeZone: "UTC" }).format(new Date(`${source.value}T12:00:00Z`)) : text("date_picker_no_date");
         status.textContent = selected?.textContent?.split(" · ").slice(1).join(" · ") || "";
+        // This is now a standalone label, rather than a suffix within a date option.
+        status.textContent = status.textContent.charAt(0).toLocaleUpperCase(locale()) + status.textContent.slice(1);
         native.title = source.value ? "" : selected?.textContent || "";
         if (!source.value) {
             status.textContent = selected?.textContent || "";

@@ -29,8 +29,9 @@
 .statistics-date-dialog::backdrop { background: #0005; }
 .statistics-calendar-heading { display: flex; align-items: center; gap: 6px; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--statistics-border-strong); }
 .statistics-calendar-heading select { min-width: 0; padding: 6px; background: var(--statistics-control-surface); color: inherit; border: 1px solid var(--statistics-border-strong); border-radius: 8px; min-height: 38px; }
-.statistics-calendar-heading .statistics-calendar-month-toggle { flex: 1; width: auto; padding: 6px 8px; font-size: .95rem; font-weight: 650; text-align: start; }
-.statistics-calendar-month-toggle::after { content: "⌄"; margin-inline-start: 8px; opacity: .6; }
+.statistics-calendar-heading .statistics-calendar-month-toggle { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex: 1; min-width: 0; width: auto; padding: 6px 10px; font-size: .95rem; font-weight: 650; text-align: start; }
+.statistics-calendar-month-toggle .material-symbols-outlined { flex: none; font-size: 20px; line-height: 1; opacity: .65; }
+.statistics-calendar-month-toggle[aria-expanded="true"] .material-symbols-outlined { transform: rotate(180deg); }
 .statistics-date-dialog button { cursor: pointer; border-radius: 8px; min-height: 38px; }
 .statistics-calendar-heading button { width: 32px; font-size: 1.5rem; }
 .statistics-calendar-weekdays, .statistics-calendar-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; text-align: center; }
@@ -48,4 +49,15 @@
 @media (pointer: coarse) {
     .statistics-date-trigger { display: none; }
     .statistics-date-native { display: block; }
+}
+
+/* Keep touch-device selects native, including the platform disclosure indicator. */
+@media (pointer: coarse) {
+    .statistics-performance-field select.statistics-native-select {
+        appearance: auto;
+        background-image: none;
+        padding-inline-end: 12px;
+    }
+    [data-theme="light"] .statistics-native-select { color-scheme: light; }
+    [data-theme="dark"] .statistics-native-select { color-scheme: dark; }
 }
