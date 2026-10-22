@@ -41,5 +41,10 @@
     "@astrojs/sitemap": "^3.7.4",
     "crypto-js": "^4.2.0",
     "echarts": "^6.1.0"
+  },
+  "overrides": {
+    "@tailwindcss/typography": {
+      "postcss-selector-parser": "7.1.6"
+    }
   }
 }
