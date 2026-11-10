@@ -26,12 +26,12 @@
     "astro": "astro"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20261023.1",
+    "@cloudflare/workers-types": "^5.20261107.1",
     "@tailwindcss/typography": "^0.5.20",
-    "@tailwindcss/vite": "^4.3.3",
+    "@tailwindcss/vite": "^4.3.5",
     "@types/crypto-js": "^4.2.2",
     "@types/node": "^25.9.9",
-    "astro": "^7.4.2",
+    "astro": "^7.4.7",
     "daisyui": "^5.7.50",
     "tailwindcss": "^4.3.0",
     "tsx": "^4.23.15",
