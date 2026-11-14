@@ -31,7 +31,7 @@
     "@tailwindcss/vite": "^4.3.3",
     "@types/crypto-js": "^4.2.2",
     "@types/node": "^25.9.9",
-    "astro": "^7.4.2",
+    "astro": "^7.4.7",
     "daisyui": "^5.7.50",
     "tailwindcss": "^4.3.0",
     "tsx": "^4.23.15",
