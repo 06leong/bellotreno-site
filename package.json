@@ -26,19 +26,19 @@
     "astro": "astro"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20261023.1",
+    "@cloudflare/workers-types": "^5.20261114.1",
     "@tailwindcss/typography": "^0.5.20",
-    "@tailwindcss/vite": "^4.3.3",
+    "@tailwindcss/vite": "^4.3.5",
     "@types/crypto-js": "^4.2.2",
     "@types/node": "^25.9.9",
-    "astro": "^7.4.2",
-    "daisyui": "^5.7.50",
+    "astro": "^7.4.12",
+    "daisyui": "^5.8.0",
     "tailwindcss": "^4.3.0",
     "tsx": "^4.23.15",
     "typescript": "^6.0.3"
   },
   "dependencies": {
-    "@astrojs/sitemap": "^3.7.4",
+    "@astrojs/sitemap": "^3.7.5",
     "crypto-js": "^4.2.0",
     "echarts": "^6.1.0"
   },
